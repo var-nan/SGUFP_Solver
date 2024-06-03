@@ -10,11 +10,15 @@
 #include <cstdint>
 #include <string>
 
+using namespace std;
+
 typedef uint16_t usint;
 typedef uint32_t uint;
 typedef uint64_t ulint;
-typedef std::vector<int> vi;
-typedef std::vector<uint> vui;
+typedef vector<int> vi;
+typedef vector<uint> vui;
+
+
 
 class NetworkArc {
 public:
@@ -38,11 +42,13 @@ public:
 	uint nodeId;
 	uint inDegree;
 	uint outDegree;
-	std::vector<uint> inArcIds;
-	std::vector<uint> outArcIds;
+	vector<uint> inArcIds;
+	vector<uint> outArcIds;
 	bool isVbar;
 	/* TODO: create constructors */
 	NetworkNode(){}
+
+	NetworkNode(uint id):nodeId{id}{}
 
 	NetworkNode(uint id, uint inDeg, uint outDeg, vui&& inArcs, vui&& outArcs)
 		: nodeId{id}, inDegree{inDeg}, outDegree{outDeg}, inArcIds{inArcs}, outArcIds{outArcs} , isVbar{false}{}
@@ -56,14 +62,19 @@ class Network {
 public:
 	uint32_t n;
 	uint32_t edges;
-	std::vector<NetworkNode> networkNodes {n};
-	std::vector<NetworkArc> networkArcs;
+	vector<NetworkNode> networkNodes {n};
+	vector<NetworkArc> networkArcs;
 
-	std::vector<std::vector<uint>> adjacencyList{n};
-	std::unordered_set<uint> Vbar; /* list of vertices that are in Vbar */
-	usint nScenarios;
+	vector<std::vector<uint>> adjacencyList{n};
+	unordered_set<uint> Vbar; /* list of vertices that are in Vbar */
+	uint nScenarios;
 
-	Network(std::string p_fileName);
+	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
+			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)
+		: n{nNodes}, edges{nEdges}, networkNodes{netNodes}, networkArcs{netArcs},
+		Vbar{v_bar}, nScenarios{scenarios} {} */
+
+	explicit Network(const std::string& p_fileName);
 
 };
 
