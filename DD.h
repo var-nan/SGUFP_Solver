@@ -5,10 +5,72 @@
 #ifndef SGUFP_SOLVER_DD_H
 #define SGUFP_SOLVER_DD_H
 
-#include "Node.h"
+#include <iostream>
+#include <vector>
+
 #include <unordered_set>
 
-typedef std::unordered_set<Node, Node::HashFunction> Layer;
+class DDNode {
+public:
+	uint32_t nodeId; /* id of the node */
+	uint64_t objectiveVal; /* objective value is an unsigned long number */
+	std::vector<uint32_t> state; /* node might have multiple state values when refining */
+	uint32_t layerNo; /* with respect to global ordering of the variables */
+	bool isExact;
+
+
+	DDNode(uint32_t st, uint16_t layerNumber, uint64_t objective)
+			: state{st}, layerNo{layerNumber}, objectiveVal{objective}, isExact{true} {}
+
+	DDNode(const DDNode& node)
+			: state{node.state}, layerNo{node.layerNo}, objectiveVal{node.objectiveVal}, isExact{node.isExact} {}
+
+	/*
+	 * operators
+	 */
+
+	DDNode& operator=(const DDNode& node) {
+
+		return *this;
+	}
+
+	DDNode& operator=(DDNode&& node) noexcept {
+		this->layerNo = node.layerNo;
+		this->objectiveVal = node.objectiveVal;
+		this->isExact = node.isExact;
+		this->state = node.state;
+		return *this;
+	}
+
+	bool operator==(const DDNode& node){
+		return true; /* TODO: correct this ASAP */
+	}
+
+	bool operator<(const DDNode& node){
+		return true; /* TODO: correct this ASAP */
+	}
+
+	bool operator<=(const DDNode& node){
+		return true; /* TODO: correct this ASAP */
+	}
+
+	bool operator>(const DDNode& node){
+		return true; /* TODO: correct this ASAP */
+	}
+
+	bool operator>=(const DDNode& node){
+		return true; /* TODO: correct this ASAP */
+	}
+
+	struct HashFunction {
+		size_t operator()(const DDNode& node) const {
+			return std::hash<int>()(static_cast<int>(node.nodeId));
+		}
+	};
+};
+
+
+typedef std::unordered_set<DDNode, DDNode::HashFunction> Layer;
 
 class RelaxedDD{
 
@@ -26,7 +88,7 @@ private:
 		/* debug this function */
 	}
 	
-	void insertNode(Layer& currentLayer, Node&& node){
+	void insertNode(Layer& currentLayer, DDNode&& node){
 	
 	}
 	
@@ -38,13 +100,13 @@ public:
 class DD {
 
 private:
-    Node root;
+    DDNode root;
     std::vector<uint32_t> coefficients;
     std::vector<uint32_t> objectives;
 
     uint64_t objective;
 
-    void insertNode(Layer& currentLayer, const Node& node){
+    void insertNode(Layer& currentLayer, const DDNode& node){
         /* insert node to given layer */
 
         // if node is already present in the layer, just modify its attributes.
@@ -76,6 +138,7 @@ public:
 	}
 
 };
+
 
 
 #endif //SGUFP_SOLVER_DD_H
