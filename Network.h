@@ -76,5 +76,7 @@ public:
 
 	explicit Network(const std::string& p_fileName);
 
+	/* TODO: implement move constructor ASAP*/
+
 };
 

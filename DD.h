@@ -7,8 +7,12 @@
 
 #include <iostream>
 #include <vector>
-
 #include <unordered_set>
+
+using namespace std;
+
+typedef vector<uint32_t> vui;
+typedef vector<int> vi;
 
 class DDNode {
 public:
@@ -17,6 +21,8 @@ public:
 	std::vector<uint32_t> state; /* node might have multiple state values when refining */
 	uint32_t layerNo; /* with respect to global ordering of the variables */
 	bool isExact;
+
+	DDNode(){}; // ASAP complete this constructor.
 
 
 	DDNode(uint32_t st, uint16_t layerNumber, uint64_t objective)
@@ -95,6 +101,27 @@ private:
 public:
 
 
+};
+
+class RestrictedDD{
+private:
+	uint64_t lowerBound;
+	void trimNodes(Layer& currentLayer);
+
+	void insertNode(Layer& currentLayer, DDNode&& node);
+
+public:
+	bool isExact;
+	uint32_t maxWidth;
+	Layer cutset;
+
+	RestrictedDD(uint32_t max_width): maxWidth{max_width}, isExact{true}, lowerBound{0} {}
+
+	void build(const DDNode& root, const vui& coefficients, const vui& values);
+
+	uint32_t getLowerBound() {return this->lowerBound; }
+
+	Layer getCutSet() { return cutset; }
 };
 
 class DD {
