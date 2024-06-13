@@ -13,10 +13,10 @@ add_library(gurobi110 SHARED IMPORTED)
 set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "/opt/gurobi1102/linux64/lib/libgurobi110.so")
 
 add_executable(SGUFP_Solver main.cpp
-        #DD.h
+        DD.h
         Network.h
         Network.cpp
-        #DD.cpp
+        DD.cpp
         #Solver.cpp
         #Solver.h
         grb.cpp

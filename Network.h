@@ -66,7 +66,7 @@ public:
 	vector<NetworkArc> networkArcs;
 
 	vector<std::vector<uint>> adjacencyList{n};
-	unordered_set<uint> Vbar; /* list of vertices that are in Vbar */
+	vector<uint> Vbar; /* list of vertices that are in Vbar */
 	uint nScenarios;
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,

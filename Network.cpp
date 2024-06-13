@@ -30,7 +30,7 @@ Network::Network(const std::string& p_fileName){
 
 		for (uint i = 0; i < m; i++){
 			// from second line, read each line and its corresponding scenario.
-			// each line contains tailId, headId,
+			// each line contains headId, headId,
 			uint tailId, headId;
 			file >> tailId >> headId;
 
@@ -57,12 +57,12 @@ Network::Network(const std::string& p_fileName){
 		std::string temp; file >> temp;
 
 		// TODO: read v_bar nodes and build network.
-		unordered_set<uint> vBarNodes;
+		vector<uint> vBarNodes;
 
 		while (file.peek() != EOF){
 			uint i;
 			file >> i;
-			vBarNodes.insert(i);
+			vBarNodes.push_back(i);
 			networkNodes[i].isVbar = true;
 		}
 

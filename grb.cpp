@@ -122,7 +122,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 		for (const auto& in_id: network.networkNodes[q].inArcIds){
 
 			for (const auto& out_id: network.networkNodes[q].outArcIds){
-				auto i = network.networkArcs[in_id].tailId;
+				auto i = network.networkArcs[in_id].headId;
 				auto j = network.networkArcs[out_id].headId;
 				auto ub_iq = network.networkArcs[in_id].upperCapacities[scenario];
 				auto ub_qj = network.networkArcs[out_id].upperCapacities[scenario];
@@ -131,7 +131,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 		}
 		/* third term in objective function */
 		for (const auto& in_id: network.networkNodes[q].inArcIds){
-			auto i = network.networkArcs[in_id].tailId;
+			auto i = network.networkArcs[in_id].headId;
 			auto ub = network.networkArcs[in_id].upperCapacities[scenario];
 			int temp = 0;
 			for (const auto& out_id: network.networkNodes[q].outArcIds) {
@@ -159,7 +159,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 	// INFO add constraints
 	// constraint 7c
 	for (const auto& arc: network.networkArcs){
-		auto i = arc.tailId;
+		auto i = arc.headId;
 		auto j = arc.headId;
 
 		if ((network.networkNodes[j].outDegree == 0) ||
@@ -172,7 +172,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 
 	// INFO constraint 7b
 	for (const auto& arc: network.networkArcs){
-		auto i = arc.tailId;
+		auto i = arc.headId;
 		auto q = arc.headId;
 
 		if ((!network.networkNodes[q].isVbar) ||(network.networkNodes[q].outDegree == 0) ||
@@ -188,7 +188,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 
 	// info: constraint 7(d), 7(e).
 	for (const auto& arc: network.networkArcs) {
-		auto q = arc.tailId;
+		auto q = arc.headId;
 		auto j = arc.headId;
 		if ((network.networkNodes[q].inDegree == 0)
 			|| (network.networkNodes[j].outDegree != 0)) continue; // arc set A_2
@@ -208,7 +208,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 
 	// info constraint 7(f)
 	for (const auto& arc: network.networkArcs){
-		auto q = arc.tailId;
+		auto q = arc.headId;
 		auto j = arc.headId;
 		if ((network.networkNodes[q].inDegree == 0) || (network.networkNodes[j].outDegree == 0)) continue;
 
