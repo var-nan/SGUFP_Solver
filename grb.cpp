@@ -106,7 +106,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 		if (network.networkNodes[q].outDegree < 1) continue;
 
 		// iterate over outgoing nodes
-		for (uint32_t j: network.networkNodes[q].outArcIds){
+		for (uint32_t j: network.networkNodes[q].outNodeIds){
 			auto id = network.networkArcs[j].headId;
 			// extract lowerbound and upperbound for this scenario.
 			int lb = network.networkArcs[j].lowerCapacities[scenario];
@@ -119,9 +119,9 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 	// remaining terms
 	for (const auto& q: network.Vbar){
 		/* second term in objective function */
-		for (const auto& in_id: network.networkNodes[q].inArcIds){
+		for (const auto& in_id: network.networkNodes[q].inNodeIds){
 
-			for (const auto& out_id: network.networkNodes[q].outArcIds){
+			for (const auto& out_id: network.networkNodes[q].outNodeIds){
 				auto i = network.networkArcs[in_id].headId;
 				auto j = network.networkArcs[out_id].headId;
 				auto ub_iq = network.networkArcs[in_id].upperCapacities[scenario];
@@ -130,23 +130,23 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 			}
 		}
 		/* third term in objective function */
-		for (const auto& in_id: network.networkNodes[q].inArcIds){
+		for (const auto& in_id: network.networkNodes[q].inNodeIds){
 			auto i = network.networkArcs[in_id].headId;
 			auto ub = network.networkArcs[in_id].upperCapacities[scenario];
 			int temp = 0;
-			for (const auto& out_id: network.networkNodes[q].outArcIds) {
+			for (const auto& out_id: network.networkNodes[q].outNodeIds) {
 				// ASAP over y variables.
 			}
 			objectiveFunc += temp * ub * sigma[q][i];
 		}
 
 		/* fourth term in objective function */
-		for (const auto& out_id: network.networkNodes[q].outArcIds){
+		for (const auto& out_id: network.networkNodes[q].outNodeIds){
 			auto j = network.networkArcs[out_id].headId;
 			auto ub = network.networkArcs[out_id].upperCapacities[scenario];
 			int temp = 0;
 
-			for (const auto& in_id: network.networkNodes[q].inArcIds){
+			for (const auto& in_id: network.networkNodes[q].inNodeIds){
 				// ASAP get y_variables
 			}
 			objectiveFunc += temp * ub * phi[q][j];
@@ -179,7 +179,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 		    (network.networkNodes[i].inDegree != 0)) continue; // arc subset A_1.
 
 		GRBLinExpr LHS = alpha[q] - beta[i][q] + gamma[i][q] + sigma[i][q];
-		for (const auto& out_id: network.networkNodes[q].outArcIds)
+		for (const auto& out_id: network.networkNodes[q].outNodeIds)
 			LHS += lambda[i][q][out_id] - mu[i][q][out_id];
 
 		double reward = arc.rewards[scenario];
@@ -199,7 +199,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 
 		if (network.networkNodes[q].isVbar){
 			LHS += phi[q][j];
-			for (const auto& i: network.networkNodes[q].inArcIds){
+			for (const auto& i: network.networkNodes[q].inNodeIds){
 				LHS += mu[i][q][j] - lambda[i][q][j];
 			}
 		}
@@ -223,7 +223,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 
 		}
 		else if (network.networkNodes[j].isVbar){ // 7(h)
-			for (const auto& arc_i: network.networkNodes[q].outArcIds){
+			for (const auto& arc_i: network.networkNodes[q].outNodeIds){
 				auto i = network.networkArcs[arc_i].headId;
 				LHS += lambda[q][j][i] - mu[q][j][i];
 			}

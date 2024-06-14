@@ -2,7 +2,7 @@
  * Created by nandgate on 6/1/24
  */
 
-#pragma include once
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -42,19 +42,19 @@ public:
 	uint nodeId;
 	uint inDegree;
 	uint outDegree;
-	vector<uint> inArcIds;
-	vector<uint> outArcIds;
+	vector<uint> inNodeIds;
+	vector<uint> outNodeIds;
 	bool isVbar;
 	/* TODO: create constructors */
 	NetworkNode(){}
 
 	NetworkNode(uint id):nodeId{id}{}
 
-	NetworkNode(uint id, uint inDeg, uint outDeg, vui&& inArcs, vui&& outArcs)
-		: nodeId{id}, inDegree{inDeg}, outDegree{outDeg}, inArcIds{inArcs}, outArcIds{outArcs} , isVbar{false}{}
+	NetworkNode(uint id, uint inDeg, uint outDeg, vui&& inNodes, vui&& outNodes)
+		: nodeId{id}, inDegree{inDeg}, outDegree{outDeg}, inNodeIds{inNodes}, outNodeIds{outNodes} , isVbar{false}{}
 
 	NetworkNode(uint id, uint inDeg, uint outDeg, vui&& inArcs, vui&& outArcs, bool isV)
-			: nodeId{id}, inDegree{inDeg}, outDegree{outDeg}, inArcIds{inArcs}, outArcIds{outArcs}, isVbar{isV}{}
+			: nodeId{id}, inDegree{inDeg}, outDegree{outDeg}, inNodeIds{inArcs}, outNodeIds{outArcs}, isVbar{isV}{}
 };
 
 class Network {
@@ -62,10 +62,10 @@ class Network {
 public:
 	uint32_t n;
 	uint32_t edges;
-	vector<NetworkNode> networkNodes {n};
+	vector<NetworkNode> networkNodes;
 	vector<NetworkArc> networkArcs;
 
-	vector<std::vector<uint>> adjacencyList{n};
+	//vector<std::vector<uint>> adjacencyList{n};
 	vector<uint> Vbar; /* list of vertices that are in Vbar */
 	uint nScenarios;
 

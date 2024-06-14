@@ -14,18 +14,18 @@ Network::Network(const std::string& p_fileName){
 
 	if (file.is_open()){
 		/* file opened for reading. */
-		// read n and m
-		uint n,m; // n = number of nodes, m = number of arcs
-		usint scenarios; // number of scenarios
+		// read nNodes and m
+		uint nNodes,m; // nNodes = number of nodes, m = number of arcs
+		uint scenarios; // number of scenarios
 
-		file >> n >> m >> scenarios;
+		file >> nNodes >> m >> scenarios;
 
-		std::vector<NetworkNode> networkNodes(n);
-		std::vector<NetworkArc> networkArcs(m);
+		std::vector<NetworkNode> netNodes(nNodes);
+		std::vector<NetworkArc> netArcs(m);
 
-		for (uint i = 0; i < n; i++){
-			// initialize a vector with n empty elements.
-			networkNodes[i].nodeId = i;
+		for (uint i = 0; i < nNodes; i++){
+			// initialize a vector with nNodes empty elements.
+			netNodes[i].nodeId = i;
 		}
 
 		for (uint i = 0; i < m; i++){
@@ -47,10 +47,10 @@ Network::Network(const std::string& p_fileName){
 				rewards[j] = reward;
 			}
 			// store this arc in the network. ASAP: number of nodes are greater than the given number, causing segmentation fault.
-			networkArcs[i] = {i,tailId, headId, upperCapacities, lowerCapacities, rewards};
-			// update network nodes.
-			networkNodes[tailId].outArcIds.push_back(i); networkNodes[tailId].outDegree++;
-			networkNodes[headId].inArcIds.push_back(i); networkNodes[headId].inDegree++;
+			netArcs[i] = {i, tailId, headId, upperCapacities, lowerCapacities, rewards};
+			// update network nodes. //ASAP store nodeIds of outgoing and incoming arcs instead of arcIDs
+			netNodes[tailId].outNodeIds.push_back(headId); netNodes[tailId].outDegree++;
+			netNodes[headId].inNodeIds.push_back(tailId); netNodes[headId].inDegree++;
 		}
 
 		// read v_bar
@@ -63,13 +63,13 @@ Network::Network(const std::string& p_fileName){
 			uint i;
 			file >> i;
 			vBarNodes.push_back(i);
-			networkNodes[i].isVbar = true;
+			netNodes[i].isVbar = true;
 		}
 
-		this->n = n;
+		this->n = nNodes;
 		this->edges = m;
-		this->networkNodes = networkNodes;
-		this->networkArcs = networkArcs;
+		this->networkNodes = netNodes;
+		this->networkArcs = netArcs;
 		this->nScenarios = scenarios;
 		this->Vbar = vBarNodes;
 	}

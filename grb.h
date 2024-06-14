@@ -2,9 +2,9 @@
 // Created by nandgate on 6/5/24.
 //
 
-#ifndef SGUFP_SOLVER_GRB_H
-#define SGUFP_SOLVER_GRB_H
-
+//#ifndef SGUFP_SOLVER_GRB_H
+//#define SGUFP_SOLVER_GRB_H
+#pragma once
 #include "gurobi_c++.h"
 #include "Network.h"
 #include <vector>
@@ -57,4 +57,4 @@ public:
 };
 
 
-#endif //SGUFP_SOLVER_GRB_H
+//#endif //SGUFP_SOLVER_GRB_H

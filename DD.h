@@ -2,19 +2,23 @@
 // Created by nandgate on 6/1/24.
 //
 
-#ifndef SGUFP_SOLVER_DD_H
-#define SGUFP_SOLVER_DD_H
+//#ifndef SGUFP_SOLVER_DD_H
+//#define SGUFP_SOLVER_DD_H
+#pragma once
 
 #include <iostream>
 #include <vector>
 #include <forward_list>
 #include <unordered_set>
 #include "Network.h"
+#include <execution>
 
 using namespace std;
 
 typedef vector<uint32_t> vui;
 typedef vector<int> vi;
+
+enum PruneStrategy {RANDOM, TRAIL};
 
 class DDArc{
 public:
@@ -23,8 +27,8 @@ public:
 	uint32_t label; // decision.
 	int weight;
 
-	DDArc(uint32_t arc_id, uint32_t tail_id, uint32_t arc_label)
-		: id{arc_id}, headId{tail_id}, label{arc_label} {}
+	DDArc(uint32_t arc_id, uint32_t head_id, uint32_t arc_label)
+		: id{arc_id}, headId{head_id}, label{arc_label} {}
 };
 
 class DDNode {
@@ -36,27 +40,35 @@ public:
 	bool isExact;
 	uint32_t parentId;
 	vector<DDArc> childArcs;
+	bool prune = false;
 
 	DDNode(){}; // ASAP complete this constructor.
 
-	DDNode(uint32_t id, forward_list<uint32_t> st, uint32_t layerNumber): nodeId{id}, state{st}, layerNo{layerNumber}, childArcs{} {}
+	DDNode(uint32_t id, forward_list<uint32_t> st, uint32_t layerNumber): nodeId{id}, state{st},
+		layerNo{layerNumber}, childArcs{}, objectiveVal{0}, isExact{true}, parentId{0} {}
 
-	DDNode(forward_list<uint32_t> st, uint16_t layerNumber, uint64_t objective, uint32_t parent, vector<DDArc> child)
-			: state{st}, layerNo{layerNumber}, objectiveVal{objective}, isExact{true}, parentId{parent}, childArcs{child} {}
+	DDNode(uint32_t id, forward_list<uint32_t> st, uint16_t layerNumber, uint64_t objective, uint32_t parent, vector<DDArc> child)
+			: nodeId{id}, state{st}, layerNo{layerNumber}, objectiveVal{objective}, isExact{true}, parentId{parent}, childArcs{child} {}
 
 	DDNode(const DDNode& node) // TODO: copy parent and children to the new node.
-			: state{node.state}, layerNo{node.layerNo}, objectiveVal{node.objectiveVal}, isExact{node.isExact} {}
+			: nodeId{node.nodeId}, state{node.state}, layerNo{node.layerNo},objectiveVal{node.objectiveVal},
+			isExact{node.isExact}, parentId{node.parentId}, childArcs{node.childArcs}, prune{node.prune} {}
 
 	/*
 	 * operators
 	 */
 
 	DDNode& operator=(const DDNode& node) {
-
+		this->layerNo = node.layerNo;
+		this->nodeId = node.nodeId;
+		this->objectiveVal = node.objectiveVal;
+		this->isExact = node.isExact;
+		this->state = node.state;
 		return *this;
 	}
 
 	DDNode& operator=(DDNode&& node) noexcept {
+		this->nodeId = node.nodeId;
 		this->layerNo = node.layerNo;
 		this->objectiveVal = node.objectiveVal;
 		this->isExact = node.isExact;
@@ -65,23 +77,23 @@ public:
 	}
 
 	bool operator==(const DDNode& node){
-		return true; /* TODO: correct this ASAP */
+		return this->nodeId == node.nodeId; /* ASAP fix this*/
 	}
 
 	bool operator<(const DDNode& node){
-		return true; /* TODO: correct this ASAP */
+		return true; /* Future: fix this */
 	}
 
 	bool operator<=(const DDNode& node){
-		return true; /* TODO: correct this ASAP */
+		return true; /* fix this ASAP */
 	}
 
 	bool operator>(const DDNode& node){
-		return true; /* TODO: correct this ASAP */
+		return true; /* fix this ASAP */
 	}
 
 	bool operator>=(const DDNode& node){
-		return true; /* TODO: correct this ASAP */
+		return true; /* fix this ASAP */
 	}
 
 	struct HashFunction {
@@ -93,6 +105,7 @@ public:
 
 
 typedef std::unordered_set<DDNode, DDNode::HashFunction> Layer;
+typedef std::vector<DDNode> NodeLayer;
 
 class RelaxedDD{
 
@@ -122,9 +135,12 @@ public:
 class RestrictedDD{
 private:
 	uint64_t lowerBound;
+	PruneStrategy strategy = TRAIL;
 	void trimNodes(Layer& currentLayer);
-
+	inline void pruneNextLayer(NodeLayer& currentLayer, NodeLayer& nextLayer);
 	void insertNode(Layer& currentLayer, DDNode&& node);
+	inline static NodeLayer&& buildNextLayer(NodeLayer& currentLayer);
+
 
 public:
 	bool isExact;
@@ -140,7 +156,7 @@ public:
 	Layer getCutSet() { return cutset; }
 };
 
-typedef std::vector<DDNode> NodeLayer;
+
 
 class DD {
 
@@ -151,7 +167,7 @@ private:
 
 public:
 
-	DD(): tree{10}{
+	DD(){
 		//this->tree = vector<unordered_set<DDNode>>(coeff.size()+2);
 		// TODO: add child nodes to the root.
 	}
@@ -162,32 +178,40 @@ public:
 
 	void getPath() {
 		// this function computes the path from terminal node to the root.
+		// start from terminal node and pick a maximum value and select that node.
+
+		for (auto it = this->tree.rbegin(); it != this->tree.rend(); ++it){
+
+		}
 	}
 
-	static NodeLayer&& buildNextLayer(NodeLayer& currentLayer, uint32_t currentVariable){
+	/**
+	 * Builds next layer in the tree from the current layer.
+	 */
+	static void buildNextLayer(NodeLayer& currentLayer, NodeLayer& nextLayer, uint32_t currentVariable){
 		// TODO: need to add currentVariable to every arc.
 
-		// takes current layer and builds next layer based on the indexset.
-		NodeLayer nextLayer;
 		uint32_t nodeId = 0;
-
 		for (auto& node: currentLayer){
 			uint32_t arcId = 0;
 			for (auto i: node.state){
 				// create an arc
 				DDArc arc{arcId++, nodeId, i};
 				auto newState = node.state;
-				newState.remove(i); // TODO: handle '0' label.
+				newState.remove(i); // ASAP: handle '0' label.
 				DDNode newNode {nodeId++,newState, node.layerNo+1};
 				node.childArcs.push_back(arc);
 				nextLayer.push_back(std::move(newNode));
 			}
 		}
-		return std::move(nextLayer);
 	}
 
-	void build(const Network& network, uint16_t startLayer=0, double gamma=-999999){
+	/**
+	 * Builds the DD tree given the network.
+	 */
+	void build(const Network& network, uint16_t startVariable=0, uint32_t gamma=999999){
 		// TODO: set gamma later.
+		// TODO: instead of starting from root, this function should also builds tree from the given layer.
 		const auto Vbar = network.Vbar;
 		const auto networkNodes = network.networkNodes;
 		const auto networkArcs = network.networkArcs;
@@ -195,20 +219,21 @@ public:
 		NodeLayer currentLayer;
 
 		bool first = true;
-
 		for (const auto vBarId: Vbar){
+
 			auto networkNode = networkNodes[vBarId];
 			// index set of current node.
-			forward_list<uint32_t> indexSet {networkNode.outArcIds.begin(), networkNode.outArcIds.end()};
+			forward_list<uint32_t> indexSet {networkNode.outNodeIds.begin(), networkNode.outNodeIds.end()};
 
 			if (currentLayer.empty() && first){
 				// build tree for first node in v_bar set the first to false.
 				// networkNode is root node. build a DDNode for root and push back to current layer.
 				DDNode rootNode{0, indexSet, 0};
 				currentLayer.push_back(rootNode);
-				// iterate over incoming arcs and build next layer
-				for (auto incomingId: networkNode.inArcIds){
-					auto nextLayer = buildNextLayer(currentLayer, incomingId);
+				// iterate over incoming arcs and build next layer TODO; add current layer(with root) to tree.
+				for (auto incomingId: networkNode.inNodeIds){
+					NodeLayer nextLayer;
+					buildNextLayer(currentLayer, nextLayer, incomingId);
 					this->tree.push_back(nextLayer);
 					currentLayer = std::move(nextLayer);
 				}
@@ -219,16 +244,17 @@ public:
 					node.state = indexSet;
 				}
 				// iterate over the incoming arcs of the current selected node in vbar.
-				for (const auto incomingArc: networkNode.inArcIds){
-					auto nextLayer = buildNextLayer(currentLayer, incomingArc); // TODO: don't need to pass index set here, since nodes in current layer already have new state.
+				for (const auto incomingArc: networkNode.inNodeIds){
+					NodeLayer nextLayer;
+					buildNextLayer(currentLayer, nextLayer, incomingArc);
 					this->tree.push_back(nextLayer);
 					currentLayer = std::move(nextLayer);
 				}
 			}
 		}
-		// TODO: add terminal node.
+		// terminal layer.
 		NodeLayer terminalLayer;
-		DDNode terminalNode;
+		DDNode terminalNode{0,{0},100};
 		terminalLayer.push_back(terminalNode);
 
 		for (auto& node: currentLayer){
@@ -250,7 +276,7 @@ public:
 		// extract a node form vbar and set it as root.
 		auto id = Vbar[0];
 		auto networkNode = networkNodes[id];
-		forward_list<uint32_t> indexSet {networkNode.outArcIds.begin(), networkNode.outArcIds.end()};
+		forward_list<uint32_t> indexSet {networkNode.outNodeIds.begin(), networkNode.outNodeIds.end()};
 		// build a DDNode with it.
 		DDNode root{0,indexSet, 0};
 		// first layer
@@ -280,7 +306,7 @@ public:
 		}
 		// for all the nodes in the last layer, add two arcs a_1, a_2 that connects terminal.
 		vector<DDNode> lastLayer;
-		DDNode terminal{0,0,0};
+		DDNode terminal{0,{0},0};
 		lastLayer.push_back(terminal);
 		for (auto& node: currentLayer){
 			//
@@ -290,8 +316,18 @@ public:
 			node.childArcs.push_back(child2);
 		}
 	}
+
+	void printTree(){
+
+		for (const auto& layer: tree){
+			for (const auto& node: layer){
+				std::cout << node.nodeId << " ";
+			}
+			std::cout << std::endl;
+		}
+	}
 };
 
 
 
-#endif //SGUFP_SOLVER_DD_H
+//#endif //SGUFP_SOLVER_DD_H
