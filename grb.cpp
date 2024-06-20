@@ -91,7 +91,7 @@ void GurobiSolver::initializeVariables() {
  * 3. Runs the solver.
  * 4.
  */
-void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
+void GurobiSolver::solveSubProblem(const Network& network, const vector<vector<vector<bool>>>& y, uint32_t scenario) {
 	/*
 	 * Create a model for each
 	 */
@@ -99,6 +99,7 @@ void GurobiSolver::solveSubProblem(const Network& network, uint32_t scenario) {
 	initializeVariables();
 
 	// TODO: add objective function
+	// ASAP check indexes of all array accesses.
 	GRBLinExpr objectiveFunc;
 
 	for (uint32_t q = 0; q < network.n; q++){

@@ -108,6 +108,7 @@ public:
 
 typedef std::unordered_set<DDNode, DDNode::HashFunction> Layer;
 typedef std::vector<DDNode> NodeLayer;
+typedef std::vector<NodeLayer> DDTree;
 
 class RelaxedDD{
 
@@ -117,6 +118,7 @@ private:
 	PruneStrategy strategy = TRAIL;
 	bool isExact;
 	Layer cutset { };
+	DDTree tree;
 	
 	/*
 	 * Merge nodes based on a selected criteria.
@@ -128,21 +130,18 @@ private:
 
 	inline void pruneNextLayer(NodeLayer& currentLayer, NodeLayer& nextLayer);
 	//inline void buildNextLayer(NodeLayer& currentLayer, NodeLayer& nextLayer, uint32_t currentVariable);
-	
-	void insertNode(Layer& currentLayer, DDNode&& node){
-	
-	}
-	
+
 public:
+	inline void build(const Network& network, uint32_t startVariable = 0, uint32_t gamma = 9999); // todo: set gamma later.
 
-
+	NodeLayer getCutSet();
 };
 
 class RestrictedDD{
 private:
 	uint64_t lowerBound;
 	PruneStrategy strategy = TRAIL;
-	vector<vector<DDNode>> tree;
+	DDTree tree = DDTree();
 	//void trimNodes(Layer& currentLayer);
 	inline void pruneNextLayer(NodeLayer& currentLayer, NodeLayer& nextLayer);
 	//void insertNode(Layer& currentLayer, DDNode&& node);
@@ -154,13 +153,22 @@ public:
 	uint32_t maxWidth;
 	Layer cutset;
 
-	explicit RestrictedDD(uint32_t max_width): maxWidth{max_width}, isExact{true}, lowerBound{0} {}
+	RestrictedDD() {
+	}
+
+	explicit RestrictedDD(uint32_t max_width): maxWidth{max_width}, isExact{true}, lowerBound{0} {
+
+	}
 
 	void build(const Network& network, uint32_t startVariable= 0, uint32_t gamma=99999);
 
 	uint32_t getLowerBound() {return this->lowerBound; }
 
 	Layer getCutSet() { return cutset; }
+
+	vector<uint32_t> getPath();
+
+	void refineDD();
 };
 
 
@@ -186,9 +194,29 @@ public:
 	void getPath() {
 		// this function computes the path from terminal node to the root.
 		// start from terminal node and pick a maximum value and select that node.
+		// vector of labels from terminal to root.
+		vector<uint32_t> path(this->tree.size());
 
 		for (auto it = this->tree.rbegin(); it != this->tree.rend(); ++it){
 
+		}
+
+		uint32_t maxZ = 0;
+		uint32_t  maxLength = 0;
+		uint32_t  parentId;
+		// find max length of path.
+		for (const auto& node: this->tree[this->tree.size()-2]){
+			if (node.childArcs[0].label > maxZ) {
+				maxZ = node.childArcs[0].label;
+				parentId = node.nodeId;
+			}
+		}
+
+		//  iterate through layers.
+		for (int layer = this->tree.size()-2; layer > 0; layer--){
+			const auto parentNode = this->tree[layer][parentId];
+
+			parentId = parentNode.parentId;
 		}
 	}
 

@@ -17,8 +17,8 @@ add_executable(SGUFP_Solver main.cpp
         Network.h
         Network.cpp
         DD.cpp
-        #Solver.cpp
-        #Solver.h
+        Solver.cpp
+        Solver.h
         grb.cpp
         grb.h)
 

@@ -13,10 +13,11 @@ using namespace std;
 
 void testWorking();
 
+// each thread should have GurobiSolver instance and gurobi environment.
 class GurobiSolver{
 private:
 	GRBEnv environment;
-	int n = 100; // ASAP: change this number to number of nodes in the network.
+	uint32_t n ;// = 100; // ASAP: change this number to number of nodes in the network.
 	/* declare dual variables. */
 	vector<GRBVar> alpha;
 
@@ -32,7 +33,8 @@ private:
 	inline void postProcess();
 
 public:
-	GurobiSolver(const GRBEnv& env): environment(env) , model{environment} {
+	// default constructor.
+	GurobiSolver(const GRBEnv& env, uint32_t nodes): n{nodes}, environment(env) , model{environment} {
 		//this->model = GRBModel(this->environment);
 		this->alpha = vector<GRBVar>(n);
 		this->beta = vector<vector<GRBVar>>(n);
@@ -45,7 +47,7 @@ public:
 
 	void resetModel();
 
-	void solveSubProblem(const Network& network, uint32_t scenario);
+	void solveSubProblem(const Network& network, const vector<vector<vector<bool>>>& y, uint32_t scenario);
 
 	void initializeVariables();
 
