@@ -174,6 +174,7 @@ void buildTree(const Network& network, uint32_t startVariable, uint32_t gamma,
 
 /**
  * Builds Restricted subtree starting the given variable as root.
+ * Can also be called to build subtree from any variable in the defined order.
  */
 void RestrictedDD::build(const Network& network, uint32_t startVariable, uint32_t gamma) {
 
@@ -189,9 +190,9 @@ void RestrictedDD::build(const Network& network, uint32_t startVariable, uint32_
 		auto networkNode = networkNodes[*iterator];
 
 		forward_list<uint32_t> indexSet;
-		for (int i = networkNode.outDegree - 1; i >= 0; i--)
+		for (int i = networkNode.outDegree - 1; i >= 0; i--) // insert elements from last.
 			indexSet.push_front(networkNode.outNodeIds[i] + 1);
-		indexSet.push_front(0);
+		indexSet.push_front(0); // add zero to index set.
 
 		if (currentLayer.empty() && first) { // build subtree for the starting node.
 			DDNode rootNode{0, indexSet, 0};
@@ -199,7 +200,7 @@ void RestrictedDD::build(const Network& network, uint32_t startVariable, uint32_
 			this->tree.push_back(currentLayer);
 			//printLayer(currentLayer);
 			// iterate over incoming arcs and build layers.
-			for (auto incomingId: networkNode.inNodeIds) {
+			for (auto incomingId: networkNode.inNodeIds) { // actual Id of the node.
 				NodeLayer nextLayer;
 				buildNextLayer(currentLayer, nextLayer, incomingId);
 				if (nextLayer.size() > maxWidth)
@@ -209,14 +210,15 @@ void RestrictedDD::build(const Network& network, uint32_t startVariable, uint32_
 				currentLayer = std::move(nextLayer);
 			}
 			first = false;
-		} else { // second variable from start, update the status of nodes in current layer.
+		} else { // second variable from start, update the states of nodes in current layer to index set.
 			for (auto &node: currentLayer) node.state = indexSet;
 
 			// iterate over incoming arcs.
 			for (const auto incomingArc: networkNode.inNodeIds) {
 				NodeLayer nextLayer;
 				buildNextLayer(currentLayer, nextLayer, incomingArc);
-				pruneNextLayer(currentLayer, nextLayer);
+				if (nextLayer.size() > maxWidth) // prune next layer if maxWidth is reached.
+					pruneNextLayer(currentLayer, nextLayer);
 				this->tree.push_back(nextLayer);
 				printLayer(nextLayer);
 				currentLayer = std::move(nextLayer);
@@ -230,9 +232,9 @@ void RestrictedDD::build(const Network& network, uint32_t startVariable, uint32_
 	// add arcs to terminal node.
 	for (auto &node: currentLayer) {
 		DDArc arc1{0, 0, gamma};
-		DDArc arc2{1, 0, -gamma}; // I don't think this arc is necessary here.
+		//DDArc arc2{1, 0, -gamma}; // I don't think this arc is necessary here.
 		node.childArcs.push_back(arc1);
-		node.childArcs.push_back(arc2);
+		//node.childArcs.push_back(arc2);
 	}
 	this->tree.push_back(terminalLayer);
 
@@ -244,6 +246,101 @@ void RestrictedDD::build(const Network& network, uint32_t startVariable, uint32_
 	//printTree(this->tree);
 }
 
+vector<uint32_t> RestrictedDD::getPath() {
+	// return a path from root to terminal.
+	// start from terminal node and pick a maximum value in terminal layer.
+	vector<uint32_t> path(this->tree.size() -1);
+
+	uint32_t maxZ = 0;
+	uint32_t maxLength = 0;
+	uint32_t parentId;
+
+	auto terminalIndex = this->tree.size()-2;
+
+	for (const auto& node: this->tree[terminalIndex]){
+		if (node.childArcs[0].label > maxZ){
+			maxZ = node.childArcs[0].label;
+			parentId = node.nodeId;
+		}
+	}
+
+	path[terminalIndex] = parentId;
+
+	// iterate through other layers.
+	for (auto layer = this->tree.size()-2; layer > 0; layer--){
+		const auto parentNode = tree[layer][parentId];
+		parentId = parentNode.parentId;
+		path[layer] = parentNode.parentId;
+	}
+
+	return path;
+}
+
+DDNode& getNodeWithIndex(vector<DDNode>& layer, uint32_t index, bool& valid){
+	// returns the node that has the given index as nodeId.
+	for (auto& node: layer){
+		if (node.nodeId == index) {
+			valid = true;
+			return node;
+		}
+	}
+	valid = false;
+}
+
+bool isArcPresent(const vector<DDArc>& childArcs, const DDArc& arc){
+	// return true if arc is present in the childArcs.
+	for (auto& a: childArcs){
+		if (a.label == arc.label)
+			return true;
+	}
+	return false;
+}
+
+void RestrictedDD::refineDD(RestrictedDD &restrictedDD) {
+	// start with the root node and node the process each layer.
+
+	for (unsigned int i = 0; i < this->tree.size(); i++) {
+		// start from the root thisTreeLayer, and go through all the
+		auto& thisTreeLayer = this->tree[i];
+		auto& otherTreeLayer = restrictedDD.tree[i];
+		vector<bool> filter(thisTreeLayer.size(), false);
+		unsigned int index = 0;
+
+		for (auto& node: thisTreeLayer){
+			bool valid = false;
+			auto& otherNode = getNodeWithIndex(otherTreeLayer, node.nodeId, valid);
+			if (valid){ // node is present in both layers.
+				/*
+				for (auto& arc: otherNode.childArcs){ // TODO: delete arcs on the fly?
+
+					// i love you, its ruining my life, i touch you for only a fortnight.
+					// if arc is not present in the other node, then remove it.
+					// iterate through childArcs and remove
+					auto it = find_if(node.childArcs.begin(), node.childArcs.end(), [&arc](const DDArc& a){return a.label == arc.label;});
+					if (it == node.childArcs.end()){
+						// remove that arc.
+					}
+				}
+				*/
+				// intersection of arcs of both nodes.
+				vector<DDArc> tempArcs;
+				for (const auto& arc: node.childArcs){
+					if (isArcPresent(otherNode.childArcs, arc))
+						tempArcs.push_back(arc);
+				}
+				node.childArcs = tempArcs;
+				filter[index] = true;
+			}
+			index++;
+		}
+
+		// remove nodes in the layer.
+		// ASAP remove unfiltered nodes in the current layer.
+		// update the child arcs of parent nodes.
+		// update the index of remaining child nodes for its parents.
+
+	}
+}
 
 // INFO: RELAXED DECISION DIAGRAM.
 

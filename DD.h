@@ -33,7 +33,7 @@ public:
 
 class DDNode {
 public:
-	uint32_t nodeId; /* id of the node */
+	uint32_t nodeId; /* id of the node in the current layer. (assigned sequentially)  */
 	uint64_t objectiveVal; /* objective value is an unsigned long number */
 	forward_list<uint32_t> state; /* node might have multiple state values when refining */
 	uint32_t layerNo; /* with respect to global ordering of the variables */
@@ -168,7 +168,7 @@ public:
 
 	vector<uint32_t> getPath();
 
-	void refineDD();
+	void refineDD(RestrictedDD& restrictedDD);
 };
 
 
