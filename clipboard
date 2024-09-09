@@ -1,0 +1,99 @@
+vector<int> cutvec = { 7,5,4,3,2,6,1 };
+RHS = 10;
+
+nodecounter = 0;
+for (int i = 0; i < nodeLayers.size(); i++)
+{
+    for (int j = 0; j < nodeLayers[i].size(); j++)
+    {
+        if (nodecounter < nodeVector[nodeLayers[i][j]].nodeID) {
+            nodecounter = nodeVector[nodeLayers[i][j]].nodeID;
+        }
+    }
+}
+nodecounter += 1;
+
+arccounter = 0;
+for (int i = arcVector.size()-1; i > 0; i--)
+{
+    if (arcVector[i].ArcID > arccounter) {
+        arccounter = arcVector[i].ArcID;
+    }
+}
+arccounter += 1;
+
+nodeVector[0].state = RHS;
+for (int i0 = 0; i0 < nodeLayers.size()-1; i0++)
+{
+    for (int i1 = 0; i1 < nodeLayers[i0].size(); i1++)
+    {
+        if (nodeVector[nodeLayers[i0][i1]].incomingArcsID.size() > 1) {
+            /// duplicate nodes
+            vector<int> allincomings = nodeVector[nodeLayers[i0][i1]].incomingArcsID;
+
+            for (int i2 = 0; i2 < allincomings.size(); i2++)
+            {
+                if (i2 == 0) {
+                    nodeVector[nodeLayers[i0][i1]].incomingArcsID = { allincomings[i2] };
+                    nodeVector[nodeLayers[i0][i1]].parentNodesID = { arcVector[allincomings[i2]].tailID };
+                    int newstate = nodeVector[arcVector[allincomings[i2]].tailID].state - (arcVector[allincomings[i2]].Label * cutvec[i0 - 1]);
+                    nodeVector[nodeLayers[i0][i1]].state = newstate;
+
+                }
+                else {
+                    Node splitnode = nodeVector[nodeLayers[i0][i1]];
+                    arcVector[allincomings[i2]].headID = nodecounter;
+                    splitnode.nodeID = nodecounter;
+                    vector<int> outarcs = splitnode.outgoingArcsID;
+                    splitnode.outgoingArcsID = {};
+                    
+                    for (int i3 = 0; i3 < outarcs.size(); i3++)
+                    {
+                        Arc newArc = arcVector[outarcs[i3]];
+                        newArc.ArcID = arccounter; 
+                        newArc.tailID = nodecounter;
+                        splitnode.outgoingArcsID.push_back(arccounter);
+                        arcVector.push_back(newArc);
+
+                        nodeVector[arcVector[arccounter].headID].incomingArcsID.push_back(arccounter);
+                        
+                        arccounter += 1;
+                    }
+
+                    splitnode.incomingArcsID = { allincomings[i2] };
+                    splitnode.parentNodesID = { arcVector[allincomings[i2]].tailID };
+
+                    vector<int> possibleStates = {};
+                    vector<int> incomings = nodeVector[nodeLayers[i0][i1]].incomingArcsID;
+                    for (int i4 = 0; i4 < incomings.size(); i4++)
+                    {
+                        int newstate = nodeVector[arcVector[incomings[i4]].tailID].state - (arcVector[incomings[i4]].Label * cutvec[i0 - 1]);
+                        possibleStates.push_back(newstate);
+                    }
+                    splitnode.state = *std::min_element(possibleStates.begin(), possibleStates.end());
+
+                    nodeVector.push_back(splitnode);
+                    nodeLayers[i0].push_back(nodecounter);
+                    nodecounter += 1; 
+                }
+            }
+        }
+        else {
+            if (i0 == 0) {
+                continue; 
+            }
+            else {
+                vector<int> possibleStates = {};
+                vector<int> incomings = nodeVector[nodeLayers[i0][i1]].incomingArcsID;
+                for (int i4 = 0; i4 < incomings.size() ; i4++)
+                {
+                    int newstate = nodeVector[arcVector[incomings[i4]].tailID].state - (arcVector[incomings[i4]].Label* cutvec[i0-1]);
+                    possibleStates.push_back(newstate);
+                }
+                nodeVector[nodeLayers[i0][i1]].state = *std::min_element(possibleStates.begin(), possibleStates.end());
+            }
+            
+        }
+        
+    }
+}
