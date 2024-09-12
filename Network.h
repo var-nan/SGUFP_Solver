@@ -68,13 +68,18 @@ public:
 	//vector<std::vector<uint>> adjacencyList{n};
 	vector<uint> Vbar; /* list of vertices that are in Vbar */
 	uint nScenarios;
-
+	// arc processing order
+	vector<pair<int, int>> processingOrder;
+	unordered_map<int, vector<int>> stateUpdateMap;
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)
 		: n{nNodes}, edges{nEdges}, networkNodes{netNodes}, networkArcs{netArcs},
 		Vbar{v_bar}, nScenarios{scenarios} {} */
 
 	explicit Network(const std::string& p_fileName);
+
+	inline NetworkArc getArc(uint32_t i, uint32_t j) const;
+
 
 	/* TODO: implement move constructor ASAP*/
 

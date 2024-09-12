@@ -5,79 +5,180 @@
 
 #include "DD.h"
 
-void DD::build(const vector<pair<int,int>> processingOrder, DDNode &node, int index) {
+void DD::build(const Network& network, DDNode& node, int index) {
+
+	// should reset nodes and arcs maps.
+	auto& arcOrder = network.processingOrder;
 
 	// set the node to the root and start from there.
+	vector<uint> currentLayer; // should be base layer.
 
-	vector<int> currentLayer; // should be base layer.
+	// TODO: make the node as the root node of the tree.
+	node.incomingArcs.clear();
+	node.outgoingArcs.clear();
+	node.id = 0;
+	nodes.insert({node.id, node});
 	currentLayer.push_back(node.id);
-
-	//int lastInserted = 0;
-	//tree.push_back({0});
-
-	DDNode root(node); // need to reset the node Id to zero or 1.
-	root.outgoingArcs.clear();
-	root.incomingArcs.clear();
-	// insert root to nodes.
+	// insert root layer to tree.
 	tree.push_back(currentLayer);
-	auto start = processingOrder.begin()+index;
-	auto end = processingOrder.end();
+
+	auto start = arcOrder.begin() + index;
+	auto end = arcOrder.end();
 
 	for (; start < end; start++){
 
 		auto[a,b] = *start;
-		vector<int>&& nextLayer = buildNextLayer(currentLayer, index);
+		vector<uint> nextLayer;
+		buildNextLayer(currentLayer, nextLayer, index);
 		tree.push_back(nextLayer);
 		currentLayer = std::move(nextLayer);
 	}
+	// TODO: add terminal node layer.
 }
 
-vector<int>&& DD::buildNextLayer(vector<int>& currentLayer, int index) {
+void DD::buildNextLayer(vector<uint> &currentLayer, vector<uint> &nextLayer, int index) {
 	/*
-	 * build next layer from the given current layer.
-	 * should also create arcs and store them in the map.
-	 * should also create nodes and store them in the map.
+	 * builds next layer from the given current layer.
+	 * adds new child nodes and outgoing arcs to their respective maps.
+	 * updates currentlayer's nodes and their arcs in the map.
+	 * This function doesn't do reduction.
 	 */
+	// TODO: reduction required?
 
-	vector<int> nextLayer;
-	//set<pair<set<int>,int>> allStates;
+	if (type == RESTRICTED) {
 
-	for (auto id: currentLayer){ // iterate through current layer.
+#if PRUNE == TRAIL
+		{
+			uint count = 0;
 
-		auto& node = nodes[id];
+			for (const auto id: currentLayer) {
 
-		// add zero state
-		DDNode zeroNode;
-		zeroNode.id = lastNode++; // TODO: need to add some more fields.
-		zeroNode.states = node.states;
-		DDArc zeroArc(lastArc++, zeroNode.id, id, 0);
-		node.outgoingArcs.push_back(zeroArc.id);
-		zeroNode.incomingArcs.push_back(zeroArc.id);
-		// insert to map.
-		nodes.insert({zeroNode.id, zeroNode});
-		arcs.insert({zeroArc.id, zeroArc});
+				DDNode &parentNode = nodes[id];
+				auto parentStates = parentNode.states;
+				// change the state of parent node if required.
+				// INFO; states should contain -1.
+				for (const auto decision: parentNode.states) {
+					if (count > maxWidth) break;
 
-		nextLayer.push_back(zeroNode.id);
+					DDNode node(lastInserted);
+					DDArc arc(lastInserted, parentNode.id, node.id, decision);
+					node.states = parentStates;
+					if (decision != -1) node.states.erase(decision); // TODO check if this removes the decision element or not.
+					node.solutionVector = parentNode.solutionVector; // TODO: copy solutions if needed.
+					// ASAP remove the decided value from node's solution vector.
+					node.solutionVector.emplace_back(decision);
+					node.incomingArcs.emplace_back(arc.id);
+					parentNode.outgoingArcs.push_back(arc.id);
+					// insert node and arc to map
+					nodes.insert({node.id, node});
+					arcs.insert({arc.id, arc});
 
-		for (auto state: node.states){
-			// create arc and node
-			DDNode node1;// create a new node with some Id
-			node1.id = lastNode++;
-			auto states = node.states; // remove the state from states.
-			states.erase(std::remove(states.begin(), states.end(), state), states.end());
-			node1.states = std::move(states);
-			DDArc arc(lastArc++, node1.id, id, state);
-			node1.incomingArcs.push_back(arc.id);
-			node.outgoingArcs.push_back(arc.id); // NOTE: SHOULD BE ID OF THE CHILDARC, NOT CHILD NODE.
-			//DDArc arc(lastArc++, 10, 10, 10);
-			nodes.insert({node1.id, node1});
-			arcs.insert({arc.id, arc});
-			nextLayer.push_back(node1.id); // ASAP: remove the state from the list of states and
+					count++;
+					lastInserted++;
+
+					nextLayer.emplace_back(node.id);
+				}
+			}
 		}
-	}
 
-	return std::move(nextLayer);
+#elif PRUNE == RANDOM
+	// remove nodes at random
+#endif
+
+	}
+	else if(type == RELAXED){
+#if PRUNE == TRAIL
+		{
+			uint count = 0;
+			uint lastNodeId = 0;
+
+			for (const auto id: currentLayer) {
+				DDNode &parentNode = nodes[id];
+
+				auto parentStates = parentNode.states;
+				for (auto decision: parentNode.states) {
+
+					if (count < maxWidth) {
+						DDNode node(lastInserted);
+						DDArc arc(lastInserted, id, node.id, decision);
+						node.states = parentStates;
+						if (decision != -1) node.states.erase(decision); // TODO check if this removes the decision element or not.
+						node.solutionVector = parentNode.solutionVector; // TODO: copy solutions if needed.
+						// ASAP remove the decided value from node's solution vector.
+						node.solutionVector.emplace_back(decision);
+						node.incomingArcs.emplace_back(arc.id);
+						parentNode.outgoingArcs.push_back(arc.id);
+						// insert node and arc to map
+						nodes.insert({node.id, node});
+						arcs.insert({arc.id, arc});
+						lastNodeId = node.id;
+						nextLayer.emplace_back(node.id);
+					} else { // create only arc and make it point to the last node.
+						// QUESTION: do we create all arcs in relaxed version.
+						DDArc arc(lastInserted, id, lastNodeId, decision);// asap update head id.
+						DDNode &node = nodes[lastNodeId];
+						node.incomingArcs.emplace_back(arc.id);
+						parentNode.outgoingArcs.emplace_back(arc.id);
+						arcs.insert({arc.id, arc});
+					}
+					count++;
+					lastInserted++;
+				}
+			}
+		}
+#elif PRUNE == RANDOM
+// merge nodes at random
+#endif
+
+	}
 }
+
+//void ibuildNextLayer(vector<uint>& currentLayer, vector<uint>& nextLayer, int index) {
+//	/*
+//	 * build next layer from the given current layer.
+//	 * should also create arcs and store them in the map.
+//	 * should also create nodes and store them in the map.
+//	 * updates both current layer and next layer
+//	 */
+//
+//	//set<pair<set<int>,int>> allStates;
+//
+//	for (auto id: currentLayer){ // iterate through current layer.
+//
+//		auto& node = nodes[id];
+//
+//		// add zero state
+//		DDNode zeroNode;
+//		zeroNode.id = lastNode++; // TODO: need to add some more fields.
+//		zeroNode.states = node.states;
+//		DDArc zeroArc(lastArc++, zeroNode.id, id, 0);
+//		node.outgoingArcs.push_back(zeroArc.id);
+//		zeroNode.incomingArcs.push_back(zeroArc.id);
+//		// insert to map.
+//		nodes.insert({zeroNode.id, zeroNode});
+//		arcs.insert({zeroArc.id, zeroArc});
+//
+//		nextLayer.push_back(zeroNode.id);
+//
+//		for (auto state: node.states){
+//			// create arc and node
+//			DDNode node1;// create a new node with some Id
+//			node1.id = lastNode++;
+//			auto states = node.states; // remove the state from states.
+//			states.erase(std::remove(states.begin(), states.end(), state), states.end());
+//			node1.states = std::move(states);
+//			DDArc arc(lastArc++, node1.id, id, state);
+//			node1.incomingArcs.push_back(arc.id);
+//			node.outgoingArcs.push_back(arc.id); // NOTE: SHOULD BE ID OF THE CHILDARC, NOT CHILD NODE.
+//			//DDArc arc(lastArc++, 10, 10, 10);
+//			nodes.insert({node1.id, node1});
+//			arcs.insert({arc.id, arc});
+//			nextLayer.push_back(node1.id); // ASAP: remove the state from the list of states and
+//		}
+//	}
+//
+//	return std::move(nextLayer);
+//}
 
 void DD::mergeNodes(DDNode& node1, DDNode& node2) {
 	/*

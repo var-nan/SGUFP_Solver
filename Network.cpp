@@ -72,6 +72,14 @@ Network::Network(const std::string& p_fileName){
 		this->networkArcs = netArcs;
 		this->nScenarios = scenarios;
 		this->Vbar = vBarNodes;
+
+		// build Order vector.
+		int i = 0;
+		for (const auto& id: Vbar){
+			for (const auto& inId: networkNodes[id].inNodeIds){
+				processingOrder.emplace_back(pair(i++, id));
+			}
+		}
 	}
 	else {
 		// error in opening file. exit program.
@@ -79,3 +87,14 @@ Network::Network(const std::string& p_fileName){
 
 }
 
+void postProcess(){
+	// ASAP: change order in 'processingOrder' and 'stateUpdateMap' variables.
+}
+
+NetworkArc Network::getArc(uint32_t i, uint32_t j) const {
+	// return an arc between node i (outgoing) and node j (incoming).
+	for (const auto& arc: networkArcs){
+		if (arc.tailId == i && arc.headId == j)
+			return arc;
+	}
+}
