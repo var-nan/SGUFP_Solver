@@ -1,0 +1,396 @@
+			// optimality cut calculation 
+			if (dual_status == GRB_OPTIMAL)
+			{
+				double constant = 0;
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.outdegree[q] == 0) continue;
+					for (int counter1 = 0; counter1 < g.outdegree[q]; counter1++)
+					{
+						int j = g.out_neighbor[q][counter1];
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (j == g.adj[q][counter])
+							{
+								constant -= g.arc_lb_sc[q][s][counter] * beta[q][j].get(GRB_DoubleAttr_X);
+								constant += g.arc_ub_sc[q][s][counter] * gamma[q][j].get(GRB_DoubleAttr_X);
+							}
+						}
+					}
+				}
+				vector<int> y_1_coef(g.n);
+				vector<vector<int>> y_2_coef(g.n, y_1);
+				vector < vector<vector<int>>> y_bar_coef(g.n, y_2);
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.indegree[q] == 0 || g.outdegree[q] == 0) continue;
+					bool not_consider = false;
+					for (int it = 0; it < not_in_V_bar.size(); it++)
+					{
+						if (q == not_in_V_bar[it])
+						{
+							not_consider = true;
+							break;
+						}
+					}
+					if (not_consider == true) continue;
+					for (int counter1 = 0; counter1 < g.indegree[q]; counter1++)
+					{
+						int i = g.in_neighbor[q][counter1];
+						double u_i_q = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (i == g.adj[q][counter])
+							{
+								u_i_q = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						for (int counter2 = 0; counter2 < g.outdegree[q]; counter2++)
+						{
+							int j = g.out_neighbor[q][counter2];
+							constant += u_i_q * lambda[i][q][j].get(GRB_DoubleAttr_X);
+							y_bar_coef[i][q][j] -= u_i_q * lambda[i][q][j].get(GRB_DoubleAttr_X);
+						}
+					}
+					for (int counter1 = 0; counter1 < g.outdegree[q]; counter1++)
+					{
+						int j = g.out_neighbor[q][counter1];
+						double u_q_j = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (j == g.adj[q][counter])
+							{
+								u_q_j = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						for (int counter2 = 0; counter2 < g.indegree[q]; counter2++)
+						{
+							int i = g.in_neighbor[q][counter2];
+							constant += u_q_j * mu[i][q][j].get(GRB_DoubleAttr_X);
+							y_bar_coef[i][q][j] -= u_q_j * mu[i][q][j].get(GRB_DoubleAttr_X);
+						}
+					}
+				}
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.indegree[q] == 0 || g.outdegree[q] == 0) continue;
+					bool not_consider = false;
+					for (int it = 0; it < not_in_V_bar.size(); it++)
+					{
+						if (q == not_in_V_bar[it])
+						{
+							not_consider = true;
+							break;
+						}
+					}
+					if (not_consider == true) continue;
+					for (int counter1 = 0; counter1 < g.indegree[q]; counter1++)
+					{
+						int i = g.in_neighbor[q][counter1];
+						double u_i_q = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (i == g.adj[q][counter])
+							{
+								u_i_q = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						GRBLinExpr sum = 0;
+						for (int counter2 = 0; counter2 < g.outdegree[q]; counter2++)
+						{
+							int j = g.out_neighbor[q][counter2];
+							y_bar_coef[i][q][j] += u_i_q * sigma[i][q].get(GRB_DoubleAttr_X);
+						}
+					}
+				}
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.indegree[q] == 0 || g.outdegree[q] == 0) continue;
+					bool not_consider = false;
+					for (int it = 0; it < not_in_V_bar.size(); it++)
+					{
+						if (q == not_in_V_bar[it])
+						{
+							not_consider = true;
+							break;
+						}
+					}
+					if (not_consider == true) continue;
+					for (int counter1 = 0; counter1 < g.outdegree[q]; counter1++)
+					{
+						int j = g.out_neighbor[q][counter1];
+						double u_q_j = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (j == g.adj[q][counter])
+							{
+								u_q_j = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						GRBLinExpr sum = 0;
+						for (int counter2 = 0; counter2 < g.indegree[q]; counter2++)
+						{
+							int i = g.in_neighbor[q][counter2];
+							y_bar_coef[i][q][j] += u_q_j * phi[q][j].get(GRB_DoubleAttr_X);
+						}
+					}
+				}
+				vector<double> current_optimality_cut;
+				for (int V_bar_it = 0; V_bar_it < V_bar.size(); V_bar_it++)
+				{
+					int q = V_bar[V_bar_it];
+					for (int q_in_neighbor_it = 0; q_in_neighbor_it < g.indegree[q]; q_in_neighbor_it++)
+					{
+						int i = g.in_neighbor[q][q_in_neighbor_it];
+						for (int q_out_neighbor_it = 0; q_out_neighbor_it < g.outdegree[q]; q_out_neighbor_it++)
+						{
+							int j = g.out_neighbor[q][q_out_neighbor_it];
+							int label_1 = incoming_arc_to_label(g, i, q, q);
+							int label_2 = outgoing_arc_to_label(g, q, j, q);
+							current_optimality_cut.push_back(-1 * y_bar_coef[i][q][j]);
+							current_optimality_cut.push_back(q);
+							current_optimality_cut.push_back(label_1);
+							current_optimality_cut.push_back(label_2);
+						}
+					}
+				}
+				current_optimality_cut.push_back(constant);
+				RHS_of_cuts.push_back(current_optimality_cut);
+				til_now += Dual_subproblem.get(GRB_DoubleAttr_ObjVal) / g.scenario;
+				s++;
+			}
+			// feasibility cut
+			else
+			{
+				s = 0;
+				til_now = 0;
+				double constant = 0;
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.outdegree[q] == 0) continue;
+					for (int counter1 = 0; counter1 < g.outdegree[q]; counter1++)
+					{
+						int j = g.out_neighbor[q][counter1];
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (j == g.adj[q][counter])
+							{
+								constant -= g.arc_lb_sc[q][s][counter] * beta[q][j].get(GRB_DoubleAttr_UnbdRay);
+								constant += g.arc_ub_sc[q][s][counter] * gamma[q][j].get(GRB_DoubleAttr_UnbdRay);
+							}
+						}
+					}
+				}
+				vector<int> y_1_coef(g.n);
+				vector<vector<int>> y_2_coef(g.n, y_1);
+				vector < vector<vector<int>>> y_bar_coef(g.n, y_2);
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.indegree[q] == 0 || g.outdegree[q] == 0) continue;
+					bool not_consider = false;
+					for (int it = 0; it < not_in_V_bar.size(); it++)
+					{
+						if (q == not_in_V_bar[it])
+						{
+							not_consider = true;
+							break;
+						}
+					}
+					if (not_consider == true) continue;
+					for (int counter1 = 0; counter1 < g.indegree[q]; counter1++)
+					{
+						int i = g.in_neighbor[q][counter1];
+						double u_i_q = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (i == g.adj[q][counter])
+							{
+								u_i_q = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						for (int counter2 = 0; counter2 < g.outdegree[q]; counter2++)
+						{
+							int j = g.out_neighbor[q][counter2];
+							constant += u_i_q * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+							y_bar_coef[i][q][j] -= u_i_q * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+						}
+					}
+					for (int counter1 = 0; counter1 < g.outdegree[q]; counter1++)
+					{
+						int j = g.out_neighbor[q][counter1];
+						double u_q_j = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (j == g.adj[q][counter])
+							{
+								u_q_j = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						for (int counter2 = 0; counter2 < g.indegree[q]; counter2++)
+						{
+							int i = g.in_neighbor[q][counter2];
+							constant += u_q_j * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+							y_bar_coef[i][q][j] -= u_q_j * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+						}
+					}
+				}
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.indegree[q] == 0 || g.outdegree[q] == 0) continue;
+					bool not_consider = false;
+					for (int it = 0; it < not_in_V_bar.size(); it++)
+					{
+						if (q == not_in_V_bar[it])
+						{
+							not_consider = true;
+							break;
+						}
+					}
+					if (not_consider == true) continue;
+					for (int counter1 = 0; counter1 < g.indegree[q]; counter1++)
+					{
+						int i = g.in_neighbor[q][counter1];
+						double u_i_q = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (i == g.adj[q][counter])
+							{
+								u_i_q = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						GRBLinExpr sum = 0;
+						for (int counter2 = 0; counter2 < g.outdegree[q]; counter2++)
+						{
+							int j = g.out_neighbor[q][counter2];
+							y_bar_coef[i][q][j] += u_i_q * sigma[i][q].get(GRB_DoubleAttr_UnbdRay);
+						}
+					}
+				}
+				for (int q = 0; q < g.n; q++)
+				{
+					if (g.indegree[q] == 0 || g.outdegree[q] == 0) continue;
+					bool not_consider = false;
+					for (int it = 0; it < not_in_V_bar.size(); it++)
+					{
+						if (q == not_in_V_bar[it])
+						{
+							not_consider = true;
+							break;
+						}
+					}
+					if (not_consider == true) continue;
+					for (int counter1 = 0; counter1 < g.outdegree[q]; counter1++)
+					{
+						int j = g.out_neighbor[q][counter1];
+						double u_q_j = 0;
+						for (int counter = 0; counter < g.adj[q].size(); counter++)
+						{
+							if (j == g.adj[q][counter])
+							{
+								u_q_j = g.arc_ub_sc[q][s][counter];
+								break;
+							}
+						}
+						GRBLinExpr sum = 0;
+						for (int counter2 = 0; counter2 < g.indegree[q]; counter2++)
+						{
+							int i = g.in_neighbor[q][counter2];
+							y_bar_coef[i][q][j] += u_q_j * phi[q][j].get(GRB_DoubleAttr_UnbdRay);
+						}
+					}
+				}
+				vector<int> current_feasibility_cut;
+				// feasibility cut calculation
+				for (int V_bar_it = 0; V_bar_it < V_bar.size(); V_bar_it++)
+				{
+					int q = V_bar[V_bar_it];
+					for (int q_in_neighbor_it = 0; q_in_neighbor_it < g.indegree[q]; q_in_neighbor_it++)
+					{
+						int i = g.in_neighbor[q][q_in_neighbor_it];
+						for (int q_out_neighbor_it = 0; q_out_neighbor_it < g.outdegree[q]; q_out_neighbor_it++)
+						{
+							int j = g.out_neighbor[q][q_out_neighbor_it];
+							int label_1 = incoming_arc_to_label(g, i, q, q);
+							int label_2 = outgoing_arc_to_label(g, q, j, q);
+							current_feasibility_cut.push_back(y_bar_coef[i][q][j]);
+							current_feasibility_cut.push_back(q);
+							current_feasibility_cut.push_back(label_1);
+							current_feasibility_cut.push_back(label_2);
+						}
+					}
+				}
+				int constant_of_feasibility_cut = constant;
+				for (int i = 0; i < current_feasibility_cut.size(); i = i + 4)
+				{
+					constant_of_feasibility_cut += current_feasibility_cut[i];
+				}
+				current_feasibility_cut.push_back(constant_of_feasibility_cut);
+				vector<bool> flipped(current_feasibility_cut.size() / 4, false);
+				vector<int> cut_compatible_to_threshold = cut_changer_for_threshold_diagram(current_feasibility_cut, flipped);
+				separate_feasibility_cut(cut_compatible_to_threshold, flipped, restricted_DD);
+				double new_solution = find_longest_path(restricted_DD, w_bar, large_number);
+
+				for (int i = 0; i < g.n; i++)
+				{
+					for (int j = 0; j < g.n; j++)
+					{
+						if (w_bar[i][j] >= 0)
+						{
+							w_to_y(g, i, j, w_bar[i][j], y_bar);
+						}
+					}
+				}
+			}
+			// no idea what is happening here! 
+			if (s == g.scenario)
+			{
+				vector<double> RHS;
+				int size_of_one_cut = RHS_of_cuts[0].size();
+				for (int ii = 0; ii < size_of_one_cut; ii++)
+				{
+					RHS.push_back(0);
+				}
+				for (int ii = 0; ii < RHS_of_cuts.size(); ii++)
+				{
+					for (int jj = 0; jj < RHS_of_cuts[ii].size(); jj++)
+					{
+						if (jj % 4 == 0) RHS[jj] += double(RHS_of_cuts[ii][jj] / g.scenario);
+						else RHS[jj] = RHS_of_cuts[ii][jj];
+					}
+				}
+				RHS_of_cuts.clear();
+				vector<vector<bool>> fixed_elements_of_w_bar;
+				vector<bool> empty(g.n, false);
+				for (int i = 0; i < g.n; i++)
+				{
+					fixed_elements_of_w_bar.push_back(empty);
+				}
+				separate_optimality_cut(g, fixed_elements_of_w_bar, w_bar, RHS, restricted_DD);
+				if (z_star <= til_now + epsilon)
+				{
+					flag = false;
+				}
+				else
+				{
+					s = 0;
+					til_now = 0;
+					z_star = find_longest_path(restricted_DD, w_bar, large_number);
+					for (int i = 0; i < g.n; i++)
+					{
+						for (int j = 0; j < g.n; j++)
+						{
+							if (w_bar[i][j] >= 0)
+							{
+								w_to_y(g, i, j, w_bar[i][j], y_bar);
+							}
+						}
+					}
+				}
+			}
