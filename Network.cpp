@@ -5,6 +5,7 @@
 #include "Network.h"
 #include <fstream>
 #include <iostream>
+#include <cstring>
 
 
 Network::Network(const std::string& p_fileName){
@@ -18,8 +19,10 @@ Network::Network(const std::string& p_fileName){
 		uint nNodes,m; // nNodes = number of nodes, m = number of arcs
 		uint scenarios; // number of scenarios
 
-		file >> nNodes >> m >> scenarios;
-
+		//file >> nNodes >> m >> scenarios;
+		nNodes = 43;
+		m = 90; //
+		scenarios = 50;
 		std::vector<NetworkNode> netNodes(nNodes);
 		std::vector<NetworkArc> netArcs(m);
 
@@ -49,8 +52,9 @@ Network::Network(const std::string& p_fileName){
 			// store this arc in the network. ASAP: number of nodes are greater than the given number, causing segmentation fault.
 			netArcs[i] = {i, tailId, headId, upperCapacities, lowerCapacities, rewards};
 			// update network nodes. //ASAP store nodeIds of outgoing and incoming arcs instead of arcIDs
-			netNodes[tailId].outNodeIds.push_back(headId); netNodes[tailId].outDegree++;
-			netNodes[headId].inNodeIds.push_back(tailId); netNodes[headId].inDegree++;
+			//netNodes[tailId].outNodeIds.push_back(headId); netNodes[tailId].outDegree++;
+			//netNodes[headId].inNodeIds.push_back(tailId); netNodes[headId].inDegree++;
+			netNodes[tailId].outgoingArcs.push_back(i); netNodes[headId].incomingArcs.push_back(i);
 		}
 
 		// read v_bar
@@ -59,11 +63,10 @@ Network::Network(const std::string& p_fileName){
 		// TODO: read v_bar nodes and build network.
 		vector<uint> vBarNodes;
 
-		while (file.peek() != EOF){
-			uint i;
-			file >> i;
-			vBarNodes.push_back(i);
-			netNodes[i].isVbar = true;
+		uint index;
+		while (file >> index){
+			vBarNodes.push_back(index);
+			netNodes[index].isVbar = true;
 		}
 
 		this->n = nNodes;
@@ -73,16 +76,41 @@ Network::Network(const std::string& p_fileName){
 		this->nScenarios = scenarios;
 		this->Vbar = vBarNodes;
 
-		// build Order vector.
+		// reduce the size of vBar. just for testing.
+		this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
+
+		// TODO: change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
 		int i = 0;
 		for (const auto& id: Vbar){
-			for (const auto& inId: networkNodes[id].inNodeIds){
-				processingOrder.emplace_back(pair(i++, id));
+			// another way of doing state update map.
+			const auto& node = networkNodes[id];
+			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
+			states.insert(-1); // add -1 to states.
+			stateUpdateMap.insert({i, states});
+			for (const auto& inId: node.incomingArcs){
+				processingOrder.emplace_back(i++, inId);
 			}
 		}
+
+//		// build stateUpdate map.
+//		int lastId = -1;
+//		for (const auto [id,aId]: processingOrder){
+//			// get arc and its tail id.
+//			const auto arc = netArcs[aId];
+//			auto tailId = arc.tailId;
+//			// get the outgoing arcs of the tail node if state needs to be changed.
+//			if (lastId != tailId){
+//				// state should be changed.
+//				auto state = netNodes[tailId].outgoingArcs;
+//				stateUpdateMap.insert({id, state}); // TODO change to aId, if needed.
+//				lastId = tailId;
+//			}
+//		}
 	}
 	else {
 		// error in opening file. exit program.
+		cerr << "File could not be opened!" << endl;
+		cerr << "Error code: " << strerror(errno);
 	}
 
 }
