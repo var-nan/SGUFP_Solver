@@ -9,6 +9,10 @@
 #ifndef PRUNE
 	#define PRUNE TRAIL
 #endif
+#ifndef MAX_WIDTH
+	#define MAX_WIDTH 128
+#endif
+
 
 #include <utility>
 #include <vector>
@@ -24,15 +28,15 @@ using namespace std;
 
 class DDArc{
 public:
-	uint id;
-	uint head;
-	uint tail;
-	int value;
+	int id;
+	int head;
+	int tail;
+	int decision; // it should store the solution.
 	int weight;
 
-	DDArc(){}
+	DDArc(): id{0}, tail{0}, head{0}, decision{0}, weight{0}{}
 
-	DDArc(uint a, uint b, uint c, int d): id{a}, tail{b}, head{c}, value{d}, weight{0}{}
+	DDArc(int a, int b, int c, int d): id{a}, tail{b}, head{c}, decision{d}, weight{0}{}
 };
 
 class DDNode{
@@ -43,15 +47,19 @@ public:
 	unordered_set<int> states;
 	int state2;
 	vector<int> solutionVector;
+	int objVal = 0; // ASAP Update it during refinement.
 
-	DDNode(){};
-	DDNode(int a): id{a}{}
-	DDNode(const DDNode& node){} // ASAP, constructor used in duplication node.
+	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
+	DDNode(int a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
+	//DDNode(const DDNode& node): id{node.id}, incomingArcs{node.incomingArcs}{} // ASAP, copy constructor used in duplication node.
 
 	// copy assignment.
 
 	~DDNode(){
-		// destructor.
+		incomingArcs.clear();
+		outgoingArcs.clear();
+		states.clear();
+		solutionVector.clear();
 		// delete incomingArcs, outgoingArcs, states vectors.
 	}
 };
@@ -70,27 +78,36 @@ enum Prune{
 class DD{
 
 private:
-	uint lastArc = 1;
-	uint lastNode = 1;
-	Type type;
-	Prune strategy;
-	uint maxWidth = 128;
-
+	int lastArc = 1;
+	int lastNode = 1;
+	Type type = RESTRICTED;
+	//Prune strategy;
+	//int maxWidth = 128;
+	//int startTree = 0; // this variable denotes the position where the tree starts in the global order.
+	vi cutset{};
+	//int exactLayer = 0; // represents which layer is exact layer.
 	// temporary
 	//vector<pair<int,int>> processingOrder;
 	//unordered_map<int, vector<int>> stateUpdateMap;
 
-	void reduceLayer(vector<uint>& currentLayer);
-	void mergeNodes(DDNode& node1, DDNode& node2);
-	void deleteArcById(uint id);
-	void deleteNodeById(uint id);
-	void duplicateNode(uint id);
-
 public:
-	unordered_map<uint,DDNode> nodes; // change to vector if needed.
-	unordered_map<uint, DDArc> arcs; // change to vector if needed.
-	vector<vector<uint>> tree;
+	void reduceLayer(vector<int> &currentLayer);
+	void mergeNodes(DDNode& node1, DDNode& node2);
+	void deleteArcById(int id);
+	void deleteNodeById(int id);
+	void duplicateNode(int id);
+	inline void updateState(const vector<int> &currentLayer, const unordered_set<int> &states);
+	inline DDNode duplicate(const DDNode& node);
+	vi solution();
+	vector<DDNode> getExactCutset();
+	vi getSolutionVector(int nodeId);
+//public:
+	unordered_map<int,DDNode> nodes; // change to vector if needed.
+	unordered_map<int, DDArc> arcs; // change to vector if needed.
+	vector<vector<int>> tree;
 	int lastInserted = 1; // 0 is reserved for root node.
+	int startTree = 0;
+	int exactLayer = 0;
 
 	DD() {
 
@@ -99,13 +116,13 @@ public:
 	void build(const Network& network, DDNode& node, int index);
 	//void build(const vector<pair<int,int>> processingOrder);
 
-	void buildNextLayer(vector<uint>& currentLayer, vector<uint>& nextLayer, int index);
+	bool buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int index);
 };
 
 
 struct set_hash{
 	/*
-	 * Hash value of the entire set is Bitwise XOR of hash of individual elements.
+	 * Hash decision of the entire set is Bitwise XOR of hash of individual elements.
 	 */
 	size_t operator()(const unordered_set<int>& s) const {
 		size_t h = 0;
@@ -117,7 +134,7 @@ struct set_hash{
 
 struct tuple_hash{
 	/*
-	 * Hash value of tuple considers only the first two elements of the tuple.
+	 * Hash decision of tuple considers only the first two elements of the tuple.
 	 */
 	size_t operator()(const tuple<unordered_set<int>,int,int>& t) const {
 		size_t h1 = set_hash{}(get<0>(t));
