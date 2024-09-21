@@ -90,7 +90,31 @@ private:
 	//vector<pair<int,int>> processingOrder;
 	//unordered_map<int, vector<int>> stateUpdateMap;
 
+	class Number{
+	private:
+		int n;
+		vector<int> numbers;
+	public:
+		Number(): n{1}, numbers{}{
+			numbers.reserve(128);
+		}
+
+		int getNext(){
+			if (!numbers.empty()) {
+				int x = numbers.back();
+				numbers.pop_back();
+				return x;
+			}
+			else return n++;
+		}
+
+		void setNext(int x){
+			numbers.push_back(x);
+		}
+	};
+
 public:
+	Number number;
 	void reduceLayer(vector<int> &currentLayer);
 	void mergeNodes(DDNode& node1, DDNode& node2);
 	void deleteArcById(int id);

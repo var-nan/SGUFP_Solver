@@ -92,6 +92,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 				for (const auto decision: parentNode.states) {
 					if (count >= MAX_WIDTH) {isExact = false; break;}
 
+					lastInserted = number.getNext();
 					DDNode node{lastInserted};
 					DDArc arc{lastInserted, parentNode.id, node.id, decision};
 					node.states = parentStates;
@@ -129,6 +130,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 				auto parentStates = parentNode.states;
 				for (auto decision: parentNode.states) {
 
+					lastInserted = number.getNext();
 					if (count < MAX_WIDTH) {
 						DDNode node{lastInserted};
 						DDArc arc{lastInserted, id, node.id, decision};
@@ -300,6 +302,7 @@ void DD::deleteNodeById(int id) {
 
 inline DDNode DD::duplicate(const DDNode& node){
 	// clone the node. for every outgoing arc, create new arc and point it to child node.
+	lastInserted = number.getNext();
 	DDNode dupNode(lastInserted++);
 	dupNode.state2 = node.state2;
 	dupNode.states = node.states;
@@ -308,6 +311,7 @@ inline DDNode DD::duplicate(const DDNode& node){
 
 	for (const auto& outArcId: node.outgoingArcs){
 		const auto& childNodeId = arcs[outArcId].head;
+		lastInserted = number.getNext();
 		DDArc newArc{lastInserted, dupNode.id, childNodeId, 0};
 		dupNode.outgoingArcs.push_back(newArc.id);
 		nodes[childNodeId].incomingArcs.push_back(newArc.id);
