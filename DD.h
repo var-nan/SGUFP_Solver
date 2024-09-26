@@ -10,7 +10,7 @@
 	#define PRUNE TRAIL
 #endif
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 128
+	#define MAX_WIDTH 20000
 #endif
 
 

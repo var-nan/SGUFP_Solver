@@ -14,11 +14,6 @@ class Cut {
     map<tuple<int, int, int>, double> cutCoef;
     double RHS;
     char type = 'N';
-    // Cut(vector<vector<vector<float>>> &y , float rhs , char t ) {
-    //     cutCoef;
-    //     RHS=rhs;
-    //     type=t;
-    // }
 };
 void generateCut(vector<int> &W_solution, Network &network ,Cut &newCut, int s) ;
 

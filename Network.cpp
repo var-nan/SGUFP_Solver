@@ -128,11 +128,11 @@ Network::Network(const std::string& p_fileName){
 
 
 		// reduce the size of vBar. just for testing.
-		this->Vbar.erase(this->Vbar.begin()+3, this->Vbar.end());
+		//this->Vbar.erase(this->Vbar.begin()+20, this->Vbar.end());
 
 		// TODO: change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
 		int i = 0;
-		for (const auto& id: Vbar){
+		for (const auto& id: this->Vbar){
 			// another way of doing state update map.
 			const auto& node = networkNodes[id];
 			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
