@@ -122,9 +122,9 @@ public:
 	void duplicateNode(int id);
 	inline void updateState(const vector<int> &currentLayer, const unordered_set<int> &states);
 	inline DDNode duplicate(const DDNode& node);
-	vi solution();
+	vi solution(Network network);
 	vector<DDNode> getExactCutset();
-	vi getSolutionVector(int nodeId);
+	vi computeExactNodePartialSolutionVector(int nodeId);
 //public:
 	unordered_map<int,DDNode> nodes; // change to vector if needed.
 	unordered_map<int, DDArc> arcs; // change to vector if needed.

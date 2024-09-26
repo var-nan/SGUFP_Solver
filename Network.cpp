@@ -44,7 +44,6 @@ Network::Network(const std::string& p_fileName){
 				// for each scenario read lb, ub, reward
 				int lb, ub, reward;
 				file >> lb >> ub >> reward;
-
 				lowerCapacities[j] = lb;
 				upperCapacities[j] = ub;
 				rewards[j] = reward;
@@ -54,7 +53,8 @@ Network::Network(const std::string& p_fileName){
 			// update network nodes. //ASAP store nodeIds of outgoing and incoming arcs instead of arcIDs
 			//netNodes[tailId].outNodeIds.push_back(headId); netNodes[tailId].outDegree++;
 			//netNodes[headId].inNodeIds.push_back(tailId); netNodes[headId].inDegree++;
-			netNodes[tailId].outgoingArcs.push_back(i); netNodes[headId].incomingArcs.push_back(i);
+			netNodes[tailId].outgoingArcs.push_back(i);
+			netNodes[headId].incomingArcs.push_back(i);
 		}
 
 		// read v_bar
@@ -68,6 +68,50 @@ Network::Network(const std::string& p_fileName){
 			vBarNodes.push_back(index);
 			netNodes[index].isVbar = true;
 		}
+		/// new part start ///
+		for (int i = 0; i < netNodes.size(); i++) {
+			for (int j = 0; j < netNodes[i].outgoingArcs.size(); j++) {
+				netNodes[i].outDegree+=1;
+				netNodes[i].outNodeIds.push_back(netArcs[netNodes[i].outgoingArcs[j]].headId);
+			}
+			for (int j = 0; j < netNodes[i].incomingArcs.size(); j++) {
+				netNodes[i].inDegree+=1;
+				netNodes[i].inNodeIds.push_back(netArcs[netNodes[i].incomingArcs[j]].tailId);
+			}
+		}
+		vector<int> a1 = {};
+		vector<int> a2 = {};
+		vector<int> a3 = {};
+		vector<int> a4 = {};
+		for (int i = 0; i < netNodes.size(); i++)
+		{
+			if (netNodes[i].incomingArcs.size() == 0) {
+				if (netNodes[i].outgoingArcs.size() == 0)
+				{
+					a4.push_back(i);
+				}
+				else {
+					a1.push_back(i);
+				}
+			}
+			else {
+				if (netNodes[i].outgoingArcs.size() == 0)
+				{
+					a2.push_back(i);
+				}
+				else {
+					a3.push_back(i);
+				}
+			}
+		}
+		// vector<int> isnode={};
+		// for (int i = 0; i < netNodes.size(); i++) {
+		// 	isnode.push_back(0);
+		// }
+		// for (int i : vBarNodes) {
+		// 	isnode[i]=1;
+		// }
+		/// new part end ///
 
 		this->n = nNodes;
 		this->edges = m;
@@ -75,9 +119,16 @@ Network::Network(const std::string& p_fileName){
 		this->networkArcs = netArcs;
 		this->nScenarios = scenarios;
 		this->Vbar = vBarNodes;
+		this->A1 =a1;
+		this->A2 =a2;
+		this->A3 =a3;
+		this->A4 =a4;
+
+
+
 
 		// reduce the size of vBar. just for testing.
-		this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
+		this->Vbar.erase(this->Vbar.begin()+3, this->Vbar.end());
 
 		// TODO: change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
 		int i = 0;
@@ -106,6 +157,14 @@ Network::Network(const std::string& p_fileName){
 //				lastId = tailId;
 //			}
 //		}
+		vector<int> isnode={};
+		for (int i = 0; i < netNodes.size(); i++) {
+			isnode.push_back(0);
+		}
+		for (int i : this->Vbar) {
+			isnode[i]=1;
+		}
+		this->isNodeInVbar = isnode;
 	}
 	else {
 		// error in opening file. exit program.

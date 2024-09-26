@@ -41,10 +41,10 @@ public:
 class NetworkNode {
 public:
 	uint nodeId;
-	//uint inDegree; // INFO removed inDegree, outDegree, inNodeIds, outNodeIds fields.
-	//uint outDegree;
-	//vector<uint> inNodeIds;
-	//vector<uint> outNodeIds;
+	uint inDegree = 0 ; // INFO removed inDegree, outDegree, inNodeIds, outNodeIds fields.
+	uint outDegree = 0;
+	vector<uint> inNodeIds={};
+	vector<uint> outNodeIds={};
 	vui incomingArcs; // store the id of incoming arcs in the network.
 	vui outgoingArcs; // store the id of outgoing arcs in the network.
 	bool isVbar;
@@ -76,7 +76,11 @@ public:
 	// each element in the processing order corresponds to a layer in the DD.
 	unordered_map<int, unordered_set<int>> stateUpdateMap; // (processingorder.id, vector of states)/
 	// if key is not present in the stateUpdateMap, then no need to change the state at the respective arc.
-
+	vector<int> A1;
+	vector<int> A2;
+	vector<int> A3;
+	vector<int> A4;
+	vector<int> isNodeInVbar;
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)

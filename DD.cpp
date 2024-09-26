@@ -54,6 +54,25 @@ void DD::build(const Network& network, DDNode& node, int index) {
 		currentLayer = std::move(nextLayer);
 	}
 	// TODO: add terminal node layer.
+	/// start of new code ///
+	currentLayer = tree.back();
+	vector<int> nextLayer={};
+	DDNode Termnial;
+	Termnial.id = number.getNext();
+
+	for (auto id : currentLayer) {
+		lastInserted = number.getNext();
+		DDNode parent = nodes[id];
+		DDArc arc{lastInserted, parent.id, Termnial.id, 1};
+		arc.weight = 9999999;
+		nodes[id].outgoingArcs.push_back(lastInserted);
+		Termnial.incomingArcs.push_back(lastInserted);
+		arcs.insert(std::make_pair(arc.id, arc));
+	}
+	nodes.insert(std::make_pair(Termnial.id , Termnial));
+	nextLayer.push_back(Termnial.id);
+	tree.push_back(nextLayer);
+	/// end of new code ///
 }
 
 inline void DD::updateState(const vector<int> &currentLayer, const unordered_set<int> &states){
@@ -376,7 +395,7 @@ static void printTree(const vector<vector<int>>& tree){
 	}
 }
 
-vi DD::solution() {
+vi DD::solution(Network network) {
 	/*
 	 * Start from terminal node and iterate through incoming arcs and select arc.
 	 *
@@ -387,7 +406,9 @@ vi DD::solution() {
 	// find maxVal parent node.
 	int maxVal = 0;
 	int maxNodeId = 0;
-	vi path(tree.size()-1);
+	vi path(tree.size()-2);
+	cout << "tree.size()" << tree.size() << endl;
+	cout << "path.size()" <<path.size() << endl;
 	int terminalNodeId = tree[tree.size()-1][0];
 	const auto& terminalNode = nodes[terminalNodeId];
 
@@ -402,12 +423,29 @@ vi DD::solution() {
 	// maxVal and maxNodeId is populated.
 	for (size_t l = tree.size()-2; l > 0; l--){ // check indexes later.
 		const auto& node = nodes[maxNodeId];
-		const auto& arc = arcs[node.incomingArcs[0]];
-		path[l] = arc.weight;
-		maxNodeId = arc.tail;
+		for(const auto& arcId: node.incomingArcs) {
+			auto& arc = arcs[arcId];
+			auto& tailNode = nodes[arc.tail];
+			if (tailNode.state2 + arc.weight == node.state2) {
+				// this is the optimal parent.
+				maxNodeId = arc.tail;
+				path[l-1] = arc.decision;
+				cout << "??????????????????????????????????????????????????" << endl;
+				cout << "arc.decision " <<arc.decision << endl;
+				cout << network.networkArcs[arc.decision].headId << endl;
+				cout << network.networkArcs[arc.decision].tailId << endl;
+				cout << network.networkArcs[arc.decision].arcId << endl;
+				cout << "??????????????????????????????????????????????????" << endl;
+				break;
+			}
+		}
+		//const auto& arc = arcs[node.incomingArcs[0]];
+		//path[l] = arc.weight;
+		//maxNodeId = arc.tail;
 	}
 	// prepend root solution to path.
 	const auto& rootNode = nodes[tree[0][0]];
+	cout << "rootNode.solutionVector.size()" <<rootNode.solutionVector.size() << endl;
 	vi finalPath(rootNode.solutionVector);
 	finalPath.insert(finalPath.end(), path.begin(), path.end());
 	return finalPath;
@@ -442,7 +480,7 @@ vi DD::solution() {
 }
 
 
-vi DD::getSolutionVector(int nodeId){
+vi DD::computeExactNodePartialSolutionVector(int nodeId){
 	/*
 	 * retrieve solution vector for a given node.
 	 */
@@ -471,7 +509,7 @@ vector<DDNode> DD::getExactCutset() {
 	int i = 0;
 	for (const int id: tree[exactLayer-1]){
 		auto node = nodes[id];
-		node.solutionVector = getSolutionVector(id);
+		node.solutionVector = computeExactNodePartialSolutionVector(id);
 		//cutsetNodes[i] = node;
 		cutsetNodes.push_back(node);
 	}
