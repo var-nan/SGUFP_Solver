@@ -3,10 +3,6 @@
  */
 
 #include "Network.h"
-#include <fstream>
-#include <iostream>
-#include <cstring>
-
 
 Network::Network(const std::string& p_fileName){
 
@@ -16,7 +12,7 @@ Network::Network(const std::string& p_fileName){
 	if (file.is_open()){
 		/* file opened for reading. */
 		// read nNodes and m
-		uint nNodes,m; // nNodes = number of nodes, m = number of arcs
+		uint nNodes,m; // nNodes = number of nodes, m = number of arcs // LATER change the way n,m,scenarios reads.
 		uint scenarios; // number of scenarios
 
 		//file >> nNodes >> m >> scenarios;
@@ -49,18 +45,18 @@ Network::Network(const std::string& p_fileName){
 				upperCapacities[j] = ub;
 				rewards[j] = reward;
 			}
-			// store this arc in the network. ASAP: number of nodes are greater than the given number, causing segmentation fault.
 			netArcs[i] = {i, tailId, headId, upperCapacities, lowerCapacities, rewards};
-			// update network nodes. //ASAP store nodeIds of outgoing and incoming arcs instead of arcIDs
-			//netNodes[tailId].outNodeIds.push_back(headId); netNodes[tailId].outDegree++;
-			//netNodes[headId].inNodeIds.push_back(tailId); netNodes[headId].inDegree++;
-			netNodes[tailId].outgoingArcs.push_back(i); netNodes[headId].incomingArcs.push_back(i);
+			// update node's incoming and outgoing attributes.
+			netNodes[tailId].outNodeIds.push_back(headId); // netNodes[tailId].outDegree++;
+			netNodes[headId].inNodeIds.push_back(tailId); // netNodes[headId].inDegree++;
+			netNodes[tailId].outgoingArcs.push_back(i);
+			netNodes[headId].incomingArcs.push_back(i);
 		}
 
 		// read v_bar
 		std::string temp; file >> temp;
 
-		// TODO: read v_bar nodes and build network.
+		// read v_bar nodes and build network.
 		vector<uint> vBarNodes;
 
 		uint index;
@@ -69,17 +65,35 @@ Network::Network(const std::string& p_fileName){
 			netNodes[index].isVbar = true;
 		}
 
+		// populate a1,a2,a3,a4 for subproblem formulation.
+		vui a1 = {}, a2 = {}, a3 = {}, a4 = {};
+
+		for (const auto& node: networkNodes){
+			if (!node.incomingArcs.empty()){
+				if (!node.outgoingArcs.empty())a4.push_back(node.nodeId);
+				else a1.push_back(node.nodeId);
+			}
+			else {
+				if (!node.outgoingArcs.empty()) a2.push_back(node.nodeId);
+				else a3.push_back(node.nodeId);
+			}
+		}
+
 		this->n = nNodes;
 		this->edges = m;
-		this->networkNodes = netNodes;
-		this->networkArcs = netArcs;
+		this->networkNodes = std::move(netNodes);
+		this->networkArcs = std::move(netArcs);
 		this->nScenarios = scenarios;
-		this->Vbar = vBarNodes;
+		this->Vbar = std::move(vBarNodes);
+		this->A1 = std::move(a1);
+		this->A2 = std::move(a2);
+		this->A3 = std::move(a3);
+		this->A4 = std::move(a4);
 
 		// reduce the size of vBar. just for testing.
 		this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
 
-		// TODO: change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
+		// INFO change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
 		int i = 0;
 		for (const auto& id: Vbar){
 			// another way of doing state update map.
@@ -119,6 +133,7 @@ void postProcess(){
 	// ASAP: change order in 'processingOrder' and 'stateUpdateMap' variables.
 }
 
+// later; this function is not necessary? remove it.
 NetworkArc Network::getArc(uint32_t i, uint32_t j) const {
 	// return an arc between node i (outgoing) and node j (incoming).
 	for (const auto& arc: networkArcs){

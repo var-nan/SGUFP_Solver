@@ -10,6 +10,8 @@
 #include <unordered_map>
 #include <cstdint>
 #include <string>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -30,9 +32,9 @@ public:
 	vi upperCapacities;
 	vi lowerCapacities;
 	vi rewards;
-	/* TODO: create constructors */
-	NetworkArc(){}
 
+	NetworkArc(): arcId{0}, tailId{0},headId{0} {} // INFO this constructor is only for map's [] operator.
+	// LATER; move capacities arguments instead of copying.
 	NetworkArc(uint id, uint tail, uint head, vi uCap, vi lCap, vi r)
 		: arcId{id}, tailId{tail}, headId{head}, upperCapacities{std::move(uCap)}, lowerCapacities{std::move(lCap)}, rewards{std::move(r)} {}
 
@@ -43,15 +45,15 @@ public:
 	uint nodeId;
 	//uint inDegree; // INFO removed inDegree, outDegree, inNodeIds, outNodeIds fields.
 	//uint outDegree;
-	//vector<uint> inNodeIds;
-	//vector<uint> outNodeIds;
+	vui inNodeIds;
+	vui outNodeIds;
 	vui incomingArcs; // store the id of incoming arcs in the network.
 	vui outgoingArcs; // store the id of outgoing arcs in the network.
 	bool isVbar;
-	/* TODO: create constructors */
-	NetworkNode(){}
 
-	NetworkNode(uint id):nodeId{id}{}
+	NetworkNode(){} // INFO this constructor is only for map's [] operator.
+
+	explicit NetworkNode(uint id):nodeId{id}, isVbar{false} {}
 
 	//NetworkNode(uint id, uint inDeg, uint outDeg, vui&& inNodes, vui&& outNodes)
 	//	: nodeId{id}, inDegree{inDeg}, outDegree{outDeg}, inNodeIds{inNodes}, outNodeIds{outNodes} , isVbar{false}{}
@@ -77,6 +79,12 @@ public:
 	unordered_map<int, unordered_set<int>> stateUpdateMap; // (processingorder.id, vector of states)/
 	// if key is not present in the stateUpdateMap, then no need to change the state at the respective arc.
 
+	// different sets of nodes based on node's incoming and outgoing neighbors.
+	vui A1;
+	vui A2;
+	vui A3;
+	vui A4;
+	vector<bool> isNodeInVbar;
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)
@@ -86,9 +94,6 @@ public:
 	explicit Network(const std::string& p_fileName);
 
 	inline NetworkArc getArc(uint32_t i, uint32_t j) const;
-
-
-	/* TODO: implement move constructor ASAP*/
 
 };
 
