@@ -10,48 +10,52 @@
 	#define PRUNE TRAIL
 #endif
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 128
+	#define MAX_WIDTH (1<<10)
 #endif
 
-
-#include <utility>
-#include <vector>
-#include <unordered_map>
-#include <cstdint>
-#include <set>
+#ifndef NUMBERS_RESERVE
+	#define NUMBERS_RESERVE 512
+#endif
 
 #include "Network.h"
-#include <iostream>
+
+#include <set>
 #include <algorithm>
 
 using namespace std;
 
+/*
+ * INFO Ids of DDArc and DDNode are unsigned long ints.
+ */
+
 class DDArc{
 public:
-	int id;
-	int head;
-	int tail;
+	// id, head and tail should be unsigned long ints.
+	ulint id;
+	ulint head; // id of the head node of the arc.
+	ulint tail;
 	int decision; // it should store the solution.
-	int weight;
+	double weight;
 
 	DDArc(): id{0}, tail{0}, head{0}, decision{0}, weight{0}{}
 
-	DDArc(int a, int b, int c, int d): id{a}, tail{b}, head{c}, decision{d}, weight{0}{}
+	DDArc(ulint id_, ulint tail_, ulint head_, int decision_):
+			id{id_}, tail{tail_}, head{head_}, decision{decision_}, weight{0}{}
 };
 
 class DDNode{
 public:
-	int id;
-	vector<int> incomingArcs;
-	vector<int> outgoingArcs;
+	ulint id;
+	vector<ulint> incomingArcs;
+	vector<ulint> outgoingArcs;
 	unordered_set<int> states;
 	int state2;
 	vector<int> solutionVector;
-	int objVal = 0; // ASAP Update it during refinement.
+	int objVal = 0; // INFO Update it during refinement.
 
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
-	DDNode(int a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
-	//DDNode(const DDNode& node): id{node.id}, incomingArcs{node.incomingArcs}{} // ASAP, copy constructor used in duplication node.
+	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
+	//DDNode(const DDNode& node): id{node.id}, incomingArcs{node.incomingArcs}{} // TODO, copy constructor used in duplication node.
 
 	// copy assignment.
 
@@ -60,7 +64,6 @@ public:
 		outgoingArcs.clear();
 		states.clear();
 		solutionVector.clear();
-		// delete incomingArcs, outgoingArcs, states vectors.
 	}
 };
 
@@ -81,56 +84,52 @@ private:
 	int lastArc = 1;
 	int lastNode = 1;
 	Type type = RESTRICTED;
-	//Prune strategy;
-	//int maxWidth = 128;
 	//int startTree = 0; // this variable denotes the position where the tree starts in the global order.
 	vi cutset{};
 	//int exactLayer = 0; // represents which layer is exact layer.
 	// temporary
-	//vector<pair<int,int>> processingOrder;
-	//unordered_map<int, vector<int>> stateUpdateMap;
 
 	class Number{
 	private:
-		int n;
-		vector<int> numbers;
+		ulint n; // INFO n starts from 1. 0 is reserved for (sub-)root.
+		vector<ulint> numbers;
 	public:
 		Number(): n{1}, numbers{}{
-			numbers.reserve(128);
+			numbers.reserve(NUMBERS_RESERVE);
 		}
 
-		int getNext(){
+		ulint getNext(){
 			if (!numbers.empty()) {
-				int x = numbers.back();
+				uint x = numbers.back();
 				numbers.pop_back();
 				return x;
 			}
 			else return n++;
 		}
 
-		void setNext(int x){
+		void setNext(ulint x){
 			numbers.push_back(x);
 		}
 	};
 
 public:
 	Number number;
-	void reduceLayer(vector<int> &currentLayer);
+	void reduceLayer(vector<ulint> &currentLayer);
 	void mergeNodes(DDNode& node1, DDNode& node2);
-	void deleteArcById(int id);
-	void deleteNodeById(int id);
-	void duplicateNode(int id);
-	inline void updateState(const vector<int> &currentLayer, const unordered_set<int> &states);
+	void deleteArcById(ulint id);
+	void deleteNodeById(ulint id);
+	void duplicateNode(ulint id);
+	inline void updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states);
 	inline DDNode duplicate(const DDNode& node);
 	vi solution();
 	vector<DDNode> getExactCutset();
-	vi getSolutionVector(int nodeId);
+	vi computePathForExactNode(ulint nodeId);
 //public:
-	unordered_map<int,DDNode> nodes; // change to vector if needed.
-	unordered_map<int, DDArc> arcs; // change to vector if needed.
-	vector<vector<int>> tree;
-	int lastInserted = 1; // 0 is reserved for root node.
-	int startTree = 0;
+	unordered_map<ulint,DDNode> nodes;
+	unordered_map<ulint, DDArc> arcs;
+	vector<vector<ulint>> tree;
+	//ulint lastInserted = 1; // 0 is reserved for root node.
+	int startTree = 0; // INFO these two should be updated during tree compilation.
 	int exactLayer = 0;
 
 	DD() {
@@ -140,7 +139,7 @@ public:
 	void build(const Network& network, DDNode& node, int index);
 	//void build(const vector<pair<int,int>> processingOrder);
 
-	bool buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int index);
+	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index);
 };
 
 

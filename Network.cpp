@@ -3,6 +3,8 @@
  */
 
 #include "Network.h"
+#include <fstream>
+#include <cstring>
 
 Network::Network(const std::string& p_fileName){
 

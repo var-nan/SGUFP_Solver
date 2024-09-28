@@ -20,9 +20,9 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	const auto& stateUpdateMap = network.stateUpdateMap;
 
 	// set the node to the root and start from there.
-	vector<int> currentLayer; // should be base layer.
+	vector<ulint> currentLayer; // should be base layer.
 
-	startTree = index; // TODO; verify next.
+	startTree = index; // LATER, size of solution vector of the root might be appropriate
 
 	node.incomingArcs.clear();
 	node.outgoingArcs.clear();
@@ -45,27 +45,42 @@ void DD::build(const Network& network, DDNode& node, int index) {
 			updateState(currentLayer, newStates);
 		}
 		//const unordered_set<int> temp = stateUpdateMap.at(a);
-		i++;
-		vector<int> nextLayer;
+		//i++;
+		vector<ulint> nextLayer;
+		nextLayer.reserve(MAX_WIDTH);
 		bool isExact = buildNextLayer(currentLayer, nextLayer, index);
-		if (isExact) exactLayer = i; // at last, this number should be exact layer number.
+		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		//reduceLayer(nextLayer); // INFO not doing reduction.
 		tree.push_back(nextLayer);
 		currentLayer = std::move(nextLayer);
 	}
-	// TODO: add terminal node layer.
+	// terminal node layer. current layer points to last layer
+	vector<ulint> terminalLayer;
+	DDNode terminalNode {number.getNext()};
+
+	for (const auto& id: currentLayer){
+		// only add single arc for each node in the last layer.
+		ulint arcId = number.getNext();
+		auto& parentNode = nodes[id];
+		// create arc and a corresponding node.
+		DDArc arc{arcId, id, terminalNode.id, 1};
+		arc.weight = 999999;
+		terminalNode.incomingArcs.push_back(arcId);
+		parentNode.outgoingArcs.push_back(arcId);
+		arcs.insert(make_pair(arcId, arc));
+	}
 }
 
-inline void DD::updateState(const vector<int> &currentLayer, const unordered_set<int> &states){
+inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states){
 
 	for (auto id: currentLayer){
 		auto& node = nodes[id];
 		node.states.clear();
-		node.states.insert(states.begin(), states.end());// ASAP fix copying vector.
+		node.states.insert(states.begin(), states.end());
 	}
 }
 
-bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int index) {
+bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index) {
 	/*
 	 * builds next layer from the given current layer.
 	 * adds new child nodes and outgoing arcs to their respective maps.
@@ -92,12 +107,12 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 				for (const auto decision: parentNode.states) {
 					if (count >= MAX_WIDTH) {isExact = false; break;}
 
-					lastInserted = number.getNext();
+					auto lastInserted = number.getNext();
 					DDNode node{lastInserted};
 					DDArc arc{lastInserted, parentNode.id, node.id, decision};
 					node.states = parentStates;
 					if (decision != -1) node.states.erase(decision);
-					//node.solutionVector = parentNode.solutionVector;
+					//node.solutionVector = parentNode.solutionVector; // solutions are computed during bulding cutset.
 					//node.solutionVector.emplace_back(decision);
 					node.incomingArcs.emplace_back(arc.id);
 					parentNode.outgoingArcs.push_back(arc.id);
@@ -106,7 +121,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 					arcs.insert(std::make_pair(arc.id, arc));
 
 					count++;
-					lastInserted++;
+					//lastInserted++;
 
 					nextLayer.emplace_back(node.id);
 				}
@@ -122,7 +137,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 #if PRUNE == TRAIL
 		{
 			int count = 0;
-			int lastNodeId = 0;
+			ulint lastNodeId = 0;
 
 			for (const auto id: currentLayer) {
 				DDNode &parentNode = nodes[id];
@@ -130,7 +145,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 				auto parentStates = parentNode.states;
 				for (auto decision: parentNode.states) {
 
-					lastInserted = number.getNext();
+					auto lastInserted = number.getNext();
 					if (count < MAX_WIDTH) {
 						DDNode node{lastInserted};
 						DDArc arc{lastInserted, id, node.id, decision};
@@ -155,7 +170,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 						isExact = false;
 					}
 					count++;
-					lastInserted++;
+					//lastInserted++;
 				}
 			}
 		}
@@ -237,7 +252,7 @@ void DD::mergeNodes(DDNode& node1, DDNode& node2) {
 
 }
 
-void DD::reduceLayer(vector<int> &currentLayer) {
+void DD::reduceLayer(vector<ulint> &currentLayer) {
 	/*
 	 * Merge two nodes that containing same state. Update incoming and outgoing arcs to point to merged node.
 	 */
@@ -268,7 +283,7 @@ void DD::reduceLayer(vector<int> &currentLayer) {
 
 }
 
-void DD::deleteArcById(int id){
+void DD::deleteArcById(ulint id){
 	/*
 	 * deletes arc by id.`
 	 * removes the arc from tail and head nodes.
@@ -286,7 +301,7 @@ void DD::deleteArcById(int id){
 	// delete node if no incoming arcs for the head node. TODO; INFO confirm with erfan later.
 }
 
-void DD::deleteNodeById(int id) {
+void DD::deleteNodeById(ulint id) {
 	/*
 	 * deletes node by its id.
 	 * delete outgoing arcs vector. destructor deletes remaining attributes.
@@ -302,11 +317,11 @@ void DD::deleteNodeById(int id) {
 
 inline DDNode DD::duplicate(const DDNode& node){
 	// clone the node. for every outgoing arc, create new arc and point it to child node.
-	lastInserted = number.getNext();
-	DDNode dupNode(lastInserted++);
+	auto lastInserted = number.getNext();
+	DDNode dupNode(lastInserted);
 	dupNode.state2 = node.state2;
 	dupNode.states = node.states;
-	// ASAP how solution vector is copied
+	// LATER not sure how to copy solution vector
 	// incoming arc is updated by the caller.
 
 	for (const auto& outArcId: node.outgoingArcs){
@@ -316,13 +331,13 @@ inline DDNode DD::duplicate(const DDNode& node){
 		dupNode.outgoingArcs.push_back(newArc.id);
 		nodes[childNodeId].incomingArcs.push_back(newArc.id);
 		arcs.insert(std::make_pair(newArc.id, newArc));
-		lastInserted++;
+		//lastInserted++;
 	}
 
 	return dupNode;
 }
 
-void DD::duplicateNode(int id){
+void DD::duplicateNode(ulint id){
 	/*
 	 * for every incoming arc, create new node (copy state parameters)
 	 *  TODO: complete it today.
@@ -333,7 +348,7 @@ void DD::duplicateNode(int id){
 	// skip first arc.
 	for (uint i = 1; i < incomingArcs.size(); i++) {
 		//
-		int arcId = incomingArcs[i];
+		ulint arcId = incomingArcs[i];
 		DDArc& arc = arcs[arcId];
 
 		// TODO compute state.
@@ -366,29 +381,18 @@ void DD::duplicateNode(int id){
 	}
 }
 
-static void printTree(const vector<vector<int>>& tree){
-
-	for (const auto& layer: tree){
-		for (const int node: layer){
-			cout << node << " ";
-		}
-		cout << endl;
-	}
-}
 
 vi DD::solution() {
 	/*
 	 * Start from terminal node and iterate through incoming arcs and select arc.
-	 *
+	 * Returns the maximum path from the tree.
 	 */
-
-	// change logic.
 
 	// find maxVal parent node.
 	int maxVal = 0;
-	int maxNodeId = 0;
+	ulint maxNodeId = 0;
 	vi path(tree.size()-1);
-	int terminalNodeId = tree[tree.size()-1][0];
+	ulint terminalNodeId = tree[tree.size()-1][0];
 	const auto& terminalNode = nodes[terminalNodeId];
 
 	for (const auto arcId: terminalNode.incomingArcs){ // find maxValue path.
@@ -401,50 +405,34 @@ vi DD::solution() {
 
 	// maxVal and maxNodeId is populated.
 	for (size_t l = tree.size()-2; l > 0; l--){ // check indexes later.
+//		const auto& node = nodes[maxNodeId];
+//		const auto& arc = arcs[node.incomingArcs[0]];
+//		path[l] = arc.decision;
+//		maxNodeId = arc.tail;
 		const auto& node = nodes[maxNodeId];
-		const auto& arc = arcs[node.incomingArcs[0]];
-		path[l] = arc.weight;
-		maxNodeId = arc.tail;
+		for (const auto& arcId : node.incomingArcs){
+			const auto& arc = arcs[arcId];
+			const auto& tailNode = nodes[arc.tail];
+
+			if ((tailNode.state2 + arc.weight) == node.state2){
+				maxNodeId = tailNode.id;
+				path.push_back(arc.decision);
+				break;
+			}
+		}
 	}
 	// prepend root solution to path.
 	const auto& rootNode = nodes[tree[0][0]];
 	vi finalPath(rootNode.solutionVector);
-	finalPath.insert(finalPath.end(), path.begin(), path.end());
+	finalPath.insert(finalPath.end(), path.rbegin(), path.rend());
 	return finalPath;
-
-//
-//	int maxVal = 0;
-//	int maxNodeId = tree[tree.size()-1][0];
-//	maxVal = nodes[maxNodeId].objVal;
-//	vi path(tree.size());
-//
-//	for (size_t l = tree.size()-1; l > 0; l--){
-//
-//		for (const auto incomingId : nodes[maxNodeId].incomingArcs){
-//			const auto& arc = arcs[incomingId];
-//			const auto& parentNode = nodes[arc.tail];
-//			if ( maxVal - arc.weight * 10 /* some coefficient */ == parentNode.objVal) {
-//				// this node is parent.
-//				maxNodeId = parentNode.id;
-//				maxVal = maxVal - arc.weight; // ASAP multiply with coefficient.
-//				path[l] = arc.weight;
-//				break;
-//			}
-//		}
-//	}
-//	// copy the root's solution at front.
-//	const auto& rootSolution = nodes[tree[0][0]].solutionVector;
-//	for (int i = 0; i < rootSolution.size(); i++){
-//		path[i] = rootSolution[i];
-//	}
-
-	return path;
 }
 
 
-vi DD::getSolutionVector(int nodeId){
+vi DD::computePathForExactNode(ulint nodeId){
 	/*
-	 * retrieve solution vector for a given node.
+	 * retrieve solution vector for a given node. used while building cutset ndoes.
+	 * TODO need to verify again.
 	 */
 
 	auto& node = nodes[nodeId];
@@ -468,25 +456,13 @@ vector<DDNode> DD::getExactCutset() {
 	 */
 	//vector<DDNode> cutsetNodes(tree[exactLayer-1].size());
 	vector<DDNode> cutsetNodes;
+	cutsetNodes.reserve(MAX_WIDTH);
 	int i = 0;
-	for (const int id: tree[exactLayer-1]){
+	for (const auto id: tree[exactLayer]){
 		auto node = nodes[id];
-		node.solutionVector = getSolutionVector(id);
+		node.solutionVector = computePathForExactNode(id);
 		//cutsetNodes[i] = node;
 		cutsetNodes.push_back(node);
 	}
 	return cutsetNodes;
 }
-//int main(){
-	// some processing order
-	//vector<pair<int,int>> processingOrder = {{1,2},{2,3}};
-
-	//DD diagram;
-
-	//DDNode rootNode;
-	//rootNode.states = unordered_set<int>({2,3,4});
-
-	//diagram.build(processingOrder, rootNode, 0);
-
-	//printTree(diagram.tree);
-//}
