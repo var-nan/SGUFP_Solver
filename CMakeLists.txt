@@ -25,6 +25,8 @@ add_executable(SGUFP_Solver main.cpp
         #NewClasses.cpp
 )
 
+target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Werror -Wimplicit) # add -O2 flag in final phase. -Wunused
+
 # target_compile_features(SGUFP_Solver PUBLIC cxx_std_17)
 target_link_libraries(SGUFP_Solver PRIVATE gurobi_c++)
 target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
