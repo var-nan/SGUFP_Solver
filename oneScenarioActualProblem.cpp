@@ -16,28 +16,16 @@ void actualProblem(Network network) {
     //Network network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
 
     int n = network.n;
-
+	int s = 0;
     GRBEnv env = GRBEnv();
     GRBModel model = GRBModel(env);
     model.set(GRB_IntParam_InfUnbdInfo, 1);
 	cout << "Environment created." << endl;
     GRBVar** X = new GRBVar * [n];
-    //GRBVar** R = new GRBVar *[n];
-   // vector<vector<int>> R(n); // TODO: need to populate this rewards vector.
-    // for (int i = 0; i < network.networkNodes.size(); i++) {
-    //     // iterate through its outgoing arcs
-    //     const auto q = network.networkNodes[i];
-    //     for (int k = 0; k < q.outgoingArcs.size(); k++) {
-    //         int j = q.outgoingArcs[k];
-    //         auto reward = network.networkArcs[j].rewards[0];
-    // //        R[i][j] = reward;
-    //     }
-    // }
     GRBVar*** y = new GRBVar ** [n];
 
     for (int i = 0; i < n; i++) {
         X[i] = model.addVars(n, GRB_CONTINUOUS);
-        //R[i] = model.addVars(n, GRB_CONTINUOUS);
 
         GRBVar** y_temp = new GRBVar *[n];
 
@@ -54,11 +42,14 @@ void actualProblem(Network network) {
     // add objective function below.
     GRBLinExpr objFun = 0;
 
-    for (int i = 0; i < n; i++) {
-        for (int arcId : network.networkNodes[i].outgoingArcs) {
+    for (int q = 0; q < n; q++) {
+        for (int arcId : network.networkNodes[q].outgoingArcs) {
 			int j = network.networkArcs[arcId].headId;
-        	int reward = network.networkArcs[arcId].rewards[0];
-            objFun += reward * X[i][j];
+        	int reward = network.networkArcs[arcId].rewards[s];
+        	if (reward <= 0 ) {
+        		reward = reward;
+        	}
+            objFun += reward * X[q][j];
         }
     }
 	model.setObjective(objFun, GRB_MAXIMIZE);
@@ -68,102 +59,104 @@ void actualProblem(Network network) {
 
 
     for (int q = 0; q < n; q++) {
-		if (q==0 || q==42) {
-			continue;
+    	if(network.networkNodes[q].outgoingArcs.size() == 0 || network.networkNodes[q].incomingArcs.size() == 0) continue;
+    	GRBLinExpr LHS = 0;
+		for (const int inArc : network.networkNodes[q].incomingArcs) {
+			const int i = network.networkArcs[inArc].tailId;
+			LHS += X[i][q];
 		}
-    	GRBLinExpr c1 = 0;
-		for (int incomingArc : network.networkNodes[q].incomingArcs) {
-			int i = network.networkArcs[incomingArc].tailId;
-			c1 += X[i][q];
+    	for (const int outArc : network.networkNodes[q].outgoingArcs) {
+		    const int j = network.networkArcs[outArc].headId;
+			LHS -= X[q][j];
 		}
-    	for (int outArc : network.networkNodes[q].outgoingArcs) {
-			int j = network.networkArcs[outArc].headId;
-			c1 -= X[q][j];
-		}
-    	model.addConstr(c1 == 0, "2b");
+    	model.addConstr(LHS == 0, "2b");
     }
 
 	cout << "First constraint defined" << endl;
 
- int s = 0;
+
 	for (int q = 0; q < n; q++){
-		for (uint inArcID : network.networkNodes[q].incomingArcs)
-		{
-			//GRBLinExpr LHS = 0;
+		for (uint inArcID : network.networkNodes[q].incomingArcs){
 			uint i = network.networkArcs[inArcID].tailId;
 			uint l_iq = network.networkArcs[inArcID].lowerCapacities[s];
 			uint u_iq = network.networkArcs[inArcID].upperCapacities[s];
-			model.addConstr(l_iq  <= X[i][q] , "7b");
-			// GRBLinExpr LHS = 0;
-			model.addConstr(X[i][q] <= u_iq , "7b");
+			GRBLinExpr LHS = 0;
+			LHS += X[i][q];
+			model.addConstr(LHS >= l_iq , "2c");
+			model.addConstr(LHS <= u_iq , "2c");
 		}
 	}
 
-for (uint q : network.Vbar) {
-	for (uint inArcID : network.networkNodes[q].incomingArcs) {
-		for (uint outArcID : network.networkNodes[q].outgoingArcs)
-		{
+	for (uint q : network.Vbar) {
+		for (uint inArcID : network.networkNodes[q].incomingArcs) {
+			for (uint outArcID : network.networkNodes[q].outgoingArcs){
+				uint i = network.networkArcs[inArcID].tailId;
+				uint j = network.networkArcs[outArcID].headId;
+				uint u_iq = network.networkArcs[inArcID].upperCapacities[s];
+				GRBLinExpr LHS = 0;
+				LHS+= X[i][q] - X[q][j] + u_iq * y[i][q][j];
+				model.addConstr(LHS <= u_iq , "2d");
+			}
+		}
+	}
+
+	for (uint q : network.Vbar) {
+		for (uint inArcID : network.networkNodes[q].incomingArcs) {
+			for (uint outArcID : network.networkNodes[q].outgoingArcs) {
+				uint i = network.networkArcs[inArcID].tailId;
+				uint j = network.networkArcs[outArcID].headId;
+				uint u_qj = network.networkArcs[outArcID].upperCapacities[s];
+				GRBLinExpr LHS = 0;
+				LHS += X[q][j] - X[i][q] + u_qj * y[i][q][j];
+				model.addConstr(LHS <= u_qj , "2e");
+			}
+		}
+	}
+
+	for (uint q : network.Vbar)	{
+		for (uint inArcID : network.networkNodes[q].incomingArcs){
+			GRBLinExpr LHS = 0;
 			uint i = network.networkArcs[inArcID].tailId;
-			uint j = network.networkArcs[outArcID].headId;
+			LHS += X[i][q];
 			uint u_iq = network.networkArcs[inArcID].upperCapacities[s];
-			GRBLinExpr LHS = 0;
-			LHS+=X[i][q]-X[q][j] + u_iq * y[i][q][j];
-			model.addConstr(LHS <= u_iq , "7b");
+			for (uint outArcID : network.networkNodes[q].outgoingArcs){
+				uint j = network.networkArcs[outArcID].headId;
+				LHS -=  u_iq * y[i][q][j] ;
+			}
+			model.addConstr(LHS <= 0, "2f");
 		}
 	}
-}
 
-
-for (uint q : network.Vbar) {
-	for (uint inArcID : network.networkNodes[q].incomingArcs) {
-		for (uint outArcID : network.networkNodes[q].outgoingArcs) {
-			uint i = network.networkArcs[inArcID].tailId;
-			uint j = network.networkArcs[outArcID].headId;
-			uint u_qj = network.networkArcs[outArcID].upperCapacities[s];
-			GRBLinExpr LHS = 0;
-			LHS+=X[q][j]-X[i][q] + u_qj * y[i][q][j];
-
-			model.addConstr(LHS <= u_qj , "7b");
-		}
-	}
-}
-//
-
-for (uint q : network.Vbar)
-{
-	for (uint inArcID : network.networkNodes[q].incomingArcs)
-	{
-		GRBLinExpr LHS = 0;
-		uint i = network.networkArcs[inArcID].tailId;
-		LHS += X[i][q];
-		uint u_iq = network.networkArcs[inArcID].upperCapacities[s];
+	for (uint q : network.Vbar) {
 		for (uint outArcID : network.networkNodes[q].outgoingArcs)
 		{
-			uint j = network.networkArcs[inArcID].headId;
-			LHS -= y[i][q][j] * u_iq;
+			GRBLinExpr LHS = 0;
+			uint j = network.networkArcs[outArcID].headId;
+			LHS += X[q][j];
+			uint u_qj = network.networkArcs[outArcID].upperCapacities[s];
+			for (uint inArcID : network.networkNodes[q].incomingArcs)
+			{
+				uint i = network.networkArcs[inArcID].tailId;
+				LHS -= u_qj * y[i][q][j] ;
+			}
+			model.addConstr(LHS <= 0, "2g");
 		}
-		model.addConstr(LHS <= 0, "7b");
 	}
-}
-//
-for (uint q : network.Vbar)
-{
-	for (uint outArcID : network.networkNodes[q].outgoingArcs)
-	{
-		GRBLinExpr LHS = 0;
-		uint j = network.networkArcs[outArcID].headId;
-		LHS += X[q][j];
-		uint u_q_j = network.networkArcs[outArcID].upperCapacities[s];
-		for (uint inArcID : network.networkNodes[q].incomingArcs)
-		{
-			uint i = network.networkArcs[inArcID].tailId;
-			LHS -= y[i][q][j] * u_q_j ;
-		}
-		model.addConstr(LHS <= 0, "7b");
-	}
-}
 
+	cout << "passed" << endl;
+	cout << network.n << endl;
+	cout << network.n << endl;
 	model.update();
 	model.optimize();
-
+	cout << network.n << endl;
+	cout << network.n << endl;
+	for(int i =0; i<network.n ; i++) {
+		for(int q=0; q<network.n ; q++) {
+			for(int j=0; j<network.n ; j++) {
+				if (y[i][q][j].get(GRB_DoubleAttr_X) >0) {
+					cout << "(" << i << ", " << q << ", " <<  j << ")" << " ======= " <<  y[i][q][j].get(GRB_DoubleAttr_X) << endl;
+				}
+			}
+		}
+	}
 }

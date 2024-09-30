@@ -116,8 +116,8 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 					DDArc arc{lastInserted, parentNode.id, node.id, decision};
 					node.states = parentStates;
 					if (decision != -1) node.states.erase(decision);
-					//node.solutionVector = parentNode.solutionVector;
-					//node.solutionVector.emplace_back(decision);
+					node.solutionVector = parentNode.solutionVector;
+					node.solutionVector.emplace_back(decision);
 					node.incomingArcs.emplace_back(arc.id);
 					parentNode.outgoingArcs.push_back(arc.id);
 					// insert node and arc to map

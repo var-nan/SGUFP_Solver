@@ -83,24 +83,26 @@ Network::Network(const std::string& p_fileName){
 		vector<int> a2 = {};
 		vector<int> a3 = {};
 		vector<int> a4 = {};
-		for (int i = 0; i < netNodes.size(); i++)
+		for (NetworkArc arc : netArcs)
 		{
+			uint i = arc.tailId;
+			uint j = arc.headId;
 			if (netNodes[i].incomingArcs.size() == 0) {
-				if (netNodes[i].outgoingArcs.size() == 0)
+				if (netNodes[j].outgoingArcs.size() == 0)
 				{
-					a4.push_back(i);
+					a4.push_back(arc.arcId);
 				}
 				else {
-					a1.push_back(i);
+					a1.push_back(arc.arcId);
 				}
 			}
 			else {
-				if (netNodes[i].outgoingArcs.size() == 0)
+				if (netNodes[j].outgoingArcs.size() == 0)
 				{
-					a2.push_back(i);
+					a2.push_back(arc.arcId);
 				}
 				else {
-					a3.push_back(i);
+					a3.push_back(arc.arcId);
 				}
 			}
 		}
@@ -112,7 +114,10 @@ Network::Network(const std::string& p_fileName){
 		// 	isnode[i]=1;
 		// }
 		/// new part end ///
-
+		vector<int> vp = {};
+		for (int i = 1; i < nNodes -2 ; i++) {
+			vp.push_back(i);
+		}
 		this->n = nNodes;
 		this->edges = m;
 		this->networkNodes = netNodes;
@@ -123,6 +128,7 @@ Network::Network(const std::string& p_fileName){
 		this->A2 =a2;
 		this->A3 =a3;
 		this->A4 =a4;
+		this->vPrime = vp;
 
 
 

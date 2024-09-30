@@ -81,7 +81,7 @@ public:
 	vector<int> A3;
 	vector<int> A4;
 	vector<int> isNodeInVbar;
-
+	vector<int> vPrime;
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)
 		: n{nNodes}, edges{nEdges}, networkNodes{netNodes}, networkArcs{netArcs},

@@ -43,50 +43,16 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 	GRBModel Dual_subproblem = GRBModel(env);
 	Dual_subproblem.set(GRB_IntParam_InfUnbdInfo, 1);
 
-	//GRBEnv environment;
-	// vector<GRBVar> alpha;
-	// vector<vector<GRBVar>> beta;
-	// vector<vector<GRBVar>> gamma;
-	// vector<vector<vector<GRBVar>>> lambda;
-	// vector<vector<vector<GRBVar>>> mu;
-	// vector<vector<GRBVar>> sigma;
-	// vector<vector<GRBVar>> phi;
 	cout << "variable definition finished " << endl;
-	uint n = network.n;
 
-	//   for (int i = 0; i < n; i++) {
-	//       alpha[i] = Dual_subproblem.addVar(-GRB_INFINITY, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//
-	//       beta[i] = vector<GRBVar>(n);beta[i] = Dual_subproblem.addVars(n, GRB_CONTINUOUS);
-	//       gamma[i] = vector<GRBVar>(n);
-	//       sigma[i] = vector<GRBVar>(n);
-	//       phi[i] = vector<GRBVar>(n);
-	//
-	//       lambda[i] = vector<vector<GRBVar>>(n);
-	//       mu[i] = vector<vector<GRBVar>>(n);
-	// cout << "interation number: " << i << endl;
-	//       for (int j = 0; j < n; j++) {
-	//           beta[i][j] = Dual_subproblem.addVar(0, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//           gamma[i][j] = Dual_subproblem.addVar(0, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//           sigma[i][j] = Dual_subproblem.addVar(0, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//           phi[i][j] = Dual_subproblem.addVar(0, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//
-	//           lambda[i][j] = vector<GRBVar>(n);
-	//           mu[i][j] = vector<GRBVar>(n);
-	//
-	//           for (int k = 0; k < n; k++) {
-	//               lambda[i][j][k] = Dual_subproblem.addVar(0, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//               mu[i][j][k] = Dual_subproblem.addVar(0, GRB_INFINITY, NULL, GRB_CONTINUOUS);
-	//           }
-	//       }
-	//   }
-	GRBVar** beta = new GRBVar * [n];
-	GRBVar** gamma = new GRBVar * [n];
-	GRBVar*** lambda = new GRBVar * *[n];
-	GRBVar*** mu = new GRBVar * *[n];
-	GRBVar** sigma = new GRBVar * [n];
-	GRBVar** phi = new GRBVar * [n];
-	GRBVar* alpha = Dual_subproblem.addVars(n, GRB_CONTINUOUS);
+	int n = static_cast<int>(network.n);
+	auto** beta = new GRBVar * [n];
+	auto** gamma = new GRBVar * [n];
+	auto*** lambda = new GRBVar * *[n];
+	auto*** mu = new GRBVar * *[n];
+	auto** sigma = new GRBVar * [n];
+	auto** phi = new GRBVar * [n];
+	auto* alpha = Dual_subproblem.addVars(n, GRB_CONTINUOUS);
 	for (int i = 0; i < n; i++)
 	{
 		beta[i] = Dual_subproblem.addVars(n, GRB_CONTINUOUS);
@@ -107,8 +73,8 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 	}
 	for (int i = 0; i < n; i++)
 	{
-		GRBVar** lambda_temp = new GRBVar * [n];
-		GRBVar** mu_temp = new GRBVar * [n];
+		auto** lambda_temp = new GRBVar * [n];
+		auto** mu_temp = new GRBVar * [n];
 		for (int j = 0; j < n; j++)
 		{
 			lambda_temp[j] = Dual_subproblem.addVars(n, GRB_CONTINUOUS);
@@ -155,9 +121,10 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 			{
 				uint i = network.networkArcs[inArc].tailId;
 				uint j = network.networkArcs[outArc].headId;
-				Dual_objective += network.networkArcs[inArc].upperCapacities[s] * (1 - y_bar[i][q][j]) * lambda[i][q][j];
-				Dual_objective += network.networkArcs[outArc].upperCapacities[s] * (1 - y_bar[i][q][j]) * mu[i][q][j];
-
+				Dual_objective += network.networkArcs[inArc].upperCapacities[s] * lambda[i][q][j];
+				Dual_objective -= network.networkArcs[inArc].upperCapacities[s] * y_bar[i][q][j] * lambda[i][q][j];
+				Dual_objective += network.networkArcs[outArc].upperCapacities[s] * mu[i][q][j];
+				Dual_objective -= network.networkArcs[outArc].upperCapacities[s] * y_bar[i][q][j] * mu[i][q][j];
 			}
 		}
 	}
@@ -168,11 +135,13 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 		{
 			uint i = network.networkArcs[inArc].tailId;
 			uint u_iq = network.networkArcs[inArc].upperCapacities[s];
+			int sum =0;
 			for (uint outArc : network.networkNodes[q].outgoingArcs)
 			{
 				uint j = network.networkArcs[outArc].headId;
-				Dual_objective += u_iq * y_bar[i][q][j] * sigma[i][q];
+				sum += y_bar[i][q][j];
 			}
+			Dual_objective += u_iq * sum * sigma[i][q];
 		}
 	}
 	/// fourth term ///
@@ -182,11 +151,13 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 		{
 			uint j = network.networkArcs[outArc].headId;
 			uint u_qj = network.networkArcs[outArc].upperCapacities[s];
+			int sum = 0;
 			for (uint inArc : network.networkNodes[q].incomingArcs)
 			{
 				uint i = network.networkArcs[inArc].tailId;
-				Dual_objective += u_qj * y_bar[i][q][j] * phi[q][j];
+				sum += y_bar[i][q][j] ;
 			}
+			Dual_objective += u_qj * sum * phi[q][j];
 		}
 	}
 	Dual_subproblem.setObjective(Dual_objective, GRB_MINIMIZE);
@@ -195,8 +166,9 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 	///////////////////////////////
 	///       constraints       ///
 	///////////////////////////////
-	///
+
 	/// constraint number 1 & 2 ///
+
 	for (uint arcID1 : network.A1)
 	{
 		GRBLinExpr LHS = 0;
@@ -214,17 +186,13 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 			LHS += sigma[i][q];
 			Dual_subproblem.addConstr(LHS >= r_iq, "7b");
 		}
-		else
-		{
-			LHS += alpha[q] - beta[i][q] + gamma[i][q];
-			Dual_subproblem.addConstr(LHS >= r_iq, "7c");
-		}
 	}
-	for (NetworkArc arcID1 : network.networkArcs) {
+	for (uint arcID1 : network.A1)
+	{
 		GRBLinExpr LHS = 0;
-		uint i = arcID1.tailId;
-		uint q = arcID1.headId;
-		uint r_iq = arcID1.rewards[s];
+		uint i = network.networkArcs[arcID1].tailId;
+		uint q = network.networkArcs[arcID1].headId;
+		uint r_iq = network.networkArcs[arcID1].rewards[s];
 		LHS += alpha[q] - beta[i][q] + gamma[i][q];
 		Dual_subproblem.addConstr(LHS >= r_iq, "7c");
 	}
@@ -233,12 +201,12 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 
 	for (uint arcID1 : network.A2)
 	{
+		GRBLinExpr LHS = 0;
 		uint j = network.networkArcs[arcID1].headId;
 		uint q = network.networkArcs[arcID1].tailId;
 		uint r_qj = network.networkArcs[arcID1].rewards[s];
 		if (network.isNodeInVbar[q])
 		{
-			GRBLinExpr LHS = 0;
 			LHS += -alpha[q] - beta[q][j] + gamma[q][j];
 			for (uint arcID2 : network.networkNodes[q].incomingArcs)
 			{
@@ -248,18 +216,12 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 			LHS += phi[q][j];
 			Dual_subproblem.addConstr(LHS >= r_qj, "7d");
 		}
-		// else
-		// {
-		// 	GRBLinExpr LHS = 0;
-		//     LHS += -alpha[q] - beta[q][j] + gamma[q][j];
-		//     Dual_subproblem.addConstr(LHS >= r_qj, "7e");
-		// }
 	}
-	for (NetworkArc arcID1 : network.networkArcs) {
+	for (uint arcID1 : network.A2) {
 		GRBLinExpr LHS = 0;
-		uint q = arcID1.tailId;
-		uint j = arcID1.headId;
-		uint r_qj = arcID1.rewards[s];
+		uint j = network.networkArcs[arcID1].headId;
+		uint q = network.networkArcs[arcID1].tailId;
+		uint r_qj = network.networkArcs[arcID1].rewards[s];
 		LHS += -alpha[q] - beta[q][j] + gamma[q][j];
 		Dual_subproblem.addConstr(LHS >= r_qj, "7e");
 	}
@@ -339,13 +301,16 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 		uint q = network.networkArcs[arcID1].headId;
 		uint i = network.networkArcs[arcID1].tailId;
 		uint r_iq = network.networkArcs[arcID1].rewards[s];
-		if (network.isNodeInVbar[q] == 0 ) {
-			if (network.isNodeInVbar[i] == 0 ) {
-				LHS += -beta[i][q] + gamma[i][q];
-				Dual_subproblem.addConstr(LHS >= r_iq, "7j");
-			}
-		}
+		LHS += -beta[i][q] + gamma[i][q];
+		Dual_subproblem.addConstr(LHS >= r_iq, "7j");
 	}
+
+
+	// for (int q=0 ; q<n ; q++) {
+	// 	if (q== 0 || q==n-1) {
+	// 		Dual_subproblem.addConstr(alpha[q] == 0, "7k");
+	// 	}
+	// }
 
 	Dual_subproblem.update();
 	Dual_subproblem.optimize();
@@ -354,6 +319,7 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 	/////////////////////////////
 	/////  CUT COMPUTATION  /////
 	/////////////////////////////
+
 	if(dual_status == GRB_OPTIMAL) {
 		//////////////////////////////
 		/////   optimality cut   /////
@@ -464,7 +430,8 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 			for (uint arcID : network.networkNodes[q].outgoingArcs)
 			{
 				uint j = network.networkArcs[arcID].headId;
-				rhs += static_cast<double>(network.networkArcs[arcID].upperCapacities[s]) * gamma[q][j].get(GRB_DoubleAttr_UnbdRay) - static_cast<double>(network.networkArcs[arcID].lowerCapacities[s]) * beta[q][j].get(GRB_DoubleAttr_UnbdRay);
+				rhs += static_cast<double>(network.networkArcs[arcID].upperCapacities[s]) * gamma[q][j].get(GRB_DoubleAttr_UnbdRay);
+				rhs -= static_cast<double>(network.networkArcs[arcID].lowerCapacities[s]) * beta[q][j].get(GRB_DoubleAttr_UnbdRay);
 			}
 		}
 
@@ -478,8 +445,8 @@ void generateCut(vector<int> &W_solution, Network &network , Cut &newCut , int s
 				for (uint outArcID : network.networkNodes[q].outgoingArcs)
 				{
 					uint j = network.networkArcs[outArcID].headId;
-					rhs += network.networkArcs[inArcID].upperCapacities[s] * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
-					rhs += network.networkArcs[outArcID].upperCapacities[s] * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+					rhs += static_cast<double>(network.networkArcs[inArcID].upperCapacities[s]) * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+					rhs += static_cast<double>(network.networkArcs[outArcID].upperCapacities[s]) * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
 					Y_bar_coef[make_tuple(i, q, j)] -= static_cast<double>(network.networkArcs[inArcID].upperCapacities[s]) * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
 					Y_bar_coef[make_tuple(i, q, j)] -= static_cast<double>(network.networkArcs[outArcID].upperCapacities[s]) * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
 				}
