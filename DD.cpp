@@ -188,7 +188,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 }
 
 void refineOptCut(Cut &newCut , DD &DDTree ,Network& network) {
-	DDTree.nodes[DDTree.tree[0][0]].state2 = newCut.RHS;
+	DDTree.nodes[DDTree.tree[0][0]].state2 = newCut.RHS; // LATER: incorporate semiroot partial solution
 	for(int i0=1 ; i0<DDTree.tree.size();i0++) {
 		for (auto n : DDTree.tree[i0]) {
 			DDTree.nodes[n].state2 = 0;
@@ -196,16 +196,21 @@ void refineOptCut(Cut &newCut , DD &DDTree ,Network& network) {
 	}
 	cout << "zart " << endl;
 	for (int i0=1 ; i0<DDTree.tree.size()-1;i0++) {
-		auto theArc = network.processingOrder[i0-1].second;
+		auto theArc = network.processingOrder[i0-1].second; // LATER: add offset of semiroot node before i0.
 		auto parentNetNode = network.networkArcs[theArc].tailId;
 		auto middleNetNode = network.networkArcs[theArc].headId;
 		for (auto DDnodeID : DDTree.tree[i0]) {
 			int newState = -9999999;
 			for (auto arcID : DDTree.nodes[DDnodeID].incomingArcs) {
 				auto DDparent = DDTree.arcs[arcID].tail;
-				int decisionNode = network.networkArcs[DDTree.arcs[arcID].decision].headId;
-
-				DDTree.arcs[arcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,decisionNode)];
+				// // we don't have a arc corresponding to -1 in networkArcs.
+				if (DDTree.arcs[arcID].decision == -1) {
+					DDTree.arcs[arcID].weight = 0; //DDTree.nodes[DDparent].state2
+				}
+				else {
+					int decisionNode = network.networkArcs[DDTree.arcs[arcID].decision].headId;
+					DDTree.arcs[arcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,decisionNode)];
+				}
 				// cout << "new state = " << newState << endl;
 				// cout << " DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2; " <<DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2 << endl;
 				if (newState <= DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2 ) newState = DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2;
