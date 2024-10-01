@@ -19,7 +19,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <set>
-
+#include "newCGO.h"
 #include "Network.h"
 #include <iostream>
 #include <algorithm>
@@ -143,6 +143,7 @@ public:
 	bool buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int index);
 };
 
+void refineOptCut(Cut &newCut , DD &DDTree,Network& network);
 
 struct set_hash{
 	/*

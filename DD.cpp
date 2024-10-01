@@ -5,6 +5,7 @@
 
 #include "DD.h"
 
+
 /*
  * 1. change build next layer function to make the child not to store the solution vector.
  * 2. change build function to account for cutset generation.
@@ -185,6 +186,85 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 	}
 	return isExact;
 }
+
+void refineOptCut(Cut &newCut , DD &DDTree ,Network& network) {
+	DDTree.nodes[DDTree.tree[0][0]].state2 = newCut.RHS;
+	for(int i0=1 ; i0<DDTree.tree.size();i0++) {
+		for (auto n : DDTree.tree[i0]) {
+			DDTree.nodes[n].state2 = 0;
+		}
+	}
+	cout << "zart " << endl;
+	for (int i0=1 ; i0<DDTree.tree.size()-1;i0++) {
+		auto theArc = network.processingOrder[i0-1].second;
+		auto parentNetNode = network.networkArcs[theArc].tailId;
+		auto middleNetNode = network.networkArcs[theArc].headId;
+		for (auto DDnodeID : DDTree.tree[i0]) {
+			int newState = -9999999;
+			for (auto arcID : DDTree.nodes[DDnodeID].incomingArcs) {
+				auto DDparent = DDTree.arcs[arcID].tail;
+				int decisionNode = network.networkArcs[DDTree.arcs[arcID].decision].headId;
+
+				DDTree.arcs[arcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,decisionNode)];
+				// cout << "new state = " << newState << endl;
+				// cout << " DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2; " <<DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2 << endl;
+				if (newState <= DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2 ) newState = DDTree.arcs[arcID].weight + DDTree.nodes[DDparent].state2;
+			}
+			DDTree.nodes[DDnodeID].state2 = newState;
+		}
+		// for (int DDArcID : DDTree.nodes[DDTree.tree.back()[0]].incomingArcs) {}
+	}
+	int termnialState = -9999999;
+	for (int inArcs : DDTree.nodes[ DDTree.tree.back()[0]].incomingArcs) {
+		DDTree.arcs[inArcs].weight = DDTree.nodes[DDTree.arcs[inArcs].tail].state2 ;
+		if (termnialState <= DDTree.arcs[inArcs].weight) termnialState = DDTree.arcs[inArcs].weight;
+	}
+	DDTree.nodes[ DDTree.tree.back()[0]].state2 = termnialState;
+
+
+	for(int i0=0 ; i0<DDTree.tree.size();i0++) {
+		for (auto n : DDTree.tree[i0]) {
+			cout << DDTree.nodes[n].state2 << " - ";
+		}
+		cout << endl;
+		cout << "----------------------------------------" << endl;
+	}
+}
+
+void refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network) {
+	DDTree.nodes[DDTree.tree[0][0]].state2 = newCut.RHS;
+	for(int i0=1 ; i0<DDTree.tree.size();i0++) {
+		for (auto n : DDTree.tree[i0]) {
+			DDTree.nodes[n].state2 = 0;
+		}
+	}
+	for(int i0=1 ; i0<DDTree.tree.size()-1;i0++) {
+		auto theArc = network.processingOrder[i0-1].second;
+		auto parentNetNode = network.networkArcs[theArc].tailId;
+		auto middleNetNode = network.networkArcs[theArc].headId;
+		for (auto n : DDTree.tree[i0]) {
+			for (auto arcID : DDTree.nodes[n].incomingArcs) {
+				auto DDparent = DDTree.arcs[arcID].tail;
+				int childNetNode = network.networkArcs[ DDTree.arcs[arcID].decision].headId;
+				int newState = DDTree.nodes[DDparent].state2 + newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,childNetNode)] ;
+				if (newState >= DDTree.nodes[n].state2) DDTree.nodes[n].state2 =newState;
+			}
+		}
+	}
+	// for(int i0=DDTree.tree.size()-1 ; i0>0 ;i0--) {
+	//
+	// }
+
+	for(int i0=0 ; i0<DDTree.tree.size();i0++) {
+		for (auto n : DDTree.tree[i0]) {
+			cout << DDTree.nodes[n].state2 << " - ";
+		}
+		cout << endl;
+		cout << "----------------------------------------" << endl;
+	}
+}
+
+
 
 //void ibuildNextLayer(vector<uint>& currentLayer, vector<uint>& nextLayer, int index) {
 //	/*
@@ -396,30 +476,22 @@ static void printTree(const vector<vector<int>>& tree){
 }
 
 vi DD::solution(Network network) {
-	/*
-	 * Start from terminal node and iterate through incoming arcs and select arc.
-	 *
-	 */
 
-	// change logic.
 
-	// find maxVal parent node.
-	int maxVal = 0;
+	int maxVal = -999999;
 	int maxNodeId = 0;
 	vi path(tree.size()-2);
-	// cout << "tree.size()" << tree.size() << endl;
-	// cout << "path.size()" <<path.size() << endl;
 	int terminalNodeId = tree[tree.size()-1][0];
 	const auto& terminalNode = nodes[terminalNodeId];
 
 	for (const auto arcId: terminalNode.incomingArcs){ // find maxValue path.
 		const auto& arc = arcs[arcId];
-		if (arc.decision > maxVal){
-			maxVal = arc.decision;
+		if (arc.weight > maxVal){
+			maxVal = arc.weight;
 			maxNodeId = arc.tail;
 		}
 	}
-
+	cout << "tree.size(): " << tree.size() << endl;
 	// maxVal and maxNodeId is populated.
 	for (size_t l = tree.size()-2; l > 0; l--){ // check indexes later.
 		const auto& node = nodes[maxNodeId];
@@ -430,21 +502,18 @@ vi DD::solution(Network network) {
 				// this is the optimal parent.
 				maxNodeId = arc.tail;
 				path[l-1] = arc.decision;
-				// cout << "??????????????????????????????????????????????????" << endl;
-				// cout << "arc.decision " <<arc.decision << endl;
-				// cout << network.networkArcs[arc.decision].headId << endl;
-				// cout << network.networkArcs[arc.decision].tailId << endl;
-				// cout << network.networkArcs[arc.decision].arcId << endl;
-				// cout << "??????????????????????????????????????????????????" << endl;
+				cout << "arc.decision" << arc.decision << endl;
 				break;
 			}
 		}
-		//const auto& arc = arcs[node.incomingArcs[0]];
-		//path[l] = arc.weight;
-		//maxNodeId = arc.tail;
 	}
-	// prepend root solution to path.
 	const auto& rootNode = nodes[tree[0][0]];
+	cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::::::::" << endl;
+	for(auto i:path) {
+		cout << i << " - ";
+	}
+	cout << endl;
+	cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::::::::" << endl;
 	cout << "rootNode.solutionVector.size()" <<rootNode.solutionVector.size() << endl;
 	vi finalPath(rootNode.solutionVector);
 	finalPath.insert(finalPath.end(), path.begin(), path.end());
