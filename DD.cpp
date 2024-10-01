@@ -74,6 +74,9 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	nextLayer.push_back(Termnial.id);
 	tree.push_back(nextLayer);
 	/// end of new code ///
+	for (auto id : tree[tree.size()-2]) {
+		nodes[id].objVal = 99999999999;
+	}
 }
 
 inline void DD::updateState(const vector<int> &currentLayer, const unordered_set<int> &states){
@@ -219,9 +222,15 @@ void refineOptCut(Cut &newCut , DD &DDTree ,Network& network) {
 		}
 		// for (int DDArcID : DDTree.nodes[DDTree.tree.back()[0]].incomingArcs) {}
 	}
+	for (auto nodeID : DDTree.tree[DDTree.tree.size()-2] ) {
+		if (DDTree.nodes[nodeID].objVal >= DDTree.nodes[nodeID].state2) {
+			DDTree.nodes[nodeID].objVal = DDTree.nodes[nodeID].state2;
+		}
+	}
+
 	int termnialState = -9999999;
 	for (int inArcs : DDTree.nodes[ DDTree.tree.back()[0]].incomingArcs) {
-		DDTree.arcs[inArcs].weight = DDTree.nodes[DDTree.arcs[inArcs].tail].state2 ;
+		DDTree.arcs[inArcs].weight = DDTree.nodes[DDTree.arcs[inArcs].tail].objVal ;
 		if (termnialState <= DDTree.arcs[inArcs].weight) termnialState = DDTree.arcs[inArcs].weight;
 	}
 	DDTree.nodes[ DDTree.tree.back()[0]].state2 = termnialState;
