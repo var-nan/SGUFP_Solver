@@ -70,14 +70,16 @@ Network::Network(const std::string& p_fileName){
 		// populate a1,a2,a3,a4 for subproblem formulation.
 		vui a1 = {}, a2 = {}, a3 = {}, a4 = {};
 
-		for (const auto& node: networkNodes){
-			if (!node.incomingArcs.empty()){
-				if (!node.outgoingArcs.empty())a4.push_back(node.nodeId);
-				else a1.push_back(node.nodeId);
+		for (const auto& arc: netArcs){
+			auto i = arc.tailId;
+			auto j = arc.headId;
+			if (netNodes[i].incomingArcs.empty()){
+				if (netNodes[j].outgoingArcs.empty()) a4.push_back(arc.arcId);
+				else a1.push_back(arc.arcId);
 			}
 			else {
-				if (!node.outgoingArcs.empty()) a2.push_back(node.nodeId);
-				else a3.push_back(node.nodeId);
+				if (netNodes[i].outgoingArcs.empty()) a2.push_back(arc.arcId);
+				else a3.push_back(arc.arcId);
 			}
 		}
 
