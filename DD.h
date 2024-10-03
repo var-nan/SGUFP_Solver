@@ -9,6 +9,13 @@
 #ifndef PRUNE
 	#define PRUNE TRAIL
 #endif
+#ifndef RESTRICTED_STRATEGY
+	#define RESTRICTED_STRATEGY TRAIL
+#endif
+#ifndef RELAXED_STRATEGY
+	#define RELAXED_STRATEGY MERGE
+#endif
+
 #ifndef MAX_WIDTH
 	#define MAX_WIDTH (1<<10)
 #endif

@@ -180,9 +180,10 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 				}
 			}
 		}
-#elif PRUNE == RANDOM
-// merge nodes at random
-#endif
+		#elif PRUNE == RANDOM
+		// merge all outgoing arcs of parent to the same children.
+
+		#endif
 
 	}
 	return isExact;
@@ -596,6 +597,27 @@ void DD::removeNode(ulint id){
 	//}
 	// actual delete.
 	deleteNodeById(id);
+
+	// remove deleted ids from the tree.
+	int n_removed = deletedNodeIds.size();
+	auto& deletedNodeIds_l = this->deletedNodeIds;
+	auto f = [&n_removed, &deletedNodeIds_l] (ulint x) mutable {
+		if (deletedNodeIds_l.count(x)) { n_removed--; return true;}
+		return false;
+	};
+
+	for (int i = tree.size()-2; i > 0; i--){
+		if (n_removed){
+			auto& layer = tree[i];
+			layer.erase(std::remove_if(layer.begin(), layer.end(), f), layer.end());
+		}
+		else break;
+	}
+	// add deleted Ids to the numbers.
+	auto& num = number;
+	std::for_each(deletedNodeIds.begin(), deletedNodeIds.end(), [&num](ulint x) mutable{num.setNext(x);});
+	deletedNodeIds.clear(); // clear the deleted NodeIds set.
+
 }
 
 
