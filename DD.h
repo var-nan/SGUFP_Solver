@@ -9,6 +9,13 @@
 #ifndef PRUNE
 	#define PRUNE TRAIL
 #endif
+#ifndef RESTRICTED_STRATEGY
+	#define RESTRICTED_STRATEGY TRAIL
+#endif
+#ifndef RELAXED_STRATEGY
+	#define RELAXED_STRATEGY MERGE
+#endif
+
 #ifndef MAX_WIDTH
 	#define MAX_WIDTH (1<<10)
 #endif
@@ -18,6 +25,7 @@
 #endif
 
 #include "Network.h"
+#include "Cut.h"
 
 #include <set>
 #include <algorithm>
@@ -51,7 +59,7 @@ public:
 	unordered_set<int> states;
 	int state2;
 	vector<int> solutionVector;
-	int objVal = 0; // INFO Update it during refinement.
+	int objVal = INT32_MAX; // set to max int value.
 
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
 	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
@@ -131,6 +139,15 @@ public:
 	//ulint lastInserted = 1; // 0 is reserved for root node.
 	int startTree = 0; // INFO these two should be updated during tree compilation.
 	int exactLayer = 0;
+	void applyOptimalityCut(const Network& network, const Cut& cut);
+	void refineTree(const Network& network, Cut cut);
+	void applyFeasibilityCut(const Network& network, const Cut& cut);
+	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.
+	void removeNode(ulint id);
+	void bottomUpDelete(ulint id);
+	void topDownDelete(ulint id);
+
+	unordered_set<ulint> deletedNodeIds;
 
 	DD() {
 
