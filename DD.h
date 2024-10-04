@@ -6,18 +6,25 @@
 //#define SGUFP_SOLVER_DD_H
 #pragma once
 // default prune strategy is removing/merging trailing nodes.
-#ifndef PRUNE
-	#define PRUNE TRAIL
-#endif
+/*
+ * RESTRICTED_STRATEGY
+ *  1 - TRAIL
+ *  2 - RANDOM
+ *
+ * RELAXED_STRATEGY
+ *  1 - TRAIL
+ *  2 - PARENT_CHILD
+ */
+
 #ifndef RESTRICTED_STRATEGY
-	#define RESTRICTED_STRATEGY TRAIL
+	#define RESTRICTED_STRATEGY 1
 #endif
 #ifndef RELAXED_STRATEGY
-	#define RELAXED_STRATEGY MERGE
+	#define RELAXED_STRATEGY 2
 #endif
 
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH (1<<10)
+	#define MAX_WIDTH 2
 #endif
 
 #ifndef NUMBERS_RESERVE
@@ -91,7 +98,7 @@ class DD{
 private:
 	int lastArc = 1;
 	int lastNode = 1;
-	Type type = RESTRICTED;
+	Type type;
 	//int startTree = 0; // this variable denotes the position where the tree starts in the global order.
 	vi cutset{};
 	//int exactLayer = 0; // represents which layer is exact layer.
@@ -149,9 +156,11 @@ public:
 
 	unordered_set<ulint> deletedNodeIds;
 
-	DD() {
+	DD() : type{RESTRICTED} {
 
 	}
+
+	explicit DD(Type type_): type{type_}{}
 
 	void build(const Network& network, DDNode& node, int index);
 	//void build(const vector<pair<int,int>> processingOrder);

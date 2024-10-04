@@ -101,7 +101,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 
 	if (type == RESTRICTED) {
 
-#if PRUNE == TRAIL
+		#if RESTRICTED_STRATEGY == 1
 		{
 			uint count = 0;
 
@@ -134,13 +134,13 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 			}
 		}
 
-#elif PRUNE == RANDOM
-	// remove nodes at random
-#endif
+		#elif RESTRICTED_STRATEGY == 2
+			// remove nodes at random
+		#endif
 
 	}
 	else if(type == RELAXED){
-#if PRUNE == TRAIL
+		#if RELAXED_STRATEGY == 1
 		{
 			int count = 0;
 			ulint lastNodeId = 0;
@@ -180,9 +180,67 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 				}
 			}
 		}
-		#elif PRUNE == RANDOM
-		// merge all outgoing arcs of parent to the same children.
+		//#endif
 
+		#elif RELAXED_STRATEGY == 2
+		{
+			// merge all outgoing arcs of parent to the same children.
+
+			int count = 0;
+			ulint lastNode;
+
+			if (currentLayer.size() >= MAX_WIDTH) {
+				// for each parent, create only one child.
+				for (const auto& id: currentLayer) {
+					// create child node.
+					auto& parentNode = nodes[id];
+					auto parentStates = parentNode.states;
+
+					auto lastInserted = number.getNext();
+					DDNode node{lastInserted};
+					node.states = parentStates;
+
+					for (auto decision : parentStates) {
+						//lastInserted = number.getNext();
+						DDArc arc{lastInserted, id, node.id, decision};
+						//node.states = parentStates;
+						//if (decision != -1) node.states.erase(decision); // INFO not required, because relaxation.
+						parentNode.outgoingArcs.push_back(lastInserted);
+						node.incomingArcs.push_back(lastInserted);
+
+						arcs.insert(std::make_pair(lastInserted, arc));
+						lastInserted = number.getNext();
+						//nodes.insert(std::make_pair(lastInserted, node));
+					}
+					// insert node to the map and node id to tree.
+					nodes.insert(std::make_pair(node.id, node));
+					nextLayer.push_back(node.id);
+					isExact = false; // TODO is this correct?
+				}
+			}
+			else { // build complete layer. this might cross MAX_WIDTH.
+				for (const auto& id : currentLayer) {
+					auto& parentNode = nodes[id];
+					auto parentStates = parentNode.states;
+
+					for(auto decision : parentStates) {
+						auto nextId = number.getNext();
+						DDNode node{nextId};
+						DDArc arc{nextId, id, node.id, decision};
+						node.states = parentStates;
+						if (decision != -1) node.states.erase(decision);
+						node.incomingArcs.push_back(arc.id);
+						parentNode.outgoingArcs.push_back(arc.id);
+
+						nodes.insert(std::make_pair(node.id, node));
+						arcs.insert(std::make_pair(arc.id, arc));
+
+						nextLayer.push_back(node.id);
+					}
+				}
+				if (nextLayer.size() > MAX_WIDTH) isExact = false;
+			}
+		}
 		#endif
 
 	}
