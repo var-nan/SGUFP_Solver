@@ -405,15 +405,34 @@ if(dual_status == GRB_OPTIMAL) {
 			}
 		}
 
+		vector<int> lowerBounds(network.processingOrder.size());
+		const auto& coeff = Y_bar_coef;
+
+		for (const auto[id_t, arcId]: network.processingOrder){
+			const auto& arc = network.networkArcs[arcId];
+			auto i = arc.tailId;
+			auto q = arc.headId;
+
+			const auto& node = network.networkNodes[q];
+			int max = 0;
+			for (const auto j: node.outNodeIds){
+				auto c = coeff.at(make_tuple(static_cast<int>(i),static_cast<int>(q),static_cast<int>(j)));
+				if (c > max) max = c;
+			}
+			lowerBounds[id_t] = max;
+		}
+		int pref = 0;
+		for (auto start = lowerBounds.rbegin(); start != lowerBounds.rend(); start++){
+			*start = *start + pref;
+			pref = *start;
+		}
+		lowerBounds.push_back(0);
+
 		newCut.type = 'f';
 		newCut.cutCoef = Y_bar_coef;
 		newCut.RHS = rhs;
+		newCut.heuristic = lowerBounds;
 	}
-
-
-
-
-
 
 
 

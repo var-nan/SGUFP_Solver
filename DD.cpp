@@ -60,7 +60,7 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	vector<int> nextLayer={};
 	DDNode Termnial;
 	Termnial.id = number.getNext();
-
+	Termnial.nodeLayer = nodes[currentLayer[0]].nodeLayer+1;
 	for (auto id : currentLayer) {
 		lastInserted = number.getNext();
 		DDNode parent = nodes[id];
@@ -123,6 +123,7 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 					node.solutionVector = parentNode.solutionVector;
 					node.solutionVector.emplace_back(decision);
 					node.incomingArcs.emplace_back(arc.id);
+					node.nodeLayer = parentNode.nodeLayer+1;
 					parentNode.outgoingArcs.push_back(arc.id);
 					// insert node and arc to map
 					nodes.insert(std::make_pair(node.id, node));
@@ -135,58 +136,61 @@ bool DD::buildNextLayer(vector<int> &currentLayer, vector<int> &nextLayer, int i
 				}
 			}
 		}
-
-#elif PRUNE == RANDOM
-	// remove nodes at random
 #endif
-
 	}
-	else if(type == RELAXED){
-#if PRUNE == TRAIL
-		{
-			int count = 0;
-			int lastNodeId = 0;
-
-			for (const auto id: currentLayer) {
-				DDNode &parentNode = nodes[id];
-
+	else if(type == RELAXED) {
+		// merge all outgoing arcs of parent to the same children.
+		int count = 0;
+		ulint lastNode;
+		if (currentLayer.size() >= MAX_WIDTH) {
+			// for each parent, create only one child.
+			for (const auto& id: currentLayer) {
+				// create child node.
+				auto& parentNode = nodes[id];
 				auto parentStates = parentNode.states;
-				for (auto decision: parentNode.states) {
-
+				auto lastInserted = number.getNext();
+				DDNode node{lastInserted};
+				node.states = parentStates;
+				for (auto decision : parentStates) {
+					//lastInserted = number.getNext();
+					DDArc arc{lastInserted, id, node.id, decision};
+					//node.states = parentStates;
+					//if (decision != -1) node.states.erase(decision); // INFO not required, because relaxation.
+					parentNode.outgoingArcs.push_back(lastInserted);
+					node.incomingArcs.push_back(lastInserted);
+					node.nodeLayer = nodes[currentLayer[0]].nodeLayer+1;
+					arcs.insert(std::make_pair(lastInserted, arc));
 					lastInserted = number.getNext();
-					if (count < MAX_WIDTH) {
-						DDNode node{lastInserted};
-						DDArc arc{lastInserted, id, node.id, decision};
-						node.states = parentStates;
-						if (decision != -1) node.states.erase(decision);
-						//node.solutionVector = parentNode.solutionVector;
-						//node.solutionVector.emplace_back(decision);
-						node.incomingArcs.emplace_back(arc.id);
-						parentNode.outgoingArcs.push_back(arc.id);
-						// insert node and arc to map
-						nodes.insert(std::make_pair(node.id, node));
-						arcs.insert(std::make_pair(arc.id, arc));
-						lastNodeId = node.id;
-						nextLayer.emplace_back(node.id);
-					} else { // create only arc and make it point to the last node.
-						// QUESTION: do we create all arcs in relaxed version.
-						DDArc arc{lastInserted, id, lastNodeId, decision};
-						DDNode &node = nodes[lastNodeId];
-						node.incomingArcs.emplace_back(arc.id);
-						parentNode.outgoingArcs.emplace_back(arc.id);
-						arcs.insert(std::make_pair(arc.id, arc));
-						isExact = false;
-					}
-					count++;
-					lastInserted++;
+					//nodes.insert(std::make_pair(lastInserted, node));
 				}
+				// insert node to the map and node id to tree.
+				nodes.insert(std::make_pair(node.id, node));
+				nextLayer.push_back(node.id);
+				isExact = false; // TODO is this correct?
 			}
 		}
-#elif PRUNE == RANDOM
-// merge nodes at random
-#endif
-
+		else { // build complete layer. this might cross MAX_WIDTH.
+			for (const auto& id : currentLayer) {
+				auto& parentNode = nodes[id];
+				auto parentStates = parentNode.states;
+				for(auto decision : parentStates) {
+					auto nextId = number.getNext();
+					DDNode node{nextId};
+					DDArc arc{nextId, id, node.id, decision};
+					node.states = parentStates;
+					if (decision != -1) node.states.erase(decision);
+					node.incomingArcs.push_back(arc.id);
+					parentNode.outgoingArcs.push_back(arc.id);
+					node.nodeLayer = nodes[currentLayer[0]].nodeLayer+1;
+					nodes.insert(std::make_pair(node.id, node));
+					arcs.insert(std::make_pair(arc.id, arc));
+					nextLayer.push_back(node.id);
+				}
+			}
+			if (nextLayer.size() > MAX_WIDTH) isExact = false;
+		}
 	}
+
 	return isExact;
 }
 
@@ -194,10 +198,10 @@ void refineOptCut(Cut &newCut , DD &DDTree ,Network& network) {
 	DDTree.nodes[DDTree.tree[0][0]].state2 = newCut.RHS; // LATER: incorporate semiroot partial solution
 	for(int i0=1 ; i0<DDTree.tree.size();i0++) {
 		for (auto n : DDTree.tree[i0]) {
-			DDTree.nodes[n].state2 = 0;
+			DDTree.nodes[n].state2 = -9999999;
 		}
 	}
-	cout << "zart " << endl;
+	// cout << "zart " << endl;
 	for (int i0=1 ; i0<DDTree.tree.size()-1;i0++) {
 		auto theArc = network.processingOrder[i0-1].second; // LATER: add offset of semiroot node before i0.
 		auto parentNetNode = network.networkArcs[theArc].tailId;
@@ -236,46 +240,170 @@ void refineOptCut(Cut &newCut , DD &DDTree ,Network& network) {
 	DDTree.nodes[ DDTree.tree.back()[0]].state2 = termnialState;
 
 
-	for(int i0=0 ; i0<DDTree.tree.size();i0++) {
-		for (auto n : DDTree.tree[i0]) {
-			cout << DDTree.nodes[n].state2 << " - ";
-		}
-		cout << endl;
-		cout << "----------------------------------------" << endl;
-	}
+
+
+	// for(int i0=0 ; i0<DDTree.tree.size();i0++) {
+	// 	for (auto n : DDTree.tree[i0]) {
+	// 		cout << DDTree.nodes[n].state2 << " - ";
+	// 	}
+	// 	cout << endl;
+	// 	cout << "----------------------------------------" << endl;
+	// }
 }
 
-void refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network) {
+void DD::refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network) {
 	DDTree.nodes[DDTree.tree[0][0]].state2 = newCut.RHS;
 	for(int i0=1 ; i0<DDTree.tree.size();i0++) {
 		for (auto n : DDTree.tree[i0]) {
 			DDTree.nodes[n].state2 = 0;
 		}
 	}
-	for(int i0=1 ; i0<DDTree.tree.size()-1;i0++) {
-		auto theArc = network.processingOrder[i0-1].second;
-		auto parentNetNode = network.networkArcs[theArc].tailId;
-		auto middleNetNode = network.networkArcs[theArc].headId;
-		for (auto n : DDTree.tree[i0]) {
-			for (auto arcID : DDTree.nodes[n].incomingArcs) {
-				auto DDparent = DDTree.arcs[arcID].tail;
-				int childNetNode = network.networkArcs[ DDTree.arcs[arcID].decision].headId;
-				int newState = DDTree.nodes[DDparent].state2 + newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,childNetNode)] ;
-				if (newState >= DDTree.nodes[n].state2) DDTree.nodes[n].state2 =newState;
-			}
-		}
-	}
-	// for(int i0=DDTree.tree.size()-1 ; i0>0 ;i0--) {
-	//
-	// }
-
 	for(int i0=0 ; i0<DDTree.tree.size();i0++) {
 		for (auto n : DDTree.tree[i0]) {
-			cout << DDTree.nodes[n].state2 << " - ";
+			cout << DDTree.nodes[n].nodeLayer << " - ";
 		}
 		cout << endl;
 		cout << "----------------------------------------" << endl;
 	}
+
+	for( auto item :newCut.heuristic) {
+		cout << item << "///" ;
+	}
+	cout << endl;
+
+	for(int i0=1 ; i0 < tree.size()-1;i0++) {
+
+		auto theArc = network.processingOrder[i0-1].second;
+		auto parentNetNode = network.networkArcs[theArc].tailId;
+		auto middleNetNode = network.networkArcs[theArc].headId;
+		vector<int> nodesToBeRemoved = {};
+		cout << " before size of the tree: " << i0 << "    " << tree[i0].size()<< endl;
+		vector<int> nodesToBeAdded = {};
+		for (auto n : tree[i0]) {
+			vi allIncomings = nodes[n].incomingArcs;
+			// cout << "nodes[n].incomingArcs.size():  " << nodes[n].incomingArcs.size() << endl;
+			cout << "nodes[n].incomingArcs.size(): " << nodes[n].incomingArcs.size()<<endl;
+			if (allIncomings.size() > 1) {
+				for (auto inc = 1 ; inc < allIncomings.size() ; inc++) {
+					// cout << "got in multi arc for " << endl;
+					int incArcID = allIncomings[inc];
+					int decisionNode = arcs[incArcID].decision;
+					auto parentNodeID = arcs[incArcID].tail;;
+					if (nodes[parentNodeID].states.find(decisionNode) == nodes[parentNodeID].states.end()) {
+						cout << "found it" << endl;
+						continue;
+					}
+					arcs[incArcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,network.networkArcs[decisionNode].headId)];
+					// cout << "arcs[incArcID].weight :" << arcs[incArcID].weight << endl;
+
+					int newState = DDTree.nodes[parentNodeID].state2 + arcs[incArcID].weight;
+					if (newState  + newCut.heuristic[nodes[n].nodeLayer] >= 0) {
+						// cout << endl;
+						// cout << "making new node " << endl;
+						// cout << "newState: " << newState << endl;
+						// cout << "nodeLayer:   " << i0 << endl;
+						// cout << endl;
+						int lastInserted = number.getNext();
+						DDNode newnode = nodes[n];
+						newnode.states = nodes[parentNodeID].states;
+						newnode.id = lastInserted;
+						newnode.incomingArcs = {allIncomings[inc]};
+						newnode.state2 = newState;
+						if (decisionNode != -1) {
+							newnode.states.erase(decisionNode);
+						}
+						newnode.outgoingArcs={};
+						for(int out : DDTree.nodes[n].outgoingArcs) {
+							auto outArc = arcs[out];
+							DDArc newArc = outArc;
+							int lastInserteda = number.getNext();
+							newArc.id = lastInserteda;
+							newArc.tail = newnode.id;
+							nodes[newArc.head].incomingArcs.push_back(newArc.id);
+							newnode.outgoingArcs.push_back(newArc.id);
+							arcs.insert(make_pair(newArc.id,newArc));
+						}
+						nodes.insert(make_pair(newnode.id,newnode));
+						nodesToBeAdded.push_back(newnode.id);
+						// cout << " node got added "<< endl;
+						// tree[newnode.nodeLayer].push_back(newnode.id);
+					}
+				}
+				/// the first incoming arc
+				int incArcID = allIncomings[0];
+				int decisionNode = arcs[incArcID].decision;
+				auto parentNodeID = arcs[incArcID].tail;
+				nodes[n].incomingArcs = {incArcID};
+				if (nodes[parentNodeID].states.find(decisionNode) == nodes[parentNodeID].states.end()) {
+					nodesToBeRemoved.push_back(n);
+					cout << "found it 2" << endl;
+				}
+				if (decisionNode != -1) {
+					arcs[incArcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,network.networkArcs[decisionNode].headId)];
+				}else {
+					arcs[incArcID].weight = 0;
+				}
+				int newState = DDTree.nodes[parentNodeID].state2 + arcs[incArcID].weight;
+				if (newState  + newCut.heuristic[nodes[n].nodeLayer] >= 0) {
+					// nodes[n].incomingArcs = {incArcID};
+					nodes[n].state2 = newState;
+					nodes[n].states = nodes[parentNodeID].states;
+					if (decisionNode != -1) {
+						nodes[n].states.erase(decisionNode);
+					}
+				}else {
+					// cout << "deletion happened!"<< endl;
+					nodesToBeRemoved.push_back(nodes[n].id);
+					// removeNode(nodes[n].id);
+				}
+
+			}else { // there is only one incomming arc
+				auto inArcID = allIncomings[0];
+				int decisionNode = arcs[inArcID].decision;
+				// cout << "decisionNode" << decisionNode << endl;
+				auto parentNodeID = arcs[inArcID].tail;
+				if (decisionNode != -1) {
+					arcs[inArcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,network.networkArcs[decisionNode].headId)];
+					int newState = DDTree.nodes[parentNodeID].state2 + arcs[inArcID].weight;
+					if (newState  + newCut.heuristic[nodes[n].nodeLayer] >= 0) {
+						DDTree.nodes[n].state2 = newState;
+					}else {
+						nodesToBeRemoved.push_back(nodes[n].id);
+					}
+				}else{
+					DDTree.nodes[n].state2 = DDTree.nodes[parentNodeID].state2;
+					if (DDTree.nodes[n].state2 + newCut.heuristic[nodes[n].nodeLayer] < 0) {
+						// cout << "deletion happened!"<< endl;
+						nodesToBeRemoved.push_back(nodes[n].id);
+					}
+				}
+			}
+
+			// cout << "tree[i0]" << tree[i0].size() << endl;
+		}
+
+		// cout << "tree[i0-1]" << tree[i0-1].size() << endl;
+		for(auto item : nodesToBeAdded) {
+			tree[i0].push_back(item);
+		}
+		cout << " after size of the tree:     " << tree[i0].size()<< endl;
+		// cout << endl;
+		for (auto badNode : nodesToBeRemoved) {
+			removeNode(badNode);
+		}
+		cout << " after size of the tree:     " << tree[i0].size()<< endl;
+	}
+
+
+	// cout << "got here " << endl;
+	for(int i0=0 ; i0<tree.size();i0++) {
+		for (auto n : tree[i0]) {
+			cout << nodes[n].state2 << " - ";
+		}
+		cout << endl;
+		cout << "----------------------------------------" << endl;
+	}
+
 }
 
 
@@ -411,6 +539,7 @@ void DD::deleteNodeById(int id) {
 	}
 	// INFO not sure if this function shoudl remove the node from the  map.
 	nodes.erase(id); // remove this if node deletion happens outside of the function.
+	deletedNodeIds.insert(id);
 }
 
 inline DDNode DD::duplicate(const DDNode& node){
@@ -450,33 +579,33 @@ void DD::duplicateNode(int id){
 		DDArc& arc = arcs[arcId];
 
 		// TODO compute state.
-		bool feasible = true; // TODO: based on the cut, build if node is feasible.
-		if (feasible){
-			DDNode newNode = duplicate(node); // set incoming arc.
-			// update incoming arc and make the arc to point to new node.
-			newNode.incomingArcs.push_back(arcId);
-			nodes.insert(std::make_pair(newNode.id, newNode));
-			arc.head = newNode.id;
-		}
-		else {
-			// delete arc.
-			deleteArcById(arcId);
-			auto& tailOutArcs = nodes[arc.tail].outgoingArcs;
-			tailOutArcs.erase(std::find(tailOutArcs.begin(), tailOutArcs.end(), arcId));
-			// remove arc
-			arcs.erase(arcId);
-		}
+		// bool feasible = true; // TODO: based on the cut, build if node is feasible.
+		// if (feasible){
+		DDNode newNode = duplicate(node); // set incoming arc.
+		// update incoming arc and make the arc to point to new node.
+		newNode.incomingArcs.push_back(arcId);
+		nodes.insert(std::make_pair(newNode.id, newNode));
+		arc.head = newNode.id;
+		// }
+		// else {
+		// 	// delete arc.
+		// 	deleteArcById(arcId);
+		// 	auto& tailOutArcs = nodes[arc.tail].outgoingArcs;
+		// 	tailOutArcs.erase(std::find(tailOutArcs.begin(), tailOutArcs.end(), arcId));
+		// 	// remove arc
+		// 	arcs.erase(arcId);
+		// }
 	}
 	// remove the incoming arcs of original node.
 	// compute state and keep it if node is feasible.
-	if (true){ // feasible, delete all incoming arcs except the first.
-		node.incomingArcs.erase(node.incomingArcs.begin()+1, node.incomingArcs.end());
-	}
-	else {
-		// delete node.
-		deleteArcById(node.incomingArcs[0]);
-		deleteNodeById(node.id);
-	}
+	// if (true){ // feasible, delete all incoming arcs except the first.
+	// 	node.incomingArcs.erase(node.incomingArcs.begin()+1, node.incomingArcs.end());
+	// }
+	// else {
+	// 	// delete node.
+	// 	deleteArcById(node.incomingArcs[0]);
+	// 	deleteNodeById(node.id);
+	// }
 }
 
 static void printTree(const vector<vector<int>>& tree){
@@ -505,7 +634,7 @@ vi DD::solution(Network network) {
 			maxNodeId = arc.tail;
 		}
 	}
-	cout << "tree.size(): " << tree.size() << endl;
+	// cout << "tree.size(): " << tree.size() << endl;
 	// maxVal and maxNodeId is populated.
 	for (size_t l = tree.size()-2; l > 0; l--){ // check indexes later.
 		const auto& node = nodes[maxNodeId];
@@ -516,7 +645,7 @@ vi DD::solution(Network network) {
 				// this is the optimal parent.
 				maxNodeId = arc.tail;
 				path[l-1] = arc.decision;
-				cout << "arc.decision" << arc.decision << endl;
+				// cout << "arc.decision" << arc.decision << endl;
 				break;
 			}
 		}
@@ -528,7 +657,7 @@ vi DD::solution(Network network) {
 	}
 	cout << endl;
 	cout << ":::::::::::::::::::::::::::::::::::::::::::::::::::::::::" << endl;
-	cout << "rootNode.solutionVector.size()" <<rootNode.solutionVector.size() << endl;
+	// cout << "rootNode.solutionVector.size()" <<rootNode.solutionVector.size() << endl;
 	vi finalPath(rootNode.solutionVector);
 	finalPath.insert(finalPath.end(), path.begin(), path.end());
 	return finalPath;
@@ -598,16 +727,100 @@ vector<DDNode> DD::getExactCutset() {
 	}
 	return cutsetNodes;
 }
-//int main(){
-	// some processing order
-	//vector<pair<int,int>> processingOrder = {{1,2},{2,3}};
 
-	//DD diagram;
 
-	//DDNode rootNode;
-	//rootNode.states = unordered_set<int>({2,3,4});
+void DD::topDownDelete(ulint id) { // hard delete function.
 
-	//diagram.build(processingOrder, rootNode, 0);
+	{
+		auto &node = nodes[id];
+		// remove the incoming arc here.
+		deleteArcById(node.incomingArcs[0]);
+		for (auto outArc: node.outgoingArcs) {
+			// for each outArc, find its head and apply topDownDelete() if head has single incoming arc.
+			auto childId = arcs[outArc].head;
+			auto &childNode = nodes[childId];
+			if (childNode.incomingArcs.size() == 1) {
+				topDownDelete(childId);
+			} else {
+				// this childId has multiple incoming arcs, just remove this arc.
+				deleteArcById(outArc);
+			}
+		}
+	}
 
-	//printTree(diagram.tree);
-//}
+	deleteNodeById(id);
+}
+void DD::removeNode(ulint id){
+	cout << "remove node called "<< endl;
+	const auto& node = nodes[id];
+	//if (node.outgoingArcs.size() > 1){ // apply hard delete on eligible outgoing nodes INFO including all nodes.
+	auto outArcs = node.outgoingArcs;
+	for (auto childArcId : outArcs){
+		const auto& childArc = arcs[childArcId];
+		const auto& child = nodes[childArc.head];
+		if (child.incomingArcs.size() > 1) {
+			// only delete this arc
+			deleteArcById(childArcId);
+		}
+		else { // apply hard delete on this child
+			topDownDelete(child.id);
+		}
+	}
+	cout << "got here 1" << endl;
+	//}
+	//if (node.incomingArcs.size() > 1) { // multiple parents
+	auto incomingArcs = node.incomingArcs;
+	for (auto arcId: incomingArcs){
+		const auto& arc = arcs[arcId];
+		const auto& parentNode = nodes[arc.tail];
+		if (parentNode.outgoingArcs.size() > 1){
+			deleteArcById(arc.id);
+		}
+		else { // soft delete this node.
+			bottomUpDelete(parentNode.id);
+		}
+	}
+	//}
+	// actual delete.
+	deleteNodeById(id);
+	// remove deleted ids from the tree.
+	int n_removed = deletedNodeIds.size();
+	// cout << "n_removed: " << n_removed << endl;
+	auto& deletedNodeIds_l = this->deletedNodeIds;
+	auto f = [&n_removed, &deletedNodeIds_l] (ulint x) mutable {
+		if (deletedNodeIds_l.count(x)) { n_removed--; return true;}
+		return false;
+	};
+	for (int i = tree.size()-2; i > 0; i--){
+		if (n_removed){
+			auto& layer = tree[i];
+			// cout << "removed sth from the tree" <<endl;
+			layer.erase(std::remove_if(layer.begin(), layer.end(), f), layer.end());
+		}
+		else break;
+	}
+	// add deleted Ids to the numbers.
+	auto& num = number;
+	std::for_each(deletedNodeIds.begin(), deletedNodeIds.end(), [&num](ulint x) mutable{num.setNext(static_cast<int>(x));});
+	std::for_each(deletedNodeIds.begin(), deletedNodeIds.end(), [](ulint x) {cout << x << " ";});
+	// cout << endl;
+	deletedNodeIds.clear();
+
+	// cout << "delete function completed " << endl;
+
+}
+void DD::bottomUpDelete(ulint id){
+	const auto& node = nodes[id];
+	auto incomingArcs = node.incomingArcs;
+	for (const auto& arcId : incomingArcs){
+		const auto& arc = arcs[arcId];
+		const auto& parentNode = nodes[arc.tail];
+		deleteArcById(arcId); // delete this incoming arc.
+		if (parentNode.outgoingArcs.empty()){
+			bottomUpDelete(parentNode.id);
+		}
+	}
+	// delete this node from nodes.
+	deleteNodeById(id);
+	// phase
+}

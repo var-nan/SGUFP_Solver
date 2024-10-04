@@ -10,7 +10,7 @@
 	#define PRUNE TRAIL
 #endif
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 20000
+	#define MAX_WIDTH 2
 #endif
 
 
@@ -46,6 +46,7 @@ public:
 	vector<int> outgoingArcs;
 	unordered_set<int> states;
 	int state2;
+	int nodeLayer;
 	vector<int> solutionVector;
 	int objVal = 0; // ASAP Update it during refinement.
 
@@ -80,7 +81,7 @@ class DD{
 private:
 	int lastArc = 1;
 	int lastNode = 1;
-	Type type = RESTRICTED;
+	Type type = RELAXED;
 	//Prune strategy;
 	//int maxWidth = 128;
 	//int startTree = 0; // this variable denotes the position where the tree starts in the global order.
@@ -125,14 +126,20 @@ public:
 	vi solution(Network network);
 	vector<DDNode> getExactCutset();
 	vi computeExactNodePartialSolutionVector(int nodeId);
-//public:
+	void refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network);
+
+
+	void removeNode(ulint id);
+	void bottomUpDelete(ulint id);
+	void topDownDelete(ulint id);
+
 	unordered_map<int,DDNode> nodes; // change to vector if needed.
 	unordered_map<int, DDArc> arcs; // change to vector if needed.
 	vector<vector<int>> tree;
 	int lastInserted = 1; // 0 is reserved for root node.
 	int startTree = 0;
 	int exactLayer = 0;
-
+	unordered_set<ulint> deletedNodeIds;
 	DD() {
 
 	}
