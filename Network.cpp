@@ -78,7 +78,7 @@ Network::Network(const std::string& p_fileName){
 				else a1.push_back(arc.arcId);
 			}
 			else {
-				if (netNodes[i].outgoingArcs.empty()) a2.push_back(arc.arcId);
+				if (netNodes[j].outgoingArcs.empty()) a2.push_back(arc.arcId);
 				else a3.push_back(arc.arcId);
 			}
 		}
@@ -95,7 +95,7 @@ Network::Network(const std::string& p_fileName){
 		this->A4 = std::move(a4);
 
 		// reduce the size of vBar. just for testing.
-		this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
+		//this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
 
 		// INFO change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
 		int i = 0;
