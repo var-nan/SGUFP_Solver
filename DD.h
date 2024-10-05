@@ -6,18 +6,25 @@
 //#define SGUFP_SOLVER_DD_H
 #pragma once
 // default prune strategy is removing/merging trailing nodes.
-#ifndef PRUNE
-	#define PRUNE TRAIL
-#endif
+/*
+ * RESTRICTED_STRATEGY
+ *  1 - TRAIL
+ *  2 - RANDOM
+ *
+ * RELAXED_STRATEGY
+ *  1 - TRAIL
+ *  2 - PARENT_CHILD
+ */
+
 #ifndef RESTRICTED_STRATEGY
-	#define RESTRICTED_STRATEGY TRAIL
+	#define RESTRICTED_STRATEGY 1
 #endif
 #ifndef RELAXED_STRATEGY
-	#define RELAXED_STRATEGY MERGE
+	#define RELAXED_STRATEGY 2
 #endif
 
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH (1<<10)
+	#define MAX_WIDTH 128
 #endif
 
 #ifndef NUMBERS_RESERVE
@@ -38,17 +45,16 @@ using namespace std;
 
 class DDArc{
 public:
-	// id, head and tail should be unsigned long ints.
-	ulint id;
-	ulint head; // id of the head node of the arc.
-	ulint tail;
-	int decision; // it should store the solution.
-	double weight;
+	ulint id; // key for arcs map.
+	ulint head; // id of the outgoing node.
+	ulint tail; // id of the incoming node.
+	int decision; // decision of the variable
+	double weight; // weight
 
-	DDArc(): id{0}, tail{0}, head{0}, decision{0}, weight{0}{}
+	DDArc(): id{0}, head{0}, tail{0}, decision{0}, weight{0}{}
 
 	DDArc(ulint id_, ulint tail_, ulint head_, int decision_):
-			id{id_}, tail{tail_}, head{head_}, decision{decision_}, weight{0}{}
+			id{id_}, head{head_}, tail{tail_}, decision{decision_}, weight{0}{}
 };
 
 class DDNode{
@@ -57,15 +63,12 @@ public:
 	vector<ulint> incomingArcs;
 	vector<ulint> outgoingArcs;
 	unordered_set<int> states;
-	int state2;
+	double state2;
 	vector<int> solutionVector;
-	int objVal = INT32_MAX; // set to max int value.
+	int objVal = INT32_MAX;
 
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
 	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
-	//DDNode(const DDNode& node): id{node.id}, incomingArcs{node.incomingArcs}{} // TODO, copy constructor used in duplication node.
-
-	// copy assignment.
 
 	~DDNode(){
 		incomingArcs.clear();
@@ -81,21 +84,8 @@ enum Type {
 	EXACT
 };
 
-enum Prune{
-	TRAIL,
-	RANDOM
-};
-
 class DD{
-
 private:
-	int lastArc = 1;
-	int lastNode = 1;
-	Type type = RESTRICTED;
-	//int startTree = 0; // this variable denotes the position where the tree starts in the global order.
-	vi cutset{};
-	//int exactLayer = 0; // represents which layer is exact layer.
-	// temporary
 
 	class Number{
 	private:
@@ -119,50 +109,65 @@ private:
 			numbers.push_back(x);
 		}
 	};
+	Type type;
+	vi cutset{};
 
 public:
 	Number number;
+	unordered_map<ulint,DDNode> nodes;
+	unordered_map<ulint, DDArc> arcs;
+	vector<vector<ulint>> tree; // layer corresponds to vector of node ids.
+	// info below two variables should be updated during tree compilation.
+	int startTree = 0; // the start position of the subtree in the global tree.
+	int exactLayer = 0; // the position of exact layer with respect to root of subtree.
+	unordered_set<ulint> deletedNodeIds; // deleted node ids during refinement on a single node.
+
+
+	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index);
+
+	/// refinement helper functions ///
+
 	void reduceLayer(vector<ulint> &currentLayer);
 	void mergeNodes(DDNode& node1, DDNode& node2);
-	void deleteArcById(ulint id);
-	void deleteNodeById(ulint id);
 	void duplicateNode(ulint id);
 	inline void updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states);
 	inline DDNode duplicate(const DDNode& node);
-	vi solution();
-	vector<DDNode> getExactCutset();
-	vi computePathForExactNode(ulint nodeId);
-//public:
-	unordered_map<ulint,DDNode> nodes;
-	unordered_map<ulint, DDArc> arcs;
-	vector<vector<ulint>> tree;
-	//ulint lastInserted = 1; // 0 is reserved for root node.
-	int startTree = 0; // INFO these two should be updated during tree compilation.
-	int exactLayer = 0;
+
+	/// refinement functions ///
+
+	void applyFeasibilityCutRestricted(const Network& network, const Cut& cut);
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
 	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.
+
+	/// node deletion functions ///
+
+	void deleteArcById(ulint id);
+	void deleteNodeById(ulint id);
 	void removeNode(ulint id);
 	void bottomUpDelete(ulint id);
 	void topDownDelete(ulint id);
 
-	unordered_set<ulint> deletedNodeIds;
+	/// other functions ///
 
-	DD() {
+	vi computePathForExactNode(ulint nodeId);
 
-	}
+
+	DD(): type{RESTRICTED}{}
+	explicit DD(Type type_): type{type_}{}
 
 	void build(const Network& network, DDNode& node, int index);
-	//void build(const vector<pair<int,int>> processingOrder);
+	vi solution();
+	vector<DDNode> getExactCutset();
 
-	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index);
 };
 
+/* custom hash functions for tuple and set */
 
 struct set_hash{
 	/*
-	 * Hash decision of the entire set is Bitwise XOR of hash of individual elements.
+	 * Hash of the entire set is Bitwise XOR of hash of individual elements.
 	 */
 	size_t operator()(const unordered_set<int>& s) const {
 		size_t h = 0;
@@ -174,7 +179,7 @@ struct set_hash{
 
 struct tuple_hash{
 	/*
-	 * Hash decision of tuple considers only the first two elements of the tuple.
+	 * Hash of tuple is computed with only the first two elements of the tuple.
 	 */
 	size_t operator()(const tuple<unordered_set<int>,int,int>& t) const {
 		size_t h1 = set_hash{}(get<0>(t));

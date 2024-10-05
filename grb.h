@@ -8,55 +8,78 @@
 #include "gurobi_c++.h"
 #include "Network.h"
 #include <vector>
+#include "Cut.h"
+#include <memory>
 
 using namespace std;
 
-void testWorking();
-
-// each thread should have GurobiSolver instance and gurobi environment.
-class GurobiSolver{
-private:
-	GRBEnv environment;
-	uint32_t n ;// = 100; // ASAP: change this number to number of nodes in the network.
-	/* declare dual variables. */
-	vector<GRBVar> alpha;
-
-	vector<vector<GRBVar>> beta;
-	vector<vector<GRBVar>> gamma;
-	vector<vector<vector<GRBVar>>> lambda;
-	vector<vector<vector<GRBVar>>> mu;
-	vector<vector<GRBVar>> sigma;
-	vector<vector<GRBVar>> phi;
-	GRBModel model;
-	//vector<GRBVar> variables = vector<GRBVar>(n);
-
-	inline void postProcess();
-
+class GuroSolver{
 public:
-	// default constructor.
-	GurobiSolver(const GRBEnv& env, uint32_t nodes): n{nodes}, environment(env) , model{environment} {
-		//this->model = GRBModel(this->environment);
-		this->alpha = vector<GRBVar>(n);
-		this->beta = vector<vector<GRBVar>>(n);
-		this->gamma = vector<vector<GRBVar>>(n);
-		this->lambda = vector<vector<vector<GRBVar>>>(n);
-		this->mu = vector<vector<vector<GRBVar>>>(n);
-		this->phi = vector<vector<GRBVar>>(n);
-		this->sigma = vector<vector<GRBVar>>(n);
+	GRBEnv environment;
+
+	int n;
+	// gurobi variables
+	GRBVar* alpha;
+	GRBVar** beta;
+	GRBVar** gamma;
+	GRBVar** sigma;
+	GRBVar** phi;
+	GRBVar*** lambda;
+	GRBVar*** mu;
+
+	GRBModel model;
+
+	GuroSolver(const GRBEnv& env_, int n_): environment(env_), n{n_},model {environment} {
+
+		// set model parameters and initialize gurobi variables.
+		model.set(GRB_IntParam_InfUnbdInfo, 1);
+
+		alpha = model.addVars(n, GRB_CONTINUOUS);
+		beta = new GRBVar*[n];
+		gamma = new GRBVar*[n];
+		sigma = new GRBVar*[n];
+		phi = new GRBVar*[n];
+		lambda = new GRBVar**[n];
+		mu = new GRBVar**[n];
 	}
-
-	void resetModel();
-
-	void solveSubProblem(const Network& network, const vector<vector<vector<bool>>>& y, uint32_t scenario);
 
 	void initializeVariables();
 
-	void resetVariables();
+	Cut solveSubProblem(const Network& network, const vector<vector<vector<shi>>> &y_bar);
 
-	~GurobiSolver(){
-		// TODO: clear all the variables.
+	Cut solveSubProblemInstance(const Network &network, const vector<vector<vector<shi>>> &y_bar, int scenario);
+
+	void addConstraints(const Network& network, int scenario);
+
+	void setObjectiveFunction(const Network &network, const vector<vector<vector<shi>>> &y, int scenario);
+
+	~GuroSolver(){
+
+		// clear up the heap.
+		cout << "Cleaning up gurobi variables" << endl;
+
+		for (int i = 0; i < n; i++){
+			delete[](beta[i]);
+			delete[](gamma[i]);
+			delete[](sigma[i]);
+			delete[](phi[i]);
+
+			for (int j = 0; j < n; j++){
+				delete[](lambda[i][j]);
+				delete[](mu[i][j]);
+			}
+			delete[](lambda[i]);
+			delete[](mu[i]);
+		}
+
+		delete[](alpha);
+		delete[](beta);
+		delete[](gamma);
+		delete[](sigma);
+		delete[](phi);
+		delete[](lambda);
+		delete[](mu);
 	}
 };
-
 
 //#endif //SGUFP_SOLVER_GRB_H
