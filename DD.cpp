@@ -825,3 +825,184 @@ void DD::applyFeasibilityCutRestricted(const Network &network, const Cut &cut) {
 			removeNode(nodeId);
 	}
 }
+
+void DD::applyFeasibilityCutRelaxed(const Network &network, const Cut &cut) {
+	// nodes might contain multiple parents.
+
+	nodes[0].state2 = cut.RHS; // TODO: during branch and bound, compute new RHS for the subroot.
+	// compute heuristics
+	vi lowerBounds = helperFunction(network, cut);
+	lowerBounds.push_back(0);
+
+	for (size_t layer = 1; layer < tree.size()-1; layer++) {
+		auto netArc = network.processingOrder[layer-1].second; // TODO during branch and bound, compute correct index.
+		auto i_NetNodeId = network.networkArcs[netArc].tailId;
+		auto q_NetNodeId = network.networkArcs[netArc].headId;
+
+		vector<ulint> nodesToRemove; // deleted nodes, remove ids from the layer.
+		vector<ulint> nodesToAdd; // duplicated nodes.
+
+		for (auto id: tree[layer]) {
+			auto& node = nodes[id];
+			// for all arcs (except first), duplicate node if feasible
+			if (node.incomingArcs.size() > 1) {
+				// duplicate nodes and outgoing arcs
+				for (auto i = 1; i < node.incomingArcs.size(); i++) {
+					auto inArc = node.incomingArcs[i];
+					auto& arc = arcs[inArc];
+					const auto& parentNode = nodes[arc.tail];
+
+					if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
+
+						auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0; // TODO if decision is -1, then just copy state as weight.
+						arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+						double newState = parentNode.state2 + arcs[inArc].weight;
+						if (newState + lowerBounds[layer] >= 0) {
+							// duplicate node.
+							auto newNode = duplicate(node);
+							nodesToAdd.push_back(newNode.id); // need to push ids to current layer.
+							arc.head = newNode.id; // update head of ard.
+							newNode.state2 = newState;
+							newNode.states = parentNode.states;
+							newNode.incomingArcs = {arc.id};
+							// info current node's incoming arcs is updated after block.
+							if (arc.decision != -1) newNode.states.erase(arc.decision);
+							//  TODO; check the arcs are being updated in node and duplicated node.
+							// updating child arcs is handled by the duplicate ()
+						}
+						else deleteArcById(arc.id);
+					}
+					else deleteArcById(arc.id);
+				}
+			}
+			// process first arc. at this point, the node should have one incoming arc.
+			auto inArc = node.incomingArcs[0];
+			auto& arc = arcs[inArc];
+			node.incomingArcs = {inArc};
+			const auto& parentNode = nodes[arcs[inArc].tail];
+
+			// if decision is not present in parent's state, remove it.
+			if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
+				auto j_NetNodeId = (arc.decision != -1)? network.networkArcs[arc.decision].headId  : 0;
+				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple( i_NetNodeId, q_NetNodeId, j_NetNodeId )) : 0;
+				auto newState = parentNode.state2 + arc.weight;
+				if (newState + lowerBounds[layer] >= 0) node.state2 = newState; // erfan removed the decision from parent's state without using duplicate ();
+				else nodesToRemove.push_back(id);
+			}
+			else {
+				// remove that node.
+				nodesToRemove.push_back(id); // i don't think this is needed here.
+			}
+
+		}
+		// remove nodes that are marked for deletion.
+		for (auto id: nodesToRemove) removeNode(id);
+		// insert new Ids to current layer.
+		tree[layer].insert(tree[layer].end(), nodesToAdd.begin(), nodesToAdd.end());
+	}
+}
+
+/**
+ * Applies given optimality cut to the tree starting with non-root layer until the
+ * terminal layer. The optimality cut might prune some solutions that are infeasible
+ * to some scenarios. Thus, the function may remove nodes that are infeasible based
+ * on the cut.
+ * 
+ * @param network 
+ * @param cut 
+ */
+void DD::applyOptimalityCutRestricted(const Network &network, const Cut &cut) {
+	/*
+	 * 
+	 */
+
+	nodes[0].state2 = cut.RHS; // TODO change this during branch and bound.
+
+	for (size_t layer = 1; layer < tree.size()-1; layer++) {
+		auto netArc = network.processingOrder[layer-1].second;
+		auto i_NetNodeId = network.networkArcs[netArc].tailId;
+		auto q_NetNodeId = network.networkArcs[netArc].headId;
+
+		vulint nodesToRemoved;
+
+		for (auto id: tree[layer]) {
+			auto& node = nodes[id];
+			auto inArcId = node.incomingArcs[0];
+			auto& arc = arcs[inArcId];
+			auto parentNode = nodes[arc.tail];
+
+			if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
+				auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId  : 0;
+				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+				node.state2 = arc.weight + parentNode.state2;
+			}
+			else nodesToRemoved.push_back(id);
+		}
+
+		for (const auto id: nodesToRemoved) removeNode(id); // does optimality cut removes nodes?
+	}
+}
+
+/**
+ * 
+ * @param network
+ * @param cut 
+ */
+void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
+
+	nodes[0].state2 = cut.RHS;
+
+	for (size_t layer = 1; layer < tree.size()-1; layer++) {
+		const auto netArcId = network.processingOrder[layer-1].second;
+		const auto i_NetNodeId = network.networkArcs[netArcId].tailId;
+		const auto q_NetNodeId = network.networkArcs[netArcId].headId;
+
+		vulint nodesToRemoved;
+		vulint nodesToAdded;
+
+		for (const auto id: tree[layer]) {
+
+			auto& node = nodes[id];
+			node.state2 = 0; // INFO setting state to zero before applying cut on the node.
+
+			if (node.incomingArcs.size() > 1) {
+				for (int i = 1; i < nodes[id].incomingArcs.size(); i++) {
+					auto inArcId = nodes[id].incomingArcs[i];
+					auto& arc = arcs[inArcId];
+					const auto& parentNode = nodes[arc.tail];
+
+					if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
+						// need to duplicate this node
+						auto newNode = duplicate(node);
+						arc.head = newNode.id;
+						newNode.states = parentNode.states;
+						if (arc.decision != -1) newNode.states.erase(arc.decision);
+						auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
+						arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+						newNode.state2 = arc.weight + parentNode.state2;
+						nodesToAdded.push_back(newNode.id);
+						// copying and updating the child arcs is handled by the duplicate() function.
+					}
+					else {
+						deleteArcById(inArcId);
+					}
+				}
+			}
+			// process first arc.
+			auto inArcId = node.incomingArcs[0];
+			auto& arc = arcs[inArcId];
+			const auto& parentNode = nodes[arc.tail];
+			node.incomingArcs = {inArcId}; // reset the incoming arcs.
+
+			if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
+				auto j_NetNodeId = (arc.decision != -1 ) ? network.networkArcs[arc.decision].headId  : 0;
+				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+				// why remove the decided state from the node.
+				node.state2 = parentNode.state2 + arc.weight;
+			}
+			else nodesToRemoved.push_back(id);
+		}
+		for (const auto id: nodesToRemoved) removeNode(id); // remove nodes marked for deletion
+		tree[layer].insert(tree[layer].end(), nodesToAdded.begin(), nodesToAdded.end()); // add node ids to current layer.
+	}
+}

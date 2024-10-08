@@ -24,7 +24,7 @@
 #endif
 
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 128
+	#define MAX_WIDTH 2
 #endif
 
 #ifndef NUMBERS_RESERVE
@@ -38,6 +38,8 @@
 #include <algorithm>
 
 using namespace std;
+
+typedef vector<ulint> vulint;
 
 /*
  * INFO Ids of DDArc and DDNode are unsigned long ints.
@@ -136,6 +138,9 @@ public:
 	/// refinement functions ///
 
 	void applyFeasibilityCutRestricted(const Network& network, const Cut& cut);
+	void applyFeasibilityCutRelaxed(const Network& network, const Cut& cut);
+	void applyOptimalityCutRestricted(const Network& network, const Cut& cut);
+	void applyOptimalityCutRelaxed(const Network& network, const Cut& cut);
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
