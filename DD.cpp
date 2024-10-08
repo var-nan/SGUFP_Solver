@@ -42,7 +42,7 @@ void DD::build(const Network& network, DDNode& node, int index) {
 		//const unordered_set<int> temp = stateUpdateMap.at(a);
 		vector<ulint> nextLayer;
 		nextLayer.reserve(MAX_WIDTH);
-		bool isExact = buildNextLayer(currentLayer, nextLayer, index);
+		bool isExact = buildNextLayer(currentLayer, nextLayer, index++);
 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		//reduceLayer(nextLayer); // INFO not doing reduction.
 		tree.push_back(nextLayer);
@@ -114,6 +114,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 					//node.solutionVector = parentNode.solutionVector; // solutions are computed during bulding cutset.
 					//node.solutionVector.emplace_back(decision);
 					node.incomingArcs.emplace_back(arc.id);
+					node.nodeLayer = index;
 					parentNode.outgoingArcs.push_back(arc.id);
 					// insert node and arc to map
 					nodes.insert(std::make_pair(node.id, node));
@@ -152,6 +153,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 						//node.solutionVector.emplace_back(decision);
 						node.incomingArcs.emplace_back(arc.id);
 						parentNode.outgoingArcs.push_back(arc.id);
+						node.nodeLayer = index;
 						// insert node and arc to map
 						nodes.insert(std::make_pair(node.id, node));
 						arcs.insert(std::make_pair(arc.id, arc));
@@ -161,6 +163,8 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 						// QUESTION: do we create all arcs in relaxed version.
 						DDArc arc{lastInserted, id, lastNodeId, decision};
 						DDNode &node = nodes[lastNodeId];
+						node.states.insert(parentStates.begin(), parentStates.end()); // insert parent states
+						node.states.erase(decision); // remove decision
 						node.incomingArcs.emplace_back(arc.id);
 						parentNode.outgoingArcs.emplace_back(arc.id);
 						arcs.insert(std::make_pair(arc.id, arc));
@@ -391,7 +395,7 @@ inline DDNode DD::duplicate(const DDNode& node){
 	for (const auto& outArcId: node.outgoingArcs){
 		const auto& childNodeId = arcs[outArcId].head;
 		lastInserted = number.getNext();
-		DDArc newArc{lastInserted, dupNode.id, childNodeId, 0};
+		DDArc newArc{lastInserted, dupNode.id, childNodeId, arcs[outArcId].decision};
 		dupNode.outgoingArcs.push_back(newArc.id);
 		nodes[childNodeId].incomingArcs.push_back(newArc.id);
 		arcs.insert(std::make_pair(newArc.id, newArc));
@@ -547,7 +551,7 @@ static vi helperFunction(const Network &network, const Cut &cut) {
 		auto q = arc.headId;
 
 		const auto& node = network.networkNodes[q];
-		int max = 0;
+		int max = INT32_MIN;
 		for (const auto j: node.outNodeIds){
 			auto c = coeff.at(make_tuple(static_cast<int>(i),static_cast<int>(q),static_cast<int>(j)));
 			if (c > max) max = c;
@@ -847,6 +851,7 @@ void DD::applyFeasibilityCutRelaxed(const Network &network, const Cut &cut) {
 			// for all arcs (except first), duplicate node if feasible
 			if (node.incomingArcs.size() > 1) {
 				// duplicate nodes and outgoing arcs
+				vulint arcsToRemove; // ASAP investigate duplicate node function
 				for (auto i = 1; i < node.incomingArcs.size(); i++) {
 					auto inArc = node.incomingArcs[i];
 					auto& arc = arcs[inArc];
@@ -862,18 +867,21 @@ void DD::applyFeasibilityCutRelaxed(const Network &network, const Cut &cut) {
 							auto newNode = duplicate(node);
 							nodesToAdd.push_back(newNode.id); // need to push ids to current layer.
 							arc.head = newNode.id; // update head of ard.
+							//newNode.state2 = newState;
+							//newNode.states = parentNode.states;
 							newNode.state2 = newState;
-							newNode.states = parentNode.states;
 							newNode.incomingArcs = {arc.id};
 							// info current node's incoming arcs is updated after block.
 							if (arc.decision != -1) newNode.states.erase(arc.decision);
 							//  TODO; check the arcs are being updated in node and duplicated node.
 							// updating child arcs is handled by the duplicate ()
+							nodes.insert(make_pair(newNode.id, newNode));
 						}
-						else deleteArcById(arc.id);
+						else arcsToRemove.push_back(arc.id);
 					}
-					else deleteArcById(arc.id);
+					else arcsToRemove.push_back(arc.id);
 				}
+				for (const auto badArcId: arcsToRemove) deleteArcById(badArcId);
 			}
 			// process first arc. at this point, the node should have one incoming arc.
 			auto inArc = node.incomingArcs[0];

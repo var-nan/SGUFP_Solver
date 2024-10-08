@@ -20,11 +20,11 @@
 	#define RESTRICTED_STRATEGY 1
 #endif
 #ifndef RELAXED_STRATEGY
-	#define RELAXED_STRATEGY 2
+	#define RELAXED_STRATEGY 1
 #endif
 
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 2
+	#define MAX_WIDTH 128
 #endif
 
 #ifndef NUMBERS_RESERVE
@@ -62,6 +62,7 @@ public:
 class DDNode{
 public:
 	ulint id;
+	uint nodeLayer = 0;
 	vector<ulint> incomingArcs;
 	vector<ulint> outgoingArcs;
 	unordered_set<int> states;
