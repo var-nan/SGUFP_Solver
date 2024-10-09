@@ -138,16 +138,26 @@ Network::Network(const std::string& p_fileName){
 
 		// TODO: change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
 		int i = 0;
+		vector<bool> stateChecker={};
 		for (const auto& id: this->Vbar){
 			// another way of doing state update map.
 			const auto& node = networkNodes[id];
 			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
 			states.insert(-1); // add -1 to states.
 			stateUpdateMap.insert({i, states});
+			bool first = true;
 			for (const auto& inId: node.incomingArcs){
+				if (first) {
+					first = false;
+					stateChecker.push_back(1);
+				}
+				else {
+					stateChecker.push_back(0);
+				}
 				processingOrder.emplace_back(i++, inId);
 			}
 		}
+		this->hasStateChanged=stateChecker;
 
 //		// build stateUpdate map.
 //		int lastId = -1;

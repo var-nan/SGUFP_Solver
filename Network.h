@@ -76,6 +76,7 @@ public:
 	// each element in the processing order corresponds to a layer in the DD.
 	unordered_map<int, unordered_set<int>> stateUpdateMap; // (processingorder.id, vector of states)/
 	// if key is not present in the stateUpdateMap, then no need to change the state at the respective arc.
+	vector<bool> hasStateChanged;
 	vector<int> A1;
 	vector<int> A2;
 	vector<int> A3;
