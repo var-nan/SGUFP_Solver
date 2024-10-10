@@ -305,6 +305,7 @@ void DD::refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network) {
 		vector<int> nodesToBeRemoved = {};
 		vector<int> nodesToBeAdded = {};
 		for (auto n : tree[i0]) {
+			// cout << "got here " << endl;
 			vi allIncomings = nodes[n].incomingArcs;
 			if (allIncomings.size() > 1) {
 				for (auto inc = 1 ; inc < allIncomings.size() ; inc++) {
@@ -363,7 +364,6 @@ void DD::refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network) {
 					}
 				}
 				/// the first incoming arc
-				// cout << "got in first single case" << endl;
 				int incArcID = allIncomings[0];
 				int decisionNode = arcs[incArcID].decision;
 				auto parentNodeID = arcs[incArcID].tail;
@@ -404,38 +404,29 @@ void DD::refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network) {
 				}
 
 			}else { // there is only one incomming arc
-				// cout << "got in second single case" << endl;
 				auto inArcID = allIncomings[0];
 				int decisionNode = arcs[inArcID].decision;
 				auto parentNodeID = arcs[inArcID].tail;
-				// cout << "passed check 1" << endl;
 				if (decisionNode != -1) {
 					arcs[inArcID].weight = newCut.cutCoef[make_tuple(parentNetNode,middleNetNode,network.networkArcs[decisionNode].headId)];
 				}else{
 					arcs[inArcID].weight = 0;
 				}
-				// cout << "passed check 2" << endl;
 				int newState = DDTree.nodes[parentNodeID].state2 + arcs[inArcID].weight;
-				// cout << "passed check 3" << endl;
 				if (newState + newCut.heuristic[nodes[n].nodeLayer] >= 0) {
 					nodes[n].state2 = newState;
 				}else {
 					nodesToBeRemoved.push_back(nodes[n].id);
 				}
-				// cout << "passed check 4" << endl;
-
 			}
 		}
-
 
 		for(auto item : nodesToBeAdded) {
 			tree[i0].push_back(item);
 		}
 		for (auto badNode : nodesToBeRemoved) {
 			removeNode(badNode);
-			cout << "removed a bunch of nodes " <<  endl;
 		}
-
 	}
 	// add here
 
@@ -915,18 +906,33 @@ vector<DDNode> DD::getExactCutset() {
 void DD::topDownDelete(ulint id) { // hard delete function.
 
 	{
+
 		auto &node = nodes[id];
 		// remove the incoming arc here.
 		deleteArcById(node.incomingArcs[0]);
-		for (auto outArc: node.outgoingArcs) {
+
+		auto badArcs = node.outgoingArcs;
+
+
+		for (auto outArc: badArcs) {
+
 			// for each outArc, find its head and apply topDownDelete() if head has single incoming arc.
 			auto childId = arcs[outArc].head;
 			auto &childNode = nodes[childId];
+
+
+			for (auto arcId1: node.outgoingArcs) {
+				cout << arcId1 << " " ;
+			}
+			cout << endl;
 			if (childNode.incomingArcs.size() == 1) {
 				topDownDelete(childId);
 			} else {
 				// this childId has multiple incoming arcs, just remove this arc.
+
+					cout << outArc << endl;
 				deleteArcById(outArc);
+
 			}
 		}
 	}
@@ -938,18 +944,24 @@ void DD::removeNode(ulint id){
 	const auto& node = nodes[id];
 	//if (node.outgoingArcs.size() > 1){ // apply hard delete on eligible outgoing nodes INFO including all nodes.
 	auto outArcs = node.outgoingArcs;
+
 	for (auto childArcId : outArcs){
+
 		const auto& childArc = arcs[childArcId];
 		const auto& child = nodes[childArc.head];
+
 		if (child.incomingArcs.size() > 1) {
 			// only delete this arc
 			deleteArcById(childArcId);
 		}
 		else { // apply hard delete on this child
+
 			topDownDelete(child.id);
+
 		}
 	}
 	//}
+
 	//if (node.incomingArcs.size() > 1) { // multiple parents
 	auto incomingArcs = node.incomingArcs;
 	for (auto arcId: incomingArcs){
@@ -963,6 +975,7 @@ void DD::removeNode(ulint id){
 		}
 	}
 	//}
+
 	// actual delete.
 	deleteNodeById(id);
 	// remove deleted ids from the tree.
@@ -972,6 +985,7 @@ void DD::removeNode(ulint id){
 		if (deletedNodeIds_l.count(x)) { n_removed--; return true;}
 		return false;
 	};
+
 	for (int i = tree.size()-2; i > 0; i--){
 		if (n_removed){
 			auto& layer = tree[i];
@@ -979,6 +993,7 @@ void DD::removeNode(ulint id){
 		}
 		else break;
 	}
+
 	// add deleted Ids to the numbers.
 	auto& num = number;
 	std::for_each(deletedNodeIds.begin(), deletedNodeIds.end(), [&num](ulint x) mutable{num.setNext(static_cast<int>(x));});
@@ -991,6 +1006,7 @@ void DD::removeNode(ulint id){
 void DD::bottomUpDelete(ulint id){
 	const auto& node = nodes[id];
 	auto incomingArcs = node.incomingArcs;
+
 	for (const auto& arcId : incomingArcs){
 		const auto& arc = arcs[arcId];
 		const auto& parentNode = nodes[arc.tail];
