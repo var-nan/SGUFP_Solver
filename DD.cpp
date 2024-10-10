@@ -605,7 +605,9 @@ void DD::topDownDelete(ulint id) { // hard delete function.
 		// remove the incoming arc here.
 		deleteArcById(node.incomingArcs[0]);
 
-		for (auto outArc: node.outgoingArcs) {
+		auto arcsToDelete = node.outgoingArcs;
+
+		for (auto outArc: arcsToDelete) {
 			// for each outArc, find its head and apply topDownDelete() if head has single incoming arc.
 			auto childId = arcs[outArc].head;
 			auto &childNode = nodes[childId];
@@ -702,87 +704,6 @@ void DD::bottomUpDelete(ulint id){
 	// if multiple incoming arcs? all bottomUpDelete () on each of the incoming nodes.
 	// phase 2: recursively reach down the tree until reaching terminal node or children with multiple incoming arcs.
 	// delete each node and arc in between.
-//
-//	auto& curNode = nodes[id];
-//	// if node has multiple children now,
-//	// case: when the current node has multiple incoming arcs and multiple outgoing arcs, apply deleteArc on the other nodes and
-//
-//	if (curNode.incomingArcs.size() > 1){
-//		// for all the other arcs, apply the delete node functoin.
-//		for (size_t i = 0; i < curNode.incomingArcs.size(); i++){
-//			auto arcId = curNode.incomingArcs[i];
-//			const auto& arc = arcs[arcId];
-//			const auto& parentNode = nodes[arc.tail];
-//			if (parentNode.outgoingArcs.size() > 1){
-//				// do not reach this node, just remove this arc.
-//				deleteArcById(arc.id);
-//			}
-//			else {
-//				//
-//				bottomUpDelete(parentNode.id);
-//			}
-//		}
-//		const auto firstParentArcId = curNode.incomingArcs[0];
-//		const auto& firstParentArc = arcs[firstParentArcId];
-//		const auto& parentNode = nodes[firstParentArc.tail];
-//		if (parentNode.outgoingArcs.size() > 1){
-//
-//		}
-//		curNode = nodes[firstParentArc.tail]; // curNode points to parent node.
-//	}
-//
-//	if (curNode.outgoingArcs.size() > 1){ // stop here and all hard delete
-//	}
-//
-//	//const auto& arcId = curNode.incomingArcs[0];
-//	//const auto& arc = arcs[arcId];
-//	//auto& parentNode = nodes[arc.tail];
-//
-//	while (curNode.outgoingArcs.size() == 1){
-//		// recursively reach parent's parent
-//		if (curNode.incomingArcs.size() > 1){
-//			for (size_t i = 1; i < curNode.incomingArcs.size(); i++){
-//				auto parentIncomingArcId = curNode.incomingArcs[i];
-//				const auto& parentIncomingArc = arcs[parentIncomingArcId];
-//				const auto& parentsParentNode = nodes[parentIncomingArc.tail];
-//				if (parentsParentNode.outgoingArcs.size() > 1){
-//					// don't go up
-//					deleteArcById(parentIncomingArcId);
-//				}
-//				else {
-//					bottomUpDelete(parentsParentNode.id);
-//				}
-//			}
-//		}
-//		// process first arc.
-//		const auto firstArcId = curNode.incomingArcs[0];
-//		const auto firstArc = arcs[firstArcId];
-//		curNode = nodes[firstArc.tail];
-//	}
-//
-//	// call hard delete on the parent.
-//
-
-
-//	if (curNode.incomingArcs.size() > 1){
-//		// multiple parents, call the function recursively
-//		for (auto arcId: curNode.incomingArcs){
-//			// get arc and call delete function on its tail Node.
-//			auto& arc = arcs[arcId];
-//			// get the parent node and check if it has multiple children
-//			const auto& parentNode = nodes[arc.tail];
-//			if (nodes[arc.tail].outgoingArcs.size() > 1) continue;
-//			else bottomUpDelete(arc.tail);
-//		}
-//	}
-//	else {
-//		// current node has single parent.
-//		while (curNode.incomingArcs.size() == 1){
-//			auto& arc = arcs[curNode.incomingArcs[0]].tail;
-//
-//		}
-//	}
-
 
 }
 
