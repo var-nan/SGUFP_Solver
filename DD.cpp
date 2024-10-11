@@ -548,38 +548,62 @@ void DD::applyOptimalityCut(const Network &network, const Cut &cut) {
 
 }
 
+void DD::deleteArc(DDNode& tailNode, DDArc& arc, DDNode& headNode){
+	/*
+	 * deletes the given arc from the arcs map.
+	 * updates the head node's incomingArcs vector and tail node's outgoingArcs vector.
+	 */
+
+	auto pos = std::find(headNode.incomingArcs.begin(), headNode.incomingArcs.end(), arc.id);
+	if (pos != headNode.incomingArcs.end()) headNode.incomingArcs.erase(pos);
+	auto pos2 = std::find(tailNode.outgoingArcs.begin(), tailNode.outgoingArcs.end(), arc.id);
+	if (pos2 != tailNode.outgoingArcs.end()) tailNode.outgoingArcs.erase(pos2);
+	arcs.erase(arc.id);
+}
+
+/**
+ * Deletes the given node from the nodes container. Inserts the node id to the list of
+ * deleted node Ids.
+ *
+ * A call to this function should be made iff both incoming and outgoing arcs are empty.
+ */
+void DD::deleteNode(DDNode& node){
+
+	deletedNodeIds.insert(node.id);
+	nodes.erase(node.id);
+}
+
+/**
+ * Deletes the subtree of the given node recursively.
+ *
+ * Removes only the child nodes that have one incoming arc.
+ */
 void DD::topDownDelete(ulint id) { // hard delete function.
 	/*
 	 * start from the current node and recursively delete the children nodes
 	 * until next node is terminal node or node with multiple incoming arcs.
-	 *
-	 * remove node and its corresponding incoming arc together.
 	 * remove the last outgoing arc of the last node.
-	 *
-	 * this node must have only one incoming arc (parent).
 	 */
 	{
 		auto &node = nodes[id];
 		// remove the incoming arc here.
-		deleteArcById(node.incomingArcs[0]);
+		//deleteArcById(node.incomingArcs[0]);
 
 		auto arcsToDelete = node.outgoingArcs;
 
-		for (auto outArc: arcsToDelete) {
-			// for each outArc, find its head and apply topDownDelete() if head has single incoming arc.
-			auto childId = arcs[outArc].head;
+		for (auto outArcId: arcsToDelete) {
+			// for each outArcId, find its head and apply topDownDelete() if head has single incoming arc.
+			auto& outArc = arcs.at(outArcId);
+			auto childId = outArc.head;
 			auto &childNode = nodes[childId];
-			if (childNode.incomingArcs.size() == 1) {
-				topDownDelete(childId);
-			} else {
-				// this childId has multiple incoming arcs, just remove this arc.
-				deleteArcById(outArc);
-			}
+			deleteArc(node, outArc, childNode);
+			if (childNode.incomingArcs.empty()) topDownDelete(childId); // orphan node
 		}
+		deleteNode(node);
 	}
 	// here, node has no outgoing arcs and incoming arcs left,
 	// also remove the node id from the tree layer.
-	deleteNodeById(id);
+	//deleteNode(node);
 }
 
 void DD::removeNode(ulint id){
@@ -587,36 +611,24 @@ void DD::removeNode(ulint id){
 	 * NOTE:
 	 */
 	// if current node has multiple parents and multiple children, do this.
-	const auto& node = nodes[id];
-	//if (node.outgoingArcs.size() > 1){ // apply hard delete on eligible outgoing nodes INFO including all nodes.
+	auto& node = nodes[id];
 	auto outArcs = node.outgoingArcs;
 	for (auto childArcId : outArcs){
-		const auto& childArc = arcs[childArcId];
-		const auto& child = nodes[childArc.head];
-		if (child.incomingArcs.size() > 1) {
-			// only delete this arc
-			deleteArcById(childArcId);
-		}
-		else { // apply hard delete on this child
-			topDownDelete(child.id);
-		}
+		auto& childArc = arcs[childArcId];
+		auto& child = nodes[childArc.head];
+		deleteArc(node, childArc, child);
+		if (child.incomingArcs.empty()) topDownDelete(child.id); // orphan node
 	}
-	//}
 	//if (node.incomingArcs.size() > 1) { // multiple parents
 	auto incomingArcs = node.incomingArcs;
 	for (auto arcId: incomingArcs){
-		const auto& arc = arcs[arcId];
-		const auto& parentNode = nodes[arc.tail];
-		if (parentNode.outgoingArcs.size() > 1){
-			deleteArcById(arc.id);
-		}
-		else { // soft delete this node.
-			bottomUpDelete(parentNode.id);
-		}
+		auto& arc = arcs[arcId];
+		auto& parentNode = nodes[arc.tail];
+		deleteArc(parentNode, arc, node);
+		if (parentNode.outgoingArcs.empty()) bottomUpDelete(parentNode.id); // orphan node
 	}
-	//}
 	// actual delete.
-	deleteNodeById(id);
+	deleteNode(node);
 
 	// remove deleted ids from the tree.
 	int n_removed = deletedNodeIds.size();
@@ -645,18 +657,19 @@ void DD::bottomUpDelete(ulint id){
 	// INFO this node might contain multiple incoming parents, but might contain one (or zero) children.
 
 	// for each incoming arc, remove arc and call soft delete on incoming node (iff has single outgoing arc).
-	const auto& node = nodes[id];
+	auto& node = nodes[id];
 	auto incomingArcs = node.incomingArcs;
 	for (const auto& arcId : incomingArcs){
-		const auto& arc = arcs[arcId];
-		const auto& parentNode = nodes[arc.tail];
-		deleteArcById(arcId); // delete this incoming arc.
+		auto& arc = arcs[arcId];
+		auto& parentNode = nodes[arc.tail];
+		deleteArc(parentNode, arc, node);
+		//deleteArcById(arcId); // delete this incoming arc.
 		if (parentNode.outgoingArcs.empty()){
 			bottomUpDelete(parentNode.id);
 		}
 	}
 	// delete this node from nodes.
-	deleteNodeById(id);
+	deleteNode(node);
 
 	// phase 1: recursively reach parents if they don't have multiple children.
 	// if multiple incoming arcs? all bottomUpDelete () on each of the incoming nodes.

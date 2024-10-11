@@ -154,6 +154,8 @@ public:
 	void removeNode(ulint id);
 	void bottomUpDelete(ulint id);
 	void topDownDelete(ulint id);
+	void deleteNode(DDNode& node);
+	void deleteArc(DDNode& parentNode, DDArc& arc, DDNode& childNode);
 
 	/// other functions ///
 
