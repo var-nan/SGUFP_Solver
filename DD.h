@@ -10,7 +10,7 @@
 	#define PRUNE TRAIL
 #endif
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 100
+	#define MAX_WIDTH 2
 #endif
 
 
@@ -127,7 +127,7 @@ public:
 	vector<DDNode> getExactCutset();
 	vi computeExactNodePartialSolutionVector(int nodeId);
 	void refineFeasibilityCut(Cut &newCut , DD &DDTree ,Network& network);
-	void refineOptimalityCut(Cut &newCut , DD &DDTree ,Network& network);
+	double refineOptimalityCut(Cut &newCut , DD &DDTree ,Network& network);
 
 	void removeNode(ulint id);
 	void bottomUpDelete(ulint id);
