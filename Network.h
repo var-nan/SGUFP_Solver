@@ -85,6 +85,7 @@ public:
 	vui A3;
 	vui A4;
 	vector<bool> isNodeInVbar;
+	vector<bool> hasStateChanged;
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)

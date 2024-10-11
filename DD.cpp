@@ -132,6 +132,10 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 
 	}
 	else if(type == RELAXED){
+		/*
+		 * RELAXED_STRATEGY (1). make relaxed arcs to point to last inserted node in
+		 * the current layer.
+		 */
 		#if RELAXED_STRATEGY == 1
 		{
 			int count = 0;
@@ -164,7 +168,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 						DDArc arc{lastInserted, id, lastNodeId, decision};
 						DDNode &node = nodes[lastNodeId];
 						node.states.insert(parentStates.begin(), parentStates.end()); // insert parent states
-						node.states.erase(decision); // remove decision
+						if(decision != -1) node.states.erase(decision); // remove decision
 						node.incomingArcs.emplace_back(arc.id);
 						parentNode.outgoingArcs.emplace_back(arc.id);
 						arcs.insert(std::make_pair(arc.id, arc));
@@ -242,52 +246,6 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 	return isExact;
 }
 
-//void ibuildNextLayer(vector<uint>& currentLayer, vector<uint>& nextLayer, int index) {
-//	/*
-//	 * build next layer from the given current layer.
-//	 * should also create arcs and store them in the map.
-//	 * should also create nodes and store them in the map.
-//	 * updates both current layer and next layer
-//	 */
-//
-//	//set<pair<set<int>,int>> allStates;
-//
-//	for (auto id: currentLayer){ // iterate through current layer.
-//
-//		auto& node = nodes[id];
-//
-//		// add zero state
-//		DDNode zeroNode;
-//		zeroNode.id = lastNode++; // TODO: need to add some more fields.
-//		zeroNode.states = node.states;
-//		DDArc zeroArc(lastArc++, zeroNode.id, id, 0);
-//		node.outgoingArcs.push_back(zeroArc.id);
-//		zeroNode.incomingArcs.push_back(zeroArc.id);
-//		// insert to map.
-//		nodes.insert({zeroNode.id, zeroNode});
-//		arcs.insert({zeroArc.id, zeroArc});
-//
-//		nextLayer.push_back(zeroNode.id);
-//
-//		for (auto state: node.states){
-//			// create arc and node
-//			DDNode node1;// create a new node with some Id
-//			node1.id = lastNode++;
-//			auto states = node.states; // remove the state from states.
-//			states.erase(std::remove(states.begin(), states.end(), state), states.end());
-//			node1.states = std::move(states);
-//			DDArc arc(lastArc++, node1.id, id, state);
-//			node1.incomingArcs.push_back(arc.id);
-//			node.outgoingArcs.push_back(arc.id); // NOTE: SHOULD BE ID OF THE CHILDARC, NOT CHILD NODE.
-//			//DDArc arc(lastArc++, 10, 10, 10);
-//			nodes.insert({node1.id, node1});
-//			arcs.insert({arc.id, arc});
-//			nextLayer.push_back(node1.id); // ASAP: remove the state from the list of states and
-//		}
-//	}
-//
-//	return std::move(nextLayer);
-//}
 
 /**
  * Merges the second DDNode into the first DDNode.
@@ -516,7 +474,7 @@ vi DD::computePathForExactNode(ulint nodeId){
 		node = nodes[inArc.tail];
 	}
 	// now node points to root node, add root's solution vector to it.
-	for (int i = 0; i < node.solutionVector.size(); i++) solutionVector[i] = node.solutionVector[i];
+	for (size_t i = 0; i < node.solutionVector.size(); i++) solutionVector[i] = node.solutionVector[i];
 	return solutionVector;
 }
 
@@ -538,11 +496,11 @@ vector<DDNode> DD::getExactCutset() {
 }
 
 
-static vi helperFunction(const Network &network, const Cut &cut) {
+static vector<double> helperFunction(const Network &network, const Cut &cut) {
 	/*
 	 * generates the lower bounds for each DD layer. used in feasibilitycut refinement.
 	 */
-	vector<int> lowerBounds(network.processingOrder.size());
+	vector<double> lowerBounds(network.processingOrder.size());
 	const auto& coeff = cut.cutCoeff;
 
 	for (const auto[id_t, arcId]: network.processingOrder){
@@ -551,7 +509,7 @@ static vi helperFunction(const Network &network, const Cut &cut) {
 		auto q = arc.headId;
 
 		const auto& node = network.networkNodes[q];
-		int max = INT32_MIN;
+		double max = INT32_MIN;
 		for (const auto j: node.outNodeIds){
 			auto c = coeff.at(make_tuple(static_cast<int>(i),static_cast<int>(q),static_cast<int>(j)));
 			if (c > max) max = c;
@@ -559,7 +517,7 @@ static vi helperFunction(const Network &network, const Cut &cut) {
 		lowerBounds[id_t] = max;
 	}
 	// compute suffix sum
-	int pref = 0;
+	double pref = 0;
 	for (auto start = lowerBounds.rbegin(); start != lowerBounds.rend(); start++){
 		*start = *start + pref;
 		pref = *start;
@@ -578,7 +536,7 @@ void DD::refineTree(const Network &network, Cut cut) {
 
 void DD::applyFeasibilityCut(const Network &network, const Cut &cut) {
 
-	vi lowerBounds = helperFunction(network, cut);
+	vector<double> lowerBounds = helperFunction(network, cut);
 
 	const auto& coeff = cut.cutCoeff;
 	double RHS = cut.RHS;
@@ -713,7 +671,7 @@ void DD::applyFeasibilityCutRestricted(const Network &network, const Cut &cut) {
 
 	nodes[0].state2 = cut.RHS;
 	// heuristic to remove nodes.
-	vi lowerBounds = helperFunction(network, cut);
+	vector<double> lowerBounds = helperFunction(network, cut);
 	lowerBounds.push_back(0);
 
 	// set the state2 to all nodes to zero.
@@ -756,8 +714,11 @@ void DD::applyFeasibilityCutRelaxed(const Network &network, const Cut &cut) {
 
 	nodes[0].state2 = cut.RHS; // TODO: during branch and bound, compute new RHS for the subroot.
 	// compute heuristics
-	vi lowerBounds = helperFunction(network, cut);
+	vector<double> lowerBounds = helperFunction(network, cut);
 	lowerBounds.push_back(0);
+
+	// terminal node
+	auto& terminalNode = nodes[tree[tree.size()-1][0]];
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
 		auto netArc = network.processingOrder[layer-1].second; // TODO during branch and bound, compute correct index.
@@ -769,59 +730,91 @@ void DD::applyFeasibilityCutRelaxed(const Network &network, const Cut &cut) {
 
 		for (auto id: tree[layer]) {
 			auto& node = nodes[id];
-			// for all arcs (except first), duplicate node if feasible
-			if (node.incomingArcs.size() > 1) {
+			node.state2 = 0;
+			node.nodeLayer = layer; // TODO remove this?
+			// for all arcs (except first), duplicate node if their state is feasible
+			auto incomingArcs = node.incomingArcs;
+
+			if (incomingArcs.size() > 1) {
 				// duplicate nodes and outgoing arcs
-				vulint arcsToRemove; // ASAP investigate duplicate node function
-				for (auto i = 1; i < node.incomingArcs.size(); i++) {
-					auto inArc = node.incomingArcs[i];
+				vulint arcsToRemove;
+				for (size_t i = 1; i < incomingArcs.size(); i++) {
+					auto inArc = incomingArcs[i];
 					auto& arc = arcs[inArc];
 					const auto& parentNode = nodes[arc.tail];
 
-					if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
+					auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
+					arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+					double newState = parentNode.state2 + arcs[inArc].weight;
 
-						auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0; // TODO if decision is -1, then just copy state as weight.
-						arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
-						double newState = parentNode.state2 + arcs[inArc].weight;
-						if (newState + lowerBounds[layer] >= 0) {
-							// duplicate node.
-							auto newNode = duplicate(node);
-							nodesToAdd.push_back(newNode.id); // need to push ids to current layer.
-							arc.head = newNode.id; // update head of ard.
-							//newNode.state2 = newState;
-							//newNode.states = parentNode.states;
-							newNode.state2 = newState;
-							newNode.incomingArcs = {arc.id};
-							// info current node's incoming arcs is updated after block.
+					if (newState + lowerBounds[layer] >= 0){
+						auto nextIndex = number.getNext();
+						DDNode newNode{nextIndex};
+						newNode.state2 = newState;
+						newNode.nodeLayer = node.nodeLayer;
+						arc.head = nextIndex;
+						// if states changed in current layer, copy states from duplicating node, else copy from parent node.
+						if (network.hasStateChanged[newNode.nodeLayer]) newNode.states = network.stateUpdateMap.at(layer);
+						else { // copy states of parent, and remove the decision if decision is not -1
+							newNode.states = parentNode.states;
 							if (arc.decision != -1) newNode.states.erase(arc.decision);
-							//  TODO; check the arcs are being updated in node and duplicated node.
-							// updating child arcs is handled by the duplicate ()
-							nodes.insert(make_pair(newNode.id, newNode));
 						}
-						else arcsToRemove.push_back(arc.id);
+						newNode.incomingArcs = {arc.id};
+						// handle pre-terminal layer separately.
+						if (newNode.nodeLayer != tree.size()-2) {
+							for (auto outArcId: node.outgoingArcs) {
+								const auto &outArc = arcs[outArcId];
+								if (!newNode.states.count(outArc.decision)) continue;
+								auto nextArcId = number.getNext();
+								DDArc newArc{nextArcId, nextIndex, outArc.head, outArc.decision};
+								arcs.insert(make_pair(nextArcId, newArc));
+								newNode.outgoingArcs.push_back(nextArcId);
+								nodes[newArc.head].incomingArcs.push_back(nextArcId);
+							}
+						}
+						else { // layer above terminal.
+							const auto& outArc = arcs[node.outgoingArcs[0]];
+							auto nextArcId = number.getNext();
+							DDArc newArc{nextArcId, newNode.id, terminalNode.id, outArc.decision };
+							newArc.weight = outArc.weight;
+							terminalNode.incomingArcs.push_back(nextArcId);
+							newNode.outgoingArcs.push_back(nextArcId);
+							arcs.insert(make_pair(nextArcId, newArc));
+						}
+
+						nodes.insert(make_pair(nextIndex, newNode));
+						nodesToAdd.push_back(nextIndex);
 					}
 					else arcsToRemove.push_back(arc.id);
 				}
 				for (const auto badArcId: arcsToRemove) deleteArcById(badArcId);
 			}
 			// process first arc. at this point, the node should have one incoming arc.
-			auto inArc = node.incomingArcs[0];
+			auto inArc = incomingArcs[0];
 			auto& arc = arcs[inArc];
 			node.incomingArcs = {inArc};
 			const auto& parentNode = nodes[arcs[inArc].tail];
 
-			// if decision is not present in parent's state, remove it.
-			if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
-				auto j_NetNodeId = (arc.decision != -1)? network.networkArcs[arc.decision].headId  : 0;
-				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple( i_NetNodeId, q_NetNodeId, j_NetNodeId )) : 0;
-				auto newState = parentNode.state2 + arc.weight;
-				if (newState + lowerBounds[layer] >= 0) node.state2 = newState; // erfan removed the decision from parent's state without using duplicate ();
-				else nodesToRemove.push_back(id);
+			if (!network.hasStateChanged[layer]) {
+				node.states = parentNode.states;
+				if (arc.decision != -1) node.states.erase(arc.decision);
 			}
-			else {
-				// remove that node.
-				nodesToRemove.push_back(id); // i don't think this is needed here.
+			else node.states = network.stateUpdateMap.at(layer);
+
+			auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
+			arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple( i_NetNodeId, q_NetNodeId, j_NetNodeId )) : 0;
+			auto newState = parentNode.state2 + arc.weight;
+			if (newState + lowerBounds[layer] >= 0) {
+				node.state2 = newState;
+				// remove arcs that are found to be infeasible (not present in the node's states).
+				if (node.nodeLayer != tree.size()-2) {
+					auto outArcs = node.outgoingArcs;
+					for (auto outArc: outArcs) {
+						if (!node.states.count(arcs[outArc].decision)) deleteArcById(outArc);
+					}
+				}
 			}
+			else nodesToRemove.push_back(id);
 
 		}
 		// remove nodes that are marked for deletion.
@@ -895,7 +888,7 @@ void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
 			node.state2 = 0; // INFO setting state to zero before applying cut on the node.
 
 			if (node.incomingArcs.size() > 1) {
-				for (int i = 1; i < nodes[id].incomingArcs.size(); i++) {
+				for (size_t i = 1; i < nodes[id].incomingArcs.size(); i++) {
 					auto inArcId = nodes[id].incomingArcs[i];
 					auto& arc = arcs[inArcId];
 					const auto& parentNode = nodes[arc.tail];
