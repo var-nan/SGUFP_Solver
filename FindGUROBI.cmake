@@ -1,5 +1,5 @@
 find_path(GUROBI_INCLUDE_DIRS
-    NAMES gurobi_c.h
+    NAMES gurobi_c++.h
     HINTS ${GUROBI_DIR} $ENV{GUROBI_HOME}
     PATH_SUFFIXES include)
 

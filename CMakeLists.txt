@@ -52,6 +52,8 @@ if (UNIX)
 
 elseif(WIN32)
     # windows system
+    option(CXX "enable C++ compilation" ON)
+
     if (CXX)
         enable_language(CXX)
     endif()
@@ -82,6 +84,9 @@ elseif(WIN32)
             grb.cpp
             grb.h
     )
+
+    message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
+    message(STATUS "GUROBI_CXX_DEBUG LIBRARY: ${GUROBI_CXX_DEBUG_LIBRARY}")
 
     target_link_libraries(${CMAKE_PROJECT_NAME} optimized ${GUROBI_CXX_LIBRARY}
             debug ${GUROBI_CXX_DEBUG_LIBRARY})
