@@ -83,7 +83,9 @@ elseif(WIN32)
             grb.h
     )
 
-    target_link_libraries(${CMAKE_PROJECT_NAME} optimized ${GUROBI_CXX_LIBRARY} debug ${GUROBI_CXX_DEBUG_LIBRARY})
+    target_link_libraries(${CMAKE_PROJECT_NAME} optimized ${GUROBI_CXX_LIBRARY}
+            debug ${GUROBI_CXX_DEBUG_LIBRARY})
+
     target_link_libraries(${CMAKE_PROJECT_NAME} ${GUROBI_LIBRARY})
 
     if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_CURRENT_SOURCE_DIR})
