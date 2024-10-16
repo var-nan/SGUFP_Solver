@@ -105,7 +105,10 @@ Network::Network(const std::string& p_fileName){
 			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
 			states.insert(-1); // add -1 to states.
 			stateUpdateMap.insert({i, states});
+			bool first = true;
 			for (const auto& inId: node.incomingArcs){
+				if (first) {this->hasStateChanged.push_back(true); first = false;}
+				else this->hasStateChanged.push_back(false);
 				processingOrder.emplace_back(i++, inId);
 			}
 		}

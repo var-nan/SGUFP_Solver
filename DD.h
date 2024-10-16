@@ -20,7 +20,7 @@
 	#define RESTRICTED_STRATEGY 1
 #endif
 #ifndef RELAXED_STRATEGY
-	#define RELAXED_STRATEGY 2
+	#define RELAXED_STRATEGY 1
 #endif
 
 #ifndef MAX_WIDTH
@@ -38,6 +38,8 @@
 #include <algorithm>
 
 using namespace std;
+
+typedef vector<ulint> vulint;
 
 /*
  * INFO Ids of DDArc and DDNode are unsigned long ints.
@@ -60,6 +62,7 @@ public:
 class DDNode{
 public:
 	ulint id;
+	uint nodeLayer = 0;
 	vector<ulint> incomingArcs;
 	vector<ulint> outgoingArcs;
 	unordered_set<int> states;
@@ -136,6 +139,9 @@ public:
 	/// refinement functions ///
 
 	void applyFeasibilityCutRestricted(const Network& network, const Cut& cut);
+	void applyFeasibilityCutRelaxed(const Network& network, const Cut& cut);
+	void applyOptimalityCutRestricted(const Network& network, const Cut& cut);
+	void applyOptimalityCutRelaxed(const Network& network, const Cut& cut);
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
@@ -148,6 +154,8 @@ public:
 	void removeNode(ulint id);
 	void bottomUpDelete(ulint id);
 	void topDownDelete(ulint id);
+	void deleteNode(DDNode& node);
+	void deleteArc(DDNode& parentNode, DDArc& arc, DDNode& childNode);
 
 	/// other functions ///
 
