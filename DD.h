@@ -31,11 +31,24 @@
 	#define NUMBERS_RESERVE 512
 #endif
 
+#ifndef DEBUG
+	#define DEBUG 1
+	#define NDEBUG
+	#define STATIC static
+#else
+	#define STATIC
+#endif
+
+#include <cassert>
+
 #include "Network.h"
 #include "Cut.h"
-
+#include <cstdlib>
 #include <set>
 #include <algorithm>
+#include <ctime>
+
+#define assertm(exp, msg) assert(((void)msg, exp))
 
 using namespace std;
 
@@ -105,7 +118,7 @@ private:
 				numbers.pop_back();
 				return x;
 			}
-			else return n++;
+			return n++;
 		}
 
 		void setNext(ulint x){
@@ -126,7 +139,7 @@ public:
 	unordered_set<ulint> deletedNodeIds; // deleted node ids during refinement on a single node.
 
 
-	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index);
+	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index, bool stateChangesNext);
 
 	/// refinement helper functions ///
 
@@ -207,3 +220,36 @@ struct tuple_equal {
 		return first == second && get<1>(t1) == get<1>(t2);
 	}
 };
+
+/**
+ * Returns a list of m unique random numbers from the interval [0,n)
+ *
+ * uses Fischer - Yates algorithm
+ * @param n - range [0,n)
+ * @param m
+ * @return
+ */
+STATIC inline vector<uint> getShuffledList(const size_t n, const size_t m){
+	assertm(n > m, "n must be greater than m");
+	size_t temp_m = m;
+
+	vui shuffle(n);
+	for (size_t i = 0; i < n; i++) shuffle[i] = i;
+	srand(time(nullptr));
+	size_t current = n-1;
+	// select m numbers from the shuffle.
+	while (temp_m--){
+		auto val = rand()%current;
+		// shuffle a[val] and a[current]
+		auto temp = shuffle[current];
+		shuffle[current] = shuffle[val];
+		shuffle[val] = temp;
+		current--;
+	}
+
+	vui result(m);
+	for (size_t i = 0; i < m; i++) result[i] = shuffle[n-m+i];
+	// sort result
+	std::sort(result.begin(), result.end());
+	return result;
+}
