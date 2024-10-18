@@ -5,21 +5,36 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-set(SOURCES Network.cpp DD.cpp grb.cpp)
+set(SOURCES Network.cpp DD.cpp grb.cpp OriginalProblem.h)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
 add_compile_definitions(MAX_WIDTH=5)
 
+# google test dependency
+include(FetchContent)
+FetchContent_Declare(googletest URL https://github.com/google/googletest/archive/5376968f6948923e2411081fd9372e71a59d8e77.zip)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+enable_testing()
+
+
 if (UNIX)
+
+    message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
+
     # gurobi libraries
+    set(GUROBI_HOME "/opt/gurobi1102/linux64/")
+    set(GUROBI_LIB "${GUROBI_HOME}lib/")
+    set(GUROBI_INCLUDE "${GUROBI_HOME}include/")
+
     add_library(gurobi_c++ STATIC IMPORTED)
-    set_property(TARGET gurobi_c++ PROPERTY IMPORTED_LOCATION "/opt/gurobi1102/linux64/lib/libgurobi_c++.a")
+    set_property(TARGET gurobi_c++ PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi_c++.a")
 
     add_library(gurobi110 SHARED IMPORTED)
-    set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "/opt/gurobi1102/linux64/lib/libgurobi110.so")
+    set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
-
+    add_compile_definitions(DEBUG)
     target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -O0 ) # add -O2 flag in final phase. -Wunused
     # compiler flags: -Wuseless-cast -Wshadow, -Wduplicated-cond, -Wduplicated-branches
     # compiler flags: -fsanitize=pointer-subtract, -fsanitize=address
@@ -29,8 +44,20 @@ if (UNIX)
     # target_compile_features(SGUFP_Solver PUBLIC cxx_std_17)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi_c++)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
-    target_include_directories(SGUFP_Solver PRIVATE "/opt/gurobi1102/linux64/include/")
+    target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
+    # test targets
+    add_executable(tests2 tests/tests.cpp ${SOURCES})
+    target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
+    target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
+
+    add_executable(testmain testmain.cpp ${SOURCES})
+    target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
+    target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
+
+    include(GoogleTest)
+    gtest_discover_tests(testmain)
+    gtest_discover_tests(tests2)
 
 elseif(WIN32)
     # windows system
@@ -42,7 +69,7 @@ elseif(WIN32)
 
     list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
     if (CMAKE_BUILD_TYPE)
-        set(CMAKE_BUILD_TYPE "Release")
+        set(CMAKE_BUILD_TYPE "Debug")
     endif()
 
     if (MSVC AND MT)
@@ -71,18 +98,14 @@ elseif(WIN32)
         feature_summary(WHAT ALL)
     endif()
 
+    add_executable(testmain testmain.cpp ${SOURCES})
+    target_link_libraries(testmain GTest::gtest_main)
+
+    add_executable(tests2 tests/tests.cpp ${SOURCES})
+    target_link_libraries(tests2 GTest::gtest_main)
+
+    include(GoogleTest)
+    gtest_discover_tests(testmain)
+    gtest_discover_tests(tests2)
+
 endif()
-
-include(FetchContent)
-FetchContent_Declare(googletest URL https://github.com/google/googletest/archive/5376968f6948923e2411081fd9372e71a59d8e77.zip)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-# end of google test
-
-enable_testing()
-
-add_executable(testmain testmain.cpp DD.h DD.cpp Network.cpp Network.h)
-target_link_libraries(testmain GTest::gtest_main)
-
-include(GoogleTest)
-gtest_discover_tests(testmain)

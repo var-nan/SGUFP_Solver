@@ -4,6 +4,8 @@
 
 
 #include "DD.h"
+#include <queue>
+#include <limits>
 
 /**
  * Compiles the decision diagram tree with given node as the root.
@@ -23,6 +25,7 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	node.incomingArcs.clear();
 	node.outgoingArcs.clear();
 	node.id = 0; // make new node if necessary.
+	node.nodeLayer = 0; // TODO change during branch and bound.
 	// TODO clear other node attributes.
 	nodes.insert(std::make_pair(node.id, node));
 	currentLayer.push_back(node.id);
@@ -42,7 +45,7 @@ void DD::build(const Network& network, DDNode& node, int index) {
 		//const unordered_set<int> temp = stateUpdateMap.at(a);
 		vector<ulint> nextLayer;
 		nextLayer.reserve(MAX_WIDTH);
-		bool isExact = buildNextLayer(currentLayer, nextLayer, index++);
+		bool isExact = buildNextLayer(currentLayer, nextLayer, ++index, network.hasStateChanged[a+1]);
 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		//reduceLayer(nextLayer); // INFO not doing reduction.
 		tree.push_back(nextLayer);
@@ -51,6 +54,7 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	// terminal node layer.
 	vector<ulint> terminalLayer;
 	DDNode terminalNode {number.getNext()};
+	terminalNode.nodeLayer = ++index;
 	// current layer points to last layer of tree.
 	for (const auto& id: currentLayer){
 		// only add single arc for each node in the last layer.
@@ -58,7 +62,7 @@ void DD::build(const Network& network, DDNode& node, int index) {
 		auto& parentNode = nodes[id];
 		// create arc add to incoming of terminal node.
 		DDArc arc{arcId, id, terminalNode.id, 1};
-		arc.weight = INT32_MAX;
+		arc.weight = std::numeric_limits<double>::max();
 		terminalNode.incomingArcs.push_back(arcId);
 		parentNode.outgoingArcs.push_back(arcId);
 		arcs.insert(make_pair(arcId, arc));
@@ -83,12 +87,12 @@ inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_s
  * Strategies to build the next layer can be modified by changing '_STRATEGY' macro.
  * Returns boolean true if the newly built layer is an exact layer, else returns boolean false.
  */
-bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index) {
+bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index, bool stateChangesNext) {
 	/*
 	 * builds next layer from the given current layer.
 	 * adds new child nodes and outgoing arcs to their respective maps.
 	 * updates current layer's nodes and their arcs in the map.
-	 * This function doesn't do reduction.
+	 * This function uses reduction only during compilation of relaxed tree.
 	 */
 
 	bool isExact = true;
@@ -133,10 +137,10 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 	}
 	else if(type == RELAXED){
 		/*
-		 * RELAXED_STRATEGY (1). make relaxed arcs to point to last inserted node in
+		 * RELAXED_STRATEGY . make relaxed arcs to point to last inserted node in
 		 * the current layer.
 		 */
-		#if RELAXED_STRATEGY == 1
+		#if RELAXED_STRATEGY == 3
 		{
 			int count = 0;
 			ulint lastNodeId = 0;
@@ -240,8 +244,75 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 				if (nextLayer.size() > MAX_WIDTH) isExact = false;
 			}
 		}
-		#endif
+		#elif RELAXED_STRATEGY == 1
+		{
+			 // build complete tree with state reduction.
+			 if (stateChangesNext) { // next DD layer will undergo state change, so create only one node.
 
+				 auto nextNodeId = number.getNext();
+				 DDNode newNode{nextNodeId};
+				 newNode.nodeLayer = index;
+
+				 for (const auto id : currentLayer) {
+					 assert(nodes.count(id));
+					 auto &node = nodes[id];
+					 for (auto decision: node.states) {
+						 auto nextId = number.getNext();
+						 DDArc newArc{nextId, id, nextNodeId, decision};
+						 node.outgoingArcs.push_back(nextId);
+						 newNode.incomingArcs.push_back(nextId);
+						 arcs.insert(make_pair(nextId, newArc));
+					 }
+				 } // state of this node is updated in the build() in next iteration.
+				 nextLayer.push_back(nextNodeId);
+				 nodes.insert(make_pair(nextNodeId, newNode));
+			 }
+			 else {
+				 vector<DDNode> nodesVector;
+				 unordered_set<tuple<unordered_set<int>, int, int>, tuple_hash, tuple_equal> allStates;
+				 int j = 0;
+
+				 for (const auto id: currentLayer) {
+					 assert(nodes.count(id));
+					 auto &node = nodes[id];
+					 auto statesCopy = node.states;
+
+					 for (auto decision: node.states) {
+						 auto newStates(statesCopy);
+						 if (decision != -1) newStates.erase(decision);
+						 auto nextId = number.getNext();
+
+						 // if newStates already in allStates, update exising node in nodesVector.
+						 auto [it, isInserted] = allStates.insert({newStates, 0, j});
+						 if (isInserted) { // create new Node
+							 DDNode newNode{nextId};
+							 DDArc newArc{nextId, id, nextId, decision};
+							 newNode.nodeLayer = index;
+							 newNode.states = newStates;
+							 newNode.incomingArcs.push_back(nextId);
+							 node.outgoingArcs.push_back(nextId);
+							 arcs.insert(make_pair(nextId, newArc));
+							 nodesVector.push_back(newNode);
+							 j++;
+						 } else { // state already exists, update existing node in nodesVector.
+							 auto [tempState, state2, pos] = *(it);
+							 auto &prevNode = nodesVector[pos];
+							 DDArc newArc{nextId, id, prevNode.id, decision};
+							 prevNode.incomingArcs.push_back(nextId);
+							 node.outgoingArcs.push_back(nextId);
+							 arcs.insert(make_pair(nextId, newArc));
+						 }
+					 }
+				 }
+
+				 // populate nextLayer. LATER. move nodes from vector.
+				 for (auto& node : nodesVector) {
+					 nextLayer.push_back(node.id);
+					 nodes.insert(make_pair(node.id, node));
+				 }
+			 }
+		}
+		#endif
 	}
 	return isExact;
 }
@@ -278,7 +349,7 @@ void DD::reduceLayer(vector<ulint> &currentLayer) {
 	 * Merge two nodes that containing same state. Update incoming and outgoing arcs to point to merged node.
 	 */
 
-	vector<bool> filter(currentLayer.size()); // to keep track of current layer nodes.
+	queue<ulint> q;
 	unordered_set<tuple<unordered_set<int>,int,int>,tuple_hash,tuple_equal> allStates;
 	uint j = 0;
 
@@ -293,14 +364,18 @@ void DD::reduceLayer(vector<ulint> &currentLayer) {
 			mergeNodes(node2, node);
 			// delete node from nodes.
 			nodes.erase(node.id);
-			filter[j] = true;
+			q.push(i);
 		}
 		j++;
 	}
+	queue tempQ {q};
+	while (!tempQ.empty()) {number.setNext(tempQ.front()); tempQ.pop();}
 	// remove filtered nodeIds from current layer.
 	currentLayer.erase(std::remove_if(currentLayer.begin(), currentLayer.end(),
-	                                  [&filter](int x){return filter[x];}),
-	                   currentLayer.end());
+	                                  [&q](const int x) mutable{
+												if ((!q.empty()) && (q.front() == x)) { q.pop(); return true;}
+												return false;
+											}),currentLayer.end());
 
 }
 
@@ -415,7 +490,7 @@ vi DD::solution() {
 	 */
 
 	// find maxVal parent node.
-	double maxVal = INT32_MIN;
+	double maxVal = std::numeric_limits<double>::lowest();
 	ulint maxNodeId = 0;
 
 	vi path;
@@ -509,7 +584,7 @@ static vector<double> helperFunction(const Network &network, const Cut &cut) {
 		auto q = arc.headId;
 
 		const auto& node = network.networkNodes[q];
-		double max = INT32_MIN;
+		double max = std::numeric_limits<double>::lowest();
 		for (const auto j: node.outNodeIds){
 			auto c = coeff.at(make_tuple(static_cast<int>(i),static_cast<int>(q),static_cast<int>(j)));
 			if (c > max) max = c;
@@ -553,7 +628,8 @@ void DD::deleteArc(DDNode& tailNode, DDArc& arc, DDNode& headNode){
 	 * deletes the given arc from the arcs map.
 	 * updates the head node's incomingArcs vector and tail node's outgoingArcs vector.
 	 */
-
+	assert(tailNode.id == arc.tail && headNode.id == arc.head);
+	assert(arcs.count(arc.id));
 	auto pos = std::find(headNode.incomingArcs.begin(), headNode.incomingArcs.end(), arc.id);
 	if (pos != headNode.incomingArcs.end()) headNode.incomingArcs.erase(pos);
 	auto pos2 = std::find(tailNode.outgoingArcs.begin(), tailNode.outgoingArcs.end(), arc.id);
@@ -568,7 +644,7 @@ void DD::deleteArc(DDNode& tailNode, DDArc& arc, DDNode& headNode){
  * A call to this function should be made iff both incoming and outgoing arcs are empty.
  */
 void DD::deleteNode(DDNode& node){
-
+	assert(nodes.count(node.id));
 	deletedNodeIds.insert(node.id);
 	nodes.erase(node.id);
 }
@@ -585,20 +661,24 @@ void DD::topDownDelete(ulint id) { // hard delete function.
 	 * remove the last outgoing arc of the last node.
 	 */
 	{
+		assert(nodes.count(id));
 		auto &node = nodes[id];
 		// remove the incoming arc here.
 		//deleteArcById(node.incomingArcs[0]);
-
+		assert(!node.outgoingArcs.empty());
 		auto arcsToDelete = node.outgoingArcs;
 
 		for (auto outArcId: arcsToDelete) {
 			// for each outArcId, find its head and apply topDownDelete() if head has single incoming arc.
+			assert(arcs.count(outArcId));
 			auto& outArc = arcs.at(outArcId);
 			auto childId = outArc.head;
+			assert(nodes.count(childId));
 			auto &childNode = nodes[childId];
 			deleteArc(node, outArc, childNode);
 			if (childNode.incomingArcs.empty()) topDownDelete(childId); // orphan node
 		}
+		assert(node.outgoingArcs.empty());
 		deleteNode(node);
 	}
 	// here, node has no outgoing arcs and incoming arcs left,
@@ -613,22 +693,30 @@ void DD::removeNode(ulint id){
 	// if current node has multiple parents and multiple children, do this.
 	auto& node = nodes[id];
 	auto outArcs = node.outgoingArcs;
+	assert(!node.outgoingArcs.empty());
 	for (auto childArcId : outArcs){
+		assert(arcs.count(childArcId));
 		auto& childArc = arcs[childArcId];
+		assert(nodes.count(childArc.head));
 		auto& child = nodes[childArc.head];
 		deleteArc(node, childArc, child);
 		if (child.incomingArcs.empty()) topDownDelete(child.id); // orphan node
 	}
 	//if (node.incomingArcs.size() > 1) { // multiple parents
 	auto incomingArcs = node.incomingArcs;
+	assert(!node.incomingArcs.empty());
 	for (auto arcId: incomingArcs){
+		assert(arcs.count(arcId));
 		auto& arc = arcs[arcId];
+		assert(nodes.count(arc.tail));
 		auto& parentNode = nodes[arc.tail];
 		deleteArc(parentNode, arc, node);
 		if (parentNode.outgoingArcs.empty()) bottomUpDelete(parentNode.id); // orphan node
 	}
+	assert(node.incomingArcs.empty() && node.outgoingArcs.empty());
 	// actual delete.
 	deleteNode(node);
+	assert(!nodes.count(id));
 
 	// remove deleted ids from the tree.
 	int n_removed = deletedNodeIds.size();
@@ -858,24 +946,29 @@ void DD::applyOptimalityCutRestricted(const Network &network, const Cut &cut) {
 		auto i_NetNodeId = network.networkArcs[netArc].tailId;
 		auto q_NetNodeId = network.networkArcs[netArc].headId;
 
-		vulint nodesToRemoved;
-
 		for (auto id: tree[layer]) {
 			auto& node = nodes[id];
 			auto inArcId = node.incomingArcs[0];
 			auto& arc = arcs[inArcId];
-			auto parentNode = nodes[arc.tail];
+			auto& parentNode = nodes[arc.tail];
 
-			if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
-				auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId  : 0;
-				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
-				node.state2 = arc.weight + parentNode.state2;
-			}
-			else nodesToRemoved.push_back(id);
+			auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
+			arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+			node.state2 = arc.weight + parentNode.state2;
 		}
-
-		for (const auto id: nodesToRemoved) removeNode(id); // does optimality cut removes nodes?
 	}
+
+	// Update the state and arc weights of the terminal.
+	auto& terminalNode = nodes[tree[tree.size()-1][0]];
+	double terminalState = std::numeric_limits<double>::lowest();
+
+	for (const auto arcId : terminalNode.incomingArcs){
+		auto& arc = arcs[arcId];
+		auto newState = nodes[arc.tail].state2;
+		arc.weight = (newState < arc.weight) ? newState : arc.weight;
+		terminalState = (arc.weight > terminalState) ? arc.weight : terminalState;
+	}
+	terminalNode.state2 = terminalState;
 }
 
 /**
@@ -902,25 +995,51 @@ void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
 
 			if (node.incomingArcs.size() > 1) {
 				for (size_t i = 1; i < nodes[id].incomingArcs.size(); i++) {
-					auto inArcId = nodes[id].incomingArcs[i];
+					auto inArcId = node.incomingArcs[i];
 					auto& arc = arcs[inArcId];
 					const auto& parentNode = nodes[arc.tail];
 
-					if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
-						// need to duplicate this node
-						auto newNode = duplicate(node);
-						arc.head = newNode.id;
+					auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
+					arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+					// create new node for this arc.
+					DDNode newNode{number.getNext()};
+					newNode.state2 = arc.weight + parentNode.state2;
+					arc.head = newNode.id;
+					newNode.incomingArcs = {arc.id};
+					if (network.hasStateChanged[layer]) newNode.states = network.stateUpdateMap.at(layer);
+					else {
 						newNode.states = parentNode.states;
 						if (arc.decision != -1) newNode.states.erase(arc.decision);
-						auto j_NetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
-						arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
-						newNode.state2 = arc.weight + parentNode.state2;
-						nodesToAdded.push_back(newNode.id);
-						// copying and updating the child arcs is handled by the duplicate() function.
+					}
+					// LATER: loop upto n-2 layers
+					// process outgoing arcs.
+					if (layer != tree.size()-2) {
+						newNode.outgoingArcs = {};
+						for (auto outArcId : node.outgoingArcs){
+							auto outArc = arcs[outArcId];
+							if (newNode.states.count(outArc.decision)){
+								auto& childNode = nodes[outArc.head];
+								DDArc newArc {number.getNext(), newNode.id, childNode.id, outArc.decision};
+								newNode.outgoingArcs.push_back(newArc.id);
+								childNode.incomingArcs.push_back(newArc.id);
+								arcs.insert(make_pair(newArc.id, newArc));
+							}
+						}
 					}
 					else {
-						deleteArcById(inArcId);
+						newNode.outgoingArcs = {};
+						auto outArcId = node.outgoingArcs[0];
+						auto& outArc = arcs[outArcId];
+						auto& childNode = nodes[outArc.head];
+						DDArc newArc {number.getNext(), newNode.id, childNode.id, outArc.decision};
+						newArc.weight = outArc.weight;
+						arcs.insert(make_pair(newArc.id, newArc));
+						childNode.incomingArcs.push_back(newArc.id);
+						newNode.outgoingArcs.push_back(newArc.id);
 					}
+					// insert to list of nodes.
+					nodesToAdded.push_back(newNode.id);
+					nodes.insert(make_pair(newNode.id, newNode));
 				}
 			}
 			// process first arc.
@@ -929,15 +1048,39 @@ void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
 			const auto& parentNode = nodes[arc.tail];
 			node.incomingArcs = {inArcId}; // reset the incoming arcs.
 
-			if (parentNode.states.find(arc.decision) != parentNode.states.end()) {
-				auto j_NetNodeId = (arc.decision != -1 ) ? network.networkArcs[arc.decision].headId  : 0;
-				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
-				// why remove the decided state from the node.
-				node.state2 = parentNode.state2 + arc.weight;
+			if (network.hasStateChanged[layer]) node.states = network.stateUpdateMap.at(layer);
+			else {
+				node.states = parentNode.states;
+				if (arc.decision != -1) node.states.erase(arc.decision);
 			}
-			else nodesToRemoved.push_back(id);
+			auto j_NetNodeId = (arc.decision != -1 ) ? network.networkArcs[arc.decision].headId  : 0;
+			arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(i_NetNodeId, q_NetNodeId, j_NetNodeId)) : 0;
+			node.state2 = arc.weight + parentNode.state2;
+			// remove outArcs that are infeasible.
+			if (layer != tree.size()-2){
+				auto outgoingArcs = node.outgoingArcs;
+				for (auto outArcId : outgoingArcs){
+					auto& outArc = arcs[outArcId];
+					if (!node.states.count(arcs[outArcId].decision)) {
+						// remove that arc
+						deleteArcById(outArcId);
+					}
+				}
+			}
 		}
+
 		for (const auto id: nodesToRemoved) removeNode(id); // remove nodes marked for deletion
 		tree[layer].insert(tree[layer].end(), nodesToAdded.begin(), nodesToAdded.end()); // add node ids to current layer.
 	}
+
+	auto& terminalNode = nodes[tree[tree.size()-1][0]];
+	double terminalState = std::numeric_limits<double>::lowest();
+
+	for (const auto arcId : terminalNode.incomingArcs){
+		auto& arc = arcs[arcId];
+		auto newState = nodes[arc.tail].state2;
+		arc.weight = (newState < arc.weight) ? newState : arc.weight;
+		terminalState = (arc.weight > terminalState) ? arc.weight : terminalState;
+	}
+	terminalNode.state2 = terminalState;
 }

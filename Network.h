@@ -9,9 +9,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <cstdint>
-//#include <string>
 #include <iostream>
-#include <fstream>
 
 using namespace std;
 
@@ -20,7 +18,6 @@ typedef uint32_t uint;
 typedef uint64_t ulint;
 typedef vector<int> vi;
 typedef vector<uint> vui;
-
 
 
 class NetworkArc {
@@ -85,7 +82,7 @@ public:
 	vui A3;
 	vui A4;
 	vector<bool> isNodeInVbar;
-	vector<bool> hasStateChanged;
+	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)

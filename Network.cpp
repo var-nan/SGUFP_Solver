@@ -112,6 +112,7 @@ Network::Network(const std::string& p_fileName){
 				processingOrder.emplace_back(i++, inId);
 			}
 		}
+		hasStateChanged.push_back(false); // extra element for buildNextLayer in DD class.
 
 //		// build stateUpdate map.
 //		int lastId = -1;
