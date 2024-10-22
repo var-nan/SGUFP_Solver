@@ -128,6 +128,8 @@ private:
 	Type type;
 	vi cutset{};
 
+	void updateTree();
+
 public:
 	Number number;
 	unordered_map<ulint,DDNode> nodes;
@@ -164,7 +166,8 @@ public:
 
 	void deleteArcById(ulint id);
 	void deleteNodeById(ulint id);
-	void removeNode(ulint id);
+	void removeNode(ulint id, bool isBatch=false);
+	void batchRemoveNodes(const vulint& ids);
 	void bottomUpDelete(ulint id);
 	void topDownDelete(ulint id);
 	void deleteNode(DDNode& node);

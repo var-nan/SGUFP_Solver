@@ -665,7 +665,7 @@ void DD::topDownDelete(ulint id) { // hard delete function.
 		auto &node = nodes[id];
 		// remove the incoming arc here.
 		//deleteArcById(node.incomingArcs[0]);
-		assert(!node.outgoingArcs.empty());
+		//assert(!node.outgoingArcs.empty());
 		auto arcsToDelete = node.outgoingArcs;
 
 		for (auto outArcId: arcsToDelete) {
@@ -686,7 +686,13 @@ void DD::topDownDelete(ulint id) { // hard delete function.
 	//deleteNode(node);
 }
 
-void DD::removeNode(ulint id){
+/**
+ * Removes the node and its associated nodes from the nodes map and updates the
+ * tree vector if deletion is not occurring in batch.
+ * @param id Id of the node to be removed.
+ * @param isBatch updates the tree vector if parameter is false. Default value is false.
+ */
+void DD::removeNode(ulint id, bool isBatch){
 	/*
 	 * NOTE:
 	 */
@@ -718,15 +724,26 @@ void DD::removeNode(ulint id){
 	deleteNode(node);
 	assert(!nodes.count(id));
 
-	// remove deleted ids from the tree.
+	if (!isBatch) updateTree();	// no batch deletion.
+}
+
+/**
+ * Removes the deleted node ids from the tree. Resets the deletedNodeIds variable after
+ * updating the tree. Adds the deletedNodeIds to the number.
+ *
+ * Optimized to call the function when removing nodes in batch.
+ */
+void DD::updateTree() {
 	int n_removed = deletedNodeIds.size();
 	auto& deletedNodeIds_l = this->deletedNodeIds;
 	auto f = [&n_removed, &deletedNodeIds_l] (ulint x) mutable {
 		if (deletedNodeIds_l.count(x)) { n_removed--; return true;}
 		return false;
 	};
-
-	for (int i = tree.size()-2; i > 0; i--){
+	#ifdef DEBUG
+		cout << "Removing " << n_removed << " nodes from tree." << endl;
+	#endif
+	for (int i = tree.size()-2; i > 0; i--){ // iterate every layer until all deleted Ids are removed from tree.
 		if (n_removed){
 			auto& layer = tree[i];
 			layer.erase(std::remove_if(layer.begin(), layer.end(), f), layer.end());
@@ -737,7 +754,17 @@ void DD::removeNode(ulint id){
 	auto& num = number;
 	std::for_each(deletedNodeIds.begin(), deletedNodeIds.end(), [&num](ulint x) mutable{num.setNext(x);});
 	deletedNodeIds.clear(); // clear the deleted NodeIds set.
+}
 
+/**
+ * Removes the given node ids from the DD and updates the tree at once.
+ * @param ids vector of node ids to be removed.
+ */
+void DD::batchRemoveNodes(const vulint& ids) {
+	// remove all the ids without updating the tree.
+	for (auto id : ids) removeNode(id, true);
+	// update tree
+	updateTree();
 }
 
 
@@ -805,8 +832,7 @@ void DD::applyFeasibilityCutRestricted(const Network &network, const Cut &cut) {
 			}
 		}
 		// remove the nodes
-		for (auto nodeId: IdsToBeRemoved)
-			removeNode(nodeId);
+		batchRemoveNodes(IdsToBeRemoved);
 	}
 }
 
@@ -919,7 +945,7 @@ void DD::applyFeasibilityCutRelaxed(const Network &network, const Cut &cut) {
 
 		}
 		// remove nodes that are marked for deletion.
-		for (auto id: nodesToRemove) removeNode(id);
+		batchRemoveNodes(nodesToRemove);
 		// insert new Ids to current layer.
 		tree[layer].insert(tree[layer].end(), nodesToAdd.begin(), nodesToAdd.end());
 	}

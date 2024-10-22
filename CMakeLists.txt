@@ -9,7 +9,7 @@ set(SOURCES Network.cpp DD.cpp grb.cpp OriginalProblem.h)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=5)
+add_compile_definitions(MAX_WIDTH=4096)
 
 # google test dependency
 include(FetchContent)
@@ -47,7 +47,8 @@ if (UNIX)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
     # test targets
-    add_executable(tests2 tests/tests.cpp ${SOURCES})
+    add_executable(tests2 tests/tests.cpp ${SOURCES}
+            tests/test_utils.h)
     target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
     target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
 
@@ -101,7 +102,11 @@ elseif(WIN32)
     add_executable(testmain testmain.cpp ${SOURCES})
     target_link_libraries(testmain GTest::gtest_main)
 
-    add_executable(tests2 tests/tests.cpp ${SOURCES})
+    add_executable(tests2 tests/tests.cpp ${SOURCES}
+            tests/test_utils.h)
+    target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
+            debug ${GUROBI_CXX_DEBUG_LIBRARY})
+    target_link_libraries(tests2 ${GUROBI_LIBRARY})
     target_link_libraries(tests2 GTest::gtest_main)
 
     include(GoogleTest)
