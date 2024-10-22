@@ -120,7 +120,59 @@ TEST_F(DDTest, TestBatchDeleteFullLayer) {
 	ASSERT_TRUE(restrictedDD.arcs.empty());
 }
 
-int main(){
-	testing::InitGoogleTest();
-	return RUN_ALL_TESTS();
+
+class DDSubRootTest : public testing::Test {
+protected:
+	DD restrictedDD;
+	const string fileName = "C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt";
+	Network network{fileName};
+	DDSubRootTest() {
+
+
+		DDNode root{3433};
+		root.incomingArcs = {434,32};
+		root.outgoingArcs = {3232,2323,323,23,434,12,43,890};
+		root.states = {1,2,3,4,5,6,7,8,9}; // TODO: what happens to state in between?
+
+		root.solutionVector = {4,3,6,7,87};
+		const string message = "Compiled Restricted Tree in ";
+		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root, 2), message);
+
+		printTreeStatistics(restrictedDD);
+	}
+};
+
+TEST_F(DDSubRootTest, Test1) {
+	ASSERT_TRUE(!restrictedDD.nodes[0].solutionVector.empty());
+	ASSERT_TRUE(restrictedDD.nodes[0].incomingArcs.empty());
+	// test number of layers is equal to number of processing arcs.
+	auto ind = network.processingOrder.size()-restrictedDD.startTree;
+	auto treeSize = restrictedDD.tree.size()-2;
+	ASSERT_EQ(ind, treeSize);
+	// test that node layers are properly assigned
+	auto start = 0;
+	for (auto& layer: restrictedDD.tree) {
+		for (auto id: layer) {
+			auto node = restrictedDD.nodes[id];
+			ASSERT_EQ(node.nodeLayer, start);
+		}
+		start++;
+	}
 }
+
+TEST_F(DDSubRootTest, Test2) {
+
+	auto rootNode = restrictedDD.nodes[0];
+	auto cutset = restrictedDD.getExactCutset();
+	size_t pathSize = rootNode.solutionVector.size() + restrictedDD.exactLayer;
+	for (const auto& node : cutset) {
+		for (size_t i = 0; i < rootNode.solutionVector.size(); i++) // root's solution should be in node's solution.
+			ASSERT_EQ(rootNode.solutionVector[i], node.solutionVector[i]);
+		ASSERT_EQ(pathSize, node.solutionVector.size());
+	}
+}
+
+// int main(){
+// 	testing::InitGoogleTest();
+// 	return RUN_ALL_TESTS();
+// }

@@ -34,8 +34,9 @@ void DD::build(const Network& network, DDNode& node, int index) {
 
 	auto start = arcOrder.begin() + index;
 	auto end = arcOrder.end();
+	index = 0; //
 
-	for (; start < end; start++){
+	for (; start != end; ++start){
 
 		auto[a,b] = *start;
 		if (stateUpdateMap.count(a)) { // update state of each node in the layer.
@@ -531,26 +532,25 @@ vi DD::solution() {
 	return finalPath;
 }
 
-
+/**
+ * Returns solution vector for a given node in the exact layer. function should only used for
+ * a node in the exact cutset.
+ * @param nodeId - id of node in the cutset.
+ * @return - vector of solutions from root to the given node.
+ */
 vi DD::computePathForExactNode(ulint nodeId){
-	/*
-	 * retrieve solution vector for a given node. used while building cutset ndoes.
-	 * TODO need to verify again.
-	 */
-
 	auto& node = nodes[nodeId];
-	int total = startTree + exactLayer-1;
-	vi solutionVector(total);
-
-	for (int i = exactLayer-1; i > 0; i--){
-		// since all nodes upto exact layer has only parent
+	vi solutionVector;
+	// iterate through all nodes from current node till root.
+	while (!node.incomingArcs.empty()) {
 		const auto& inArc = arcs[node.incomingArcs[0]];
-		solutionVector[startTree+i-1] =inArc.decision;
+		solutionVector.push_back(inArc.decision);
 		node = nodes[inArc.tail];
 	}
-	// now node points to root node, add root's solution vector to it.
-	for (size_t i = 0; i < node.solutionVector.size(); i++) solutionVector[i] = node.solutionVector[i];
-	return solutionVector;
+	// add root's solution.
+	vi result(node.solutionVector);
+	result.insert(result.end(), solutionVector.rbegin(), solutionVector.rend());
+	return result;
 }
 
 vector<DDNode> DD::getExactCutset() {
