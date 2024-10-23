@@ -126,9 +126,11 @@ private:
 		}
 	};
 	Type type;
-	vi cutset{};
+	//vi cutset{};
 
 	void updateTree();
+	[[nodiscard]] vi computePathForExactNode(ulint nodeId) const;
+	[[nodiscard]] vector<DDNode> generateExactCutSet() const;
 
 public:
 	Number number;
@@ -139,7 +141,7 @@ public:
 	int startTree = 0; // the start position of the subtree in the global tree.
 	int exactLayer = 0; // the position of exact layer with respect to root of subtree.
 	unordered_set<ulint> deletedNodeIds; // deleted node ids during refinement on a single node.
-
+	vector<DDNode> cutSet;
 
 	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index, bool stateChangesNext);
 
@@ -175,15 +177,13 @@ public:
 
 	/// other functions ///
 
-	vi computePathForExactNode(ulint nodeId);
-
 
 	DD(): type{RESTRICTED}{}
-	explicit DD(Type type_): type{type_}{}
+	explicit DD(const Type type_): type{type_}{}
 
 	void build(const Network& network, DDNode& node, int index);
 	vi solution();
-	vector<DDNode> getExactCutset();
+	[[nodiscard]] vector<DDNode> getExactCutSet() const;
 
 };
 

@@ -136,7 +136,7 @@ protected:
 
 		root.solutionVector = {4,3,6,7,87};
 		const string message = "Compiled Restricted Tree in ";
-		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root, 2), message);
+		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root, 1), message);
 
 		printTreeStatistics(restrictedDD);
 	}
@@ -163,12 +163,38 @@ TEST_F(DDSubRootTest, Test1) {
 TEST_F(DDSubRootTest, Test2) {
 
 	auto rootNode = restrictedDD.nodes[0];
-	auto cutset = restrictedDD.getExactCutset();
+	auto cutset = restrictedDD.getExactCutSet();
 	size_t pathSize = rootNode.solutionVector.size() + restrictedDD.exactLayer;
 	for (const auto& node : cutset) {
 		for (size_t i = 0; i < rootNode.solutionVector.size(); i++) // root's solution should be in node's solution.
 			ASSERT_EQ(rootNode.solutionVector[i], node.solutionVector[i]);
 		ASSERT_EQ(pathSize, node.solutionVector.size());
+	}
+}
+
+TEST_F(DDSubRootTest, TestNodeLayer) {
+	// test if nodes have correct node layer.
+	for (int i = 0; i < restrictedDD.tree.size(); i++) {
+		for (auto id: restrictedDD.tree[i]) {
+			const auto& node = restrictedDD.nodes[id];
+			ASSERT_EQ(node.nodeLayer, i);
+		}
+	}
+}
+
+TEST_F(DDSubRootTest, TestCutSet) {
+
+	const auto cutset = restrictedDD.getExactCutSet();
+	//const auto cutSet2 = restrictedDD.generateExactCutSet();
+
+	auto f = [](const DDNode& node1, const DDNode& node2) {
+		return node1.id == node2.id && node1.nodeLayer == node2.nodeLayer
+			&& node1.states == node2.states;
+	};
+
+	ASSERT_TRUE(!cutset.empty());
+	for (int i = 0; i < cutset.size(); i++) {
+		ASSERT_TRUE(!cutset[i].solutionVector.empty());
 	}
 }
 

@@ -31,9 +31,12 @@ inline size_t getNumNodesDD(const DD& dd) {
 }
 
 inline void printTreeStatistics(const DD& dd) {
+	cout << "**************** DD Stats **************************" << endl;
 	cout << "Number of layers in tree: " << dd.tree.size() << endl;
-	cout << "Number of nodes in the DD: " << dd.nodes.size() << endl;
-	cout << "Number of arcs in the DD: " << dd.arcs.size() << endl;
+	cout << "Number of nodes: " << dd.nodes.size() << endl;
+	cout << "Number of arcs: " << dd.arcs.size() << endl;
+	cout << "Index of exact layer: " << dd.exactLayer << " (contains " << dd.tree[dd.exactLayer].size() << " elements)."<< endl;
+	cout << "*****************************************************" << endl;
 }
 
 inline void printTree(const DD& dd) {

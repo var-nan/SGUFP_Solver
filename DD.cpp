@@ -72,6 +72,9 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	nodes.insert(make_pair(terminalNode.id, terminalNode));
 	terminalLayer.push_back(terminalNode.id);
 	tree.push_back(terminalLayer);
+
+	// generate cutset.
+	cutSet = generateExactCutSet();
 }
 
 inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states){
@@ -538,14 +541,14 @@ vi DD::solution() {
  * @param nodeId - id of node in the cutset.
  * @return - vector of solutions from root to the given node.
  */
-vi DD::computePathForExactNode(ulint nodeId){
-	auto& node = nodes[nodeId];
+vi DD::computePathForExactNode(ulint nodeId) const{
+	DDNode node = nodes.at(nodeId);
 	vi solutionVector;
 	// iterate through all nodes from current node till root.
 	while (!node.incomingArcs.empty()) {
-		const auto& inArc = arcs[node.incomingArcs[0]];
+		const auto& inArc = arcs.at(node.incomingArcs[0]);
 		solutionVector.push_back(inArc.decision);
-		node = nodes[inArc.tail];
+		node = nodes.at(inArc.tail);
 	}
 	// add root's solution.
 	vi result(node.solutionVector);
@@ -553,21 +556,42 @@ vi DD::computePathForExactNode(ulint nodeId){
 	return result;
 }
 
-vector<DDNode> DD::getExactCutset() {
+/**
+ * Creates a copy of given node. copies only the id,states
+ * and node-layer attributes.
+ * @param node
+ * @return
+ */
+DDNode copyNode(const DDNode& node) {
+	DDNode newNode{node.id};
+	newNode.states = node.states;
+	newNode.nodeLayer = node.nodeLayer;
+	return newNode;
+}
+
+/**
+ * Computes and returns a vector of nodes that are in exact cutset.
+ * @return vector of nodes that are in exact cutset.
+ */
+vector<DDNode> DD::generateExactCutSet() const {
 	/*
 	 * returns a vector containing the nodes in the exact layer as cutset.
 	 */
 	//vector<DDNode> cutsetNodes(tree[exactLayer-1].size());
 	vector<DDNode> cutsetNodes;
 	cutsetNodes.reserve(MAX_WIDTH);
-	int i = 0;
+
 	for (const auto id: tree[exactLayer]){
-		auto node = nodes[id];
-		node.solutionVector = computePathForExactNode(id);
-		//cutsetNodes[i] = node;
-		cutsetNodes.push_back(node);
+		const auto& node = nodes.at(id);
+		DDNode newNode = copyNode(node);
+		newNode.solutionVector = computePathForExactNode(id);
+		cutsetNodes.emplace_back(newNode);
 	}
 	return cutsetNodes;
+}
+
+vector<DDNode> DD::getExactCutSet() const {
+	return cutSet;
 }
 
 
