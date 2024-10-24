@@ -23,15 +23,17 @@ class DDTest : public testing::Test {
 protected:
 	const string fileName {"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
 	Network network{fileName};
-	DD relaxedDD {RELAXED};
+	DD relaxedDD {EXACT};
 	DD restrictedDD {RESTRICTED};
 
 	DDTest() {
 		DDNode root{0};
+		root.nodeLayer = 0;
+		root.globalLayer = 0;
 		string message =  "Compiled Relaxed Tree in ";
-		MEASURE_EXECUTION_TIME(relaxedDD.build(network, root, 0),message);
+		MEASURE_EXECUTION_TIME(relaxedDD.build(network, root),message);
 		message = "Compiled Restricted Tree in ";
-		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root, 0), message);
+		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root), message);
 		//cout << "Network processing size: " << network.processingOrder.size() << endl;
 		//cout << "Relaxed DD size: " << relaxedDD.tree.size() << endl;
 		//cout << "Restricted DD size: " << restrictedDD.tree.size() << endl;
@@ -124,21 +126,24 @@ TEST_F(DDTest, TestBatchDeleteFullLayer) {
 class DDSubRootTest : public testing::Test {
 protected:
 	DD restrictedDD;
+	DD exactDD{EXACT};
 	const string fileName = "C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt";
 	Network network{fileName};
 	DDSubRootTest() {
-
-
 		DDNode root{3433};
+		root.globalLayer = 4;
+		root.nodeLayer = 1;
 		root.incomingArcs = {434,32};
 		root.outgoingArcs = {3232,2323,323,23,434,12,43,890};
 		root.states = {1,2,3,4,5,6,7,8,9}; // TODO: what happens to state in between?
 
-		root.solutionVector = {4,3,6,7,87};
-		const string message = "Compiled Restricted Tree in ";
-		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root, 1), message);
+		root.solutionVector = {4,3,6,7};
+		string message = "Compiled Restricted Tree in ";
+		MEASURE_EXECUTION_TIME(restrictedDD.build(network, root), message);
+		message = "Compiled Exact tree in ";
+		MEASURE_EXECUTION_TIME(exactDD.build(network, root), message);
 
-		printTreeStatistics(restrictedDD);
+		//printTreeStatistics(restrictedDD);
 	}
 };
 
@@ -146,7 +151,7 @@ TEST_F(DDSubRootTest, Test1) {
 	ASSERT_TRUE(!restrictedDD.nodes[0].solutionVector.empty());
 	ASSERT_TRUE(restrictedDD.nodes[0].incomingArcs.empty());
 	// test number of layers is equal to number of processing arcs.
-	auto ind = network.processingOrder.size()-restrictedDD.startTree;
+	auto ind = network.processingOrder.size()-restrictedDD.getGlobalPosition();
 	auto treeSize = restrictedDD.tree.size()-2;
 	ASSERT_EQ(ind, treeSize);
 	// test that node layers are properly assigned
@@ -161,10 +166,10 @@ TEST_F(DDSubRootTest, Test1) {
 }
 
 TEST_F(DDSubRootTest, Test2) {
-
+	// test solution in exact cutset nodes works.
 	auto rootNode = restrictedDD.nodes[0];
 	auto cutset = restrictedDD.getExactCutSet();
-	size_t pathSize = rootNode.solutionVector.size() + restrictedDD.exactLayer;
+	size_t pathSize = rootNode.solutionVector.size() + restrictedDD.getExactLayer();
 	for (const auto& node : cutset) {
 		for (size_t i = 0; i < rootNode.solutionVector.size(); i++) // root's solution should be in node's solution.
 			ASSERT_EQ(rootNode.solutionVector[i], node.solutionVector[i]);
@@ -178,7 +183,18 @@ TEST_F(DDSubRootTest, TestNodeLayer) {
 		for (auto id: restrictedDD.tree[i]) {
 			const auto& node = restrictedDD.nodes[id];
 			ASSERT_EQ(node.nodeLayer, i);
+			cout << node.globalLayer << ":" << node.nodeLayer << " ";
 		}
+		cout << endl;
+	}
+	cout << "For exact tree " << endl;
+	for (int i = 0; i < exactDD.tree.size(); i++) {
+		for (const auto id: exactDD.tree[i]) {
+			const auto& node = exactDD.nodes[id];
+			ASSERT_EQ(node.nodeLayer, i);
+			cout << node.globalLayer << ":" << node.nodeLayer << " ";
+		}
+		cout << endl;
 	}
 }
 
@@ -196,6 +212,15 @@ TEST_F(DDSubRootTest, TestCutSet) {
 	for (int i = 0; i < cutset.size(); i++) {
 		ASSERT_TRUE(!cutset[i].solutionVector.empty());
 	}
+}
+
+TEST_F(DDSubRootTest, TestSolution) {
+	// test solution with subroot works.
+	auto solution = restrictedDD.solution();
+	int solution_size = restrictedDD.nodes[0].solutionVector.size()+ restrictedDD.tree.size()-2; // one for root and one for terminal.
+	ASSERT_EQ(solution.size(), solution_size);
+	for (const auto s : solution) cout << s << " ";
+	cout << endl;
 }
 
 // int main(){

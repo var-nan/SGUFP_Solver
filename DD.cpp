@@ -10,7 +10,7 @@
 /**
  * Compiles the decision diagram tree with given node as the root.
  */
-void DD::build(const Network& network, DDNode& node, int index) {
+void DD::build(const Network& network, DDNode& node) {
 	// node parameter should be initialized before calling this function. node should contain states.
 	// the given node parameter will be inserted as the root of the tree.
 
@@ -20,21 +20,20 @@ void DD::build(const Network& network, DDNode& node, int index) {
 	// set the node to the root.
 	vector<ulint> currentLayer; // should be root layer.
 
-	startTree = index; // LATER, size of solution vector of the root might be appropriate
+	startTree = node.globalLayer; // LATER, size of solution vector of the root might be appropriate
 
 	node.incomingArcs.clear();
 	node.outgoingArcs.clear();
 	node.id = 0; // make new node if necessary.
 	node.nodeLayer = 0; // TODO change during branch and bound.
-	// TODO clear other node attributes.
 	nodes.insert(std::make_pair(node.id, node));
 	currentLayer.push_back(node.id);
 	// insert root layer to tree.
 	tree.push_back(currentLayer);
 
-	auto start = arcOrder.begin() + index;
+	auto start = arcOrder.begin() + startTree;
 	auto end = arcOrder.end();
-	index = 0; //
+	uint index = 0; // for node layer.
 
 	for (; start != end; ++start){
 
@@ -46,9 +45,10 @@ void DD::build(const Network& network, DDNode& node, int index) {
 		//const unordered_set<int> temp = stateUpdateMap.at(a);
 		vector<ulint> nextLayer;
 		nextLayer.reserve(MAX_WIDTH);
-		bool isExact = buildNextLayer(currentLayer, nextLayer, ++index, network.hasStateChanged[a+1]);
+		bool isExact = buildNextLayer(currentLayer, nextLayer, network.hasStateChanged[a+1]);
 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		//reduceLayer(nextLayer); // INFO not doing reduction.
+		++index;
 		tree.push_back(nextLayer);
 		currentLayer = std::move(nextLayer);
 	}
@@ -75,6 +75,10 @@ void DD::build(const Network& network, DDNode& node, int index) {
 
 	// generate cutset.
 	cutSet = generateExactCutSet();
+
+	#ifdef DEBUG
+		displayStats();
+	#endif
 }
 
 inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states){
@@ -91,7 +95,7 @@ inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_s
  * Strategies to build the next layer can be modified by changing '_STRATEGY' macro.
  * Returns boolean true if the newly built layer is an exact layer, else returns boolean false.
  */
-bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index, bool stateChangesNext) {
+bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext) {
 	/*
 	 * builds next layer from the given current layer.
 	 * adds new child nodes and outgoing arcs to their respective maps.
@@ -122,7 +126,8 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 					//node.solutionVector = parentNode.solutionVector; // solutions are computed during bulding cutset.
 					//node.solutionVector.emplace_back(decision);
 					node.incomingArcs.emplace_back(arc.id);
-					node.nodeLayer = index;
+					node.nodeLayer = parentNode.nodeLayer+1;
+					node.globalLayer = parentNode.globalLayer+1;
 					parentNode.outgoingArcs.push_back(arc.id);
 					// insert node and arc to map
 					nodes.insert(std::make_pair(node.id, node));
@@ -249,17 +254,24 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 			}
 		}
 		#elif RELAXED_STRATEGY == 1
+
+		#endif
+	}
+	else { // exact tree.
+		#if EXACT_STRATEGY == 1
 		{
 			 // build complete tree with state reduction.
 			 if (stateChangesNext) { // next DD layer will undergo state change, so create only one node.
 
 				 auto nextNodeId = number.getNext();
 				 DDNode newNode{nextNodeId};
-				 newNode.nodeLayer = index;
+				 //newNode.nodeLayer = index;
 
 				 for (const auto id : currentLayer) {
 					 assert(nodes.count(id));
 					 auto &node = nodes[id];
+				 	 newNode.nodeLayer = node.nodeLayer+1;
+				 	 newNode.globalLayer = node.globalLayer+1;
 					 for (auto decision: node.states) {
 						 auto nextId = number.getNext();
 						 DDArc newArc{nextId, id, nextNodeId, decision};
@@ -291,7 +303,8 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 						 if (isInserted) { // create new Node
 							 DDNode newNode{nextId};
 							 DDArc newArc{nextId, id, nextId, decision};
-							 newNode.nodeLayer = index;
+							 newNode.nodeLayer = node.nodeLayer+1;
+						 	 newNode.globalLayer = node.globalLayer+1;
 							 newNode.states = newStates;
 							 newNode.incomingArcs.push_back(nextId);
 							 node.outgoingArcs.push_back(nextId);
@@ -316,6 +329,8 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, i
 				 }
 			 }
 		}
+		#elif EXACT_STRATEGY == 2
+			// without state reduction.
 		#endif
 	}
 	return isExact;
