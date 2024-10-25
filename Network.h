@@ -39,16 +39,16 @@ public:
 
 class NetworkNode {
 public:
-	uint nodeId;
+	uint nodeId=0;
 	//uint inDegree; // INFO removed inDegree, outDegree, inNodeIds, outNodeIds fields.
 	//uint outDegree;
 	vui inNodeIds;
 	vui outNodeIds;
 	vui incomingArcs; // store the id of incoming arcs in the network.
 	vui outgoingArcs; // store the id of outgoing arcs in the network.
-	bool isVbar;
+	bool isVbar = false;
 
-	NetworkNode(){} // INFO this constructor is only for map's [] operator.
+	NetworkNode()= default; // INFO this constructor is only for map's [] operator.
 
 	explicit NetworkNode(uint id):nodeId{id}, isVbar{false} {}
 

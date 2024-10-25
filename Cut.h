@@ -105,4 +105,30 @@ static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, con
 	return y_bar;
 }
 
+class CutContainer {
+	// unordered_set of containers or vector of containers.
+	vector<Cut> cuts;
+	CutType cutType;
+
+public:
+
+	explicit CutContainer(CutType type_): cutType(type_){}
+
+	bool isCutExists(const Cut& cut) {
+		return true; // if cut exists? return true
+	}
+
+	void insertCut(Cut&& cut) {
+
+	}
+
+	void clearContainer() {
+		cuts.clear();
+	}
+
+	~CutContainer() {
+		cuts.clear();
+	}
+};
+
 //#endif //SGUFP_SOLVER_CUT_H

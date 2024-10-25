@@ -62,9 +62,11 @@ Network::Network(const std::string& p_fileName){
 		vector<uint> vBarNodes;
 
 		uint index;
+		isNodeInVbar = vector<bool>(n, false);
 		while (file >> index){
 			vBarNodes.push_back(index);
 			netNodes[index].isVbar = true;
+			isNodeInVbar[index] = true;
 		}
 
 		// populate a1,a2,a3,a4 for subproblem formulation.
