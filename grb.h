@@ -56,8 +56,9 @@ public:
 	~GuroSolver(){
 
 		// clear up the heap.
-		cout << "Cleaning up gurobi variables" << endl;
-
+		#ifdef DEBUG
+			cout << "Cleaning up gurobi variables... ";
+		#endif
 		for (int i = 0; i < n; i++){
 			delete[](beta[i]);
 			delete[](gamma[i]);
@@ -79,6 +80,9 @@ public:
 		delete[](phi);
 		delete[](lambda);
 		delete[](mu);
+		#ifdef DEBUG
+			cout << " Completed." << endl;
+		#endif
 	}
 };
 

@@ -175,6 +175,9 @@ public:
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
+	void applyOptimalityCutRestrictedLatest(const Network& network, const Cut& cut);
+	void applyFeasibilityCutRestrictedLatest(const Network& network, const Cut& cut);
+	double applyOptimalityCutHeuristic(const Network& network, const Cut& cut);
 	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.
 
 	/// node deletion functions ///

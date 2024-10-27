@@ -44,7 +44,7 @@ void DD::build(const Network& network, DDNode& node) {
 		}
 		//const unordered_set<int> temp = stateUpdateMap.at(a);
 		vector<ulint> nextLayer;
-		nextLayer.reserve(MAX_WIDTH);
+		//nextLayer.reserve(MAX_WIDTH);
 		bool isExact = buildNextLayer(currentLayer, nextLayer, network.hasStateChanged[a+1]);
 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		//reduceLayer(nextLayer); // INFO not doing reduction.
@@ -74,7 +74,7 @@ void DD::build(const Network& network, DDNode& node) {
 	tree.push_back(terminalLayer);
 
 	// generate cutset.
-	cutSet = generateExactCutSet();
+	//cutSet = generateExactCutSet(); TODO uncomment this.
 
 	#ifdef DEBUG
 		displayStats();
@@ -623,7 +623,7 @@ static vector<double> helperFunction(const Network &network, const Cut &cut) {
 		auto q = arc.headId;
 
 		const auto& node = network.networkNodes[q];
-		double max = std::numeric_limits<double>::lowest();
+		double max = 0;
 		for (const auto j: node.outNodeIds){
 			auto c = coeff.at(make_tuple(static_cast<int>(i),static_cast<int>(q),static_cast<int>(j)));
 			if (c > max) max = c;
@@ -1148,4 +1148,184 @@ void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
 		terminalState = (arc.weight > terminalState) ? arc.weight : terminalState;
 	}
 	terminalNode.state2 = terminalState;
+}
+
+/**
+ * Applies optimality cut to the restricted DD.
+ * @param network
+ * @param cut
+ */
+void DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut &cut) {
+
+	cout << "Applying optimality cut" << endl;
+
+	nodes[0].state2 = cut.RHS;
+
+	for (size_t layer = 1; layer < tree.size()-1; layer++) {
+
+		auto netArcId = network.processingOrder[startTree+layer-1].second;
+		auto iNetNodeId = network.networkArcs[netArcId].tailId;
+		auto qNetNodeId = network.networkArcs[netArcId].headId;
+
+		for (auto nodeId: tree[layer]) {
+			assert(nodes.count(nodeId)>0);
+			auto& node = nodes[nodeId];
+			auto inArcId = node.incomingArcs[0];
+			assert(arcs.count(inArcId)>0);
+			auto& inArc = arcs[inArcId];
+			const auto& parentNode = nodes[inArc.tail];
+
+			if (parentNode.states.count(inArc.decision)) { //  this condition is unnecesary. since tree is restricted.
+				// jNetNodeId
+				auto jNetNodeId = (inArc.decision != -1) ? network.networkArcs[inArc.decision].headId : 0;
+				inArc.weight = (inArc.decision != -1) ? cut.cutCoeff.at(make_tuple(iNetNodeId, qNetNodeId, jNetNodeId))  :0;
+				node.state2 = inArc.weight + parentNode.state2;
+			}
+		}
+	}
+	// terminal layer
+	assert(nodes.count(tree[tree.size()-1][0])> 0);
+	auto& terminalNode = nodes[tree[tree.size()-1][0]];
+	terminalNode.state2 = 0;
+	for (auto inArcId : terminalNode.incomingArcs) {
+		auto& arc = arcs[inArcId];
+		const auto& parentNode = nodes[arc.tail];
+
+		if (arc.weight > parentNode.state2) {
+			arc.weight = parentNode.state2;
+		}
+		// if(terminalNode.state2 < arc.weight)
+		// 	terminalNode.state2 = arc.weight;
+	}
+	for (auto inArcId : terminalNode.incomingArcs) { // fuse this loop with above.
+		if (terminalNode.state2 < arcs[inArcId].weight) {
+			terminalNode.state2 = arcs[inArcId].weight;
+		}
+	}
+	cout << "Terminal state: " << terminalNode.state2 << endl;
+	cout << "Applied optimality cut for restricted tree" << endl;
+}
+
+/**
+ * Applies feasibility cut on the restricted DD. Removes infeasible solutions from DD.
+ * @param network
+ * @param cut
+ */
+void DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &cut) {
+
+	#ifdef DEBUG
+		cout << "Applying feasibility cut on restricted tree...";
+	#endif
+
+	// TODO: compute partial RHS during branch and bound.
+	nodes[0].state2 = cut.RHS;
+	auto lowerBounds = helperFunction(network, cut);
+	lowerBounds.push_back(0);
+
+	for (size_t layer = 1; layer < tree.size()-1; layer++) {
+
+		auto netArcId = network.processingOrder[startTree+layer-1].second;
+		auto iNetNodeId = network.networkArcs[netArcId].tailId;
+		auto qNetNodeId = network.networkArcs[netArcId].headId;
+
+		vulint nodesToRemove;
+		auto globalPosition = startTree + layer -1;
+
+		for(auto nodeId : tree[layer]) {
+			assert(nodes.count(nodeId)>0);
+			auto& node = nodes[nodeId];
+			auto inArcId = node.incomingArcs[0];
+			assert(arcs.count(inArcId)>0);
+			auto& inArc = arcs[inArcId];
+			const auto& parentNode = nodes[inArc.tail];
+
+			if (inArc.decision != -1) {
+				auto jNetNodeId = network.networkArcs[inArc.decision].headId;
+				inArc.weight = cut.cutCoeff.at(make_tuple(iNetNodeId, qNetNodeId, jNetNodeId));
+				auto newState = parentNode.state2 + inArc.weight;
+				if ((newState + lowerBounds[node.globalLayer]) >= 0)
+					node.state2 = newState;
+				else {
+					node.state2 = newState;
+					nodesToRemove.push_back(nodeId);
+				}
+			}
+			else {
+				inArc.weight = 0;
+				node.state2 = parentNode.state2;
+				if ((node.state2 + lowerBounds[node.globalLayer]) < 0)
+					nodesToRemove.push_back(nodeId);
+			}
+		}
+
+		if (!nodesToRemove.empty()) {
+			#ifdef DEBUG
+				cout << " # of nodes that are infeasible in layer "<< layer << " : " << nodesToRemove.size() << endl;
+			#endif
+			if (nodesToRemove.size() == tree[layer].size()) {
+				#ifdef DEBUG
+					cout << "Removing entire layer.. " << layer << endl;
+				#endif
+				// set isFeasible flag to false
+				isInFeasible = true;
+				// TODO do not remove entire tree/nodes, set flags and discard current semi root.
+			}
+			batchRemoveNodes(nodesToRemove);
+		}
+	}
+	#ifdef DEBUG
+		cout<< " Completed." << endl;
+	#endif
+}
+
+
+double DD::applyOptimalityCutHeuristic(const Network &network, const Cut &cut) {
+	#ifdef DEBUG
+		cout << "Applying optimality cut heuristic" << endl;
+	#endif
+	nodes[0].state2 = cut.RHS; // TODO partial rhs during branch and bound.
+
+	for (size_t layer = 1; layer < tree.size()-1; layer++) {
+		auto netArcId = network.processingOrder[startTree+layer-1].second;
+		auto iNetNodeId = network.networkArcs[netArcId].tailId;
+		auto qNetNodeId = network.networkArcs[netArcId].headId;
+
+		for (auto nodeId : tree[layer]) {
+			assert(nodes.count(nodeId)>0);
+			auto& node = nodes[nodeId];
+			double newState = std::numeric_limits<double>::lowest();
+
+			for (auto inArcId : node.incomingArcs) {
+				assert(arcs.count(inArcId)> 0);
+				auto& arc = arcs[inArcId];
+				assert(nodes.count(arc.tail)>0);
+				auto& parentNode = nodes[arc.tail];
+				auto jNetNodeId = (arc.decision != -1) ? network.networkArcs[arc.decision].headId : 0;
+				arc.weight = (arc.decision != -1) ? cut.cutCoeff.at(make_tuple(iNetNodeId, qNetNodeId, jNetNodeId))  :0;
+				if (newState <= (arc.weight + parentNode.state2)) {
+					newState = arc.weight + parentNode.state2;
+				}
+			}
+			node.state2 = newState;
+		}
+	}
+
+	double terminalState = std::numeric_limits<double>::lowest();
+
+	auto& terminalNode = nodes[tree[tree.size()-1][0]];
+	for (auto inArcId : terminalNode.incomingArcs) {
+		auto& inArc = arcs[inArcId];
+		auto& parentNode = nodes[inArc.tail];
+		if (inArc.weight > parentNode.state2) {
+			inArc.weight = parentNode.state2;
+		}
+	}
+	for (auto inArcId : terminalNode.incomingArcs) {
+		if (terminalState < arcs[inArcId].weight) {
+			terminalState = arcs[inArcId].weight;
+		}
+	}
+	terminalNode.state2 = terminalState;
+	cout << "Applied Optimality cut heuristically" << endl;
+	return terminalState;
 }

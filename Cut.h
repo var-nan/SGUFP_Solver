@@ -7,6 +7,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <map>
 #include <tuple>
 
 using namespace std;
@@ -47,8 +48,8 @@ struct cut_tuple_equal{
 	}
 };
 
-typedef unordered_map<tuple<int,int,int>, double, cut_tuple_hash, cut_tuple_equal> CutCoefficients;
-
+// typedef unordered_map<tuple<int,int,int>, double, cut_tuple_hash, cut_tuple_equal> CutCoefficients;
+typedef map<tuple<int,int,int>,double> CutCoefficients; // LATER: change to unordered_map
 class Cut{
 public:
 	bool operator==(const Cut& cut2) const {
@@ -99,7 +100,7 @@ static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, con
 			auto i = network.networkArcs[arcId].tailId;
 			auto j = network.networkArcs[w_solution[a]].headId;
 			y_bar[i][q][j] = 1;
-			cout << "i: " << i << ", q: " << q << ", j " << j << endl;
+			//cout << "i: " << i << ", q: " << q << ", j " << j << endl;
 		}
 	}
 	return y_bar;

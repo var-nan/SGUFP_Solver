@@ -77,11 +77,11 @@ public:
 	// if key is not present in the stateUpdateMap, then no need to change the state at the respective arc.
 
 	// different sets of nodes based on node's incoming and outgoing neighbors.
+	vector<bool> isNodeInVbar;
 	vui A1;
 	vui A2;
 	vui A3;
 	vui A4;
-	vector<bool> isNodeInVbar;
 	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
