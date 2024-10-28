@@ -40,6 +40,16 @@ protected:
 	}
 };
 
+TEST_F(DDTest, TestRestrictedDDIncArcs) {
+	for (size_t layer = 1; layer < restrictedDD.tree.size()-1; layer++) {
+
+		for (auto id: restrictedDD.tree[layer]) {
+			// each node has only one incoming arc
+			ASSERT_TRUE( restrictedDD.nodes[id].incomingArcs.size() == 1);
+		}
+	}
+}
+
 TEST_F(DDTest, TestRestrictedDD) {
 	for (const auto layer : restrictedDD.tree) {
 		cout << layer.size() << " ";

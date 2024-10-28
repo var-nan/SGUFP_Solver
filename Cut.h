@@ -48,9 +48,28 @@ struct cut_tuple_equal{
 	}
 };
 
+struct unordered_map_hash {
+	/*
+	 * Hash value of the unordered_map<tuple<int,int,int>>, double>
+	 */
+	size_t operator()(const unordered_map<tuple<int,int,int>, double>& coeff) {
+		size_t seed = 0;
+		for (const auto& pair: coeff) {
+			// get hash of tuple
+			auto h1 = cut_tuple_hash()(pair.first);
+			auto h2 = hash<double>{}(pair.second);
+
+			// TODO; use h1 and h2 in seed somehow.
+			// naive hashing (INFO highly inefficient)
+		}
+		return seed;
+	}
+};
+
 // typedef unordered_map<tuple<int,int,int>, double, cut_tuple_hash, cut_tuple_equal> CutCoefficients;
 typedef map<tuple<int,int,int>,double> CutCoefficients; // LATER: change to unordered_map
 class Cut{
+	size_t hash;
 public:
 	bool operator==(const Cut& cut2) const {
 		return (this->cutType == cut2.cutType) && (this->RHS == cut2.RHS) &&
@@ -61,12 +80,20 @@ public:
 		return *this == cut2;
 	}
 
+	size_t getHash(){return hash;}
+
 	CutType cutType;
 	double RHS;
 	CutCoefficients cutCoeff;
 
+	[[nodiscard]] double get(uint a, uint b, uint c) const {
+		return cutCoeff.at(make_tuple(a,b,c));
+	}
+
 	Cut(CutType cutType_, double RHS_, CutCoefficients cutCoeff_):
 		cutType{cutType_}, RHS{RHS_}, cutCoeff{std::move(cutCoeff_)}{
+			// compute hash here.
+
 
 	}
 };
@@ -108,11 +135,16 @@ static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, con
 
 class CutContainer {
 	// unordered_set of containers or vector of containers.
+public:
 	vector<Cut> cuts;
 	CutType cutType;
 
 public:
 
+	 // begin(){ return cuts.begin();};
+	 void doSomething() {
+		auto it = cuts.begin();
+	}
 	explicit CutContainer(CutType type_): cutType(type_){}
 
 	bool isCutExists(const Cut& cut) {

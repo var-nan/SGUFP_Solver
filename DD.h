@@ -50,6 +50,7 @@
 #include <set>
 #include <algorithm>
 #include <ctime>
+#include <utility>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
@@ -89,6 +90,8 @@ public:
 
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
 	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
+	DDNode(ulint id, uint layer, vi states_, vi solutionVector_): id{0}, incomingArcs{}, outgoingArcs{},
+					states{states_.begin(), states_.end()}, solutionVector(std::move(solutionVector_)), state2{0}{}
 
 	~DDNode(){
 		incomingArcs.clear();
@@ -178,6 +181,7 @@ public:
 	void applyOptimalityCutRestrictedLatest(const Network& network, const Cut& cut);
 	void applyFeasibilityCutRestrictedLatest(const Network& network, const Cut& cut);
 	double applyOptimalityCutHeuristic(const Network& network, const Cut& cut);
+	bool applyFeasibilityCutHeuristic(const Network& network, const Cut& cut);
 	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.
 
 	/// node deletion functions ///

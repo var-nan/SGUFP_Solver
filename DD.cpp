@@ -45,7 +45,7 @@ void DD::build(const Network& network, DDNode& node) {
 		//const unordered_set<int> temp = stateUpdateMap.at(a);
 		vector<ulint> nextLayer;
 		//nextLayer.reserve(MAX_WIDTH);
-		bool isExact = buildNextLayer(currentLayer, nextLayer, network.hasStateChanged[a+1]);
+		isExact = buildNextLayer(currentLayer, nextLayer, network.hasStateChanged[a+1]);
 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		//reduceLayer(nextLayer); // INFO not doing reduction.
 		++index;
@@ -1328,4 +1328,48 @@ double DD::applyOptimalityCutHeuristic(const Network &network, const Cut &cut) {
 	terminalNode.state2 = terminalState;
 	cout << "Applied Optimality cut heuristically" << endl;
 	return terminalState;
+}
+
+
+bool DD::applyFeasibilityCutHeuristic(const Network &network, const Cut &cut) {
+#ifdef DEBUG
+	cout << "Applying feasibility cut heuristic" << endl;
+#endif
+
+	nodes[0].state2 = cut.RHS; // LATER incorporate semiroot partial solution
+
+	const auto& processingOrder = network.processingOrder;
+	const auto& netArcs = network.networkArcs;
+	//const auto& netNodes = network.networkNodes;
+
+	for (size_t layer = 1; layer < tree.size() -1; layer++) {
+		auto theArc = network.processingOrder[startTree+layer-1].second;
+		const auto& iNetNode = netArcs[theArc].tailId;
+		const auto& qNetNode = netArcs[theArc].headId;
+
+		for (auto nodeId : tree[layer]) {
+			double newState = std::numeric_limits<double>::lowest();
+			auto& node = nodes[nodeId];
+			for (auto inArcId : node.incomingArcs) {
+				auto& inArc = arcs[inArcId];
+				const auto& parentNode = nodes[inArc.tail];
+				const auto& jNetNode = (inArc.decision != -1) ? network.networkArcs[inArc.decision].headId : 0;
+				inArc.weight = (inArc.decision != -1) ? cut.get(iNetNode, qNetNode, jNetNode) : 0;
+				newState = (inArc.weight + parentNode.state2 > newState) ? inArc.weight + parentNode.state2 : newState;
+			}
+			node.state2 = newState;
+		}
+	}
+	// terminal layer
+	double state = std::numeric_limits<double>::lowest();
+	auto terminalNode = nodes[tree[tree.size()-1][0]];
+	for (auto inArcId : terminalNode.incomingArcs) {
+		auto& arc = arcs[inArcId];
+		const auto& parentNode = nodes[arc.tail];
+		arc.weight = (arc.weight > parentNode.state2) ? parentNode.state2 : arc.weight;
+		state = (state < arc.weight) ? arc.weight : state;
+	}
+
+	terminalNode.state2 = state;
+	return (state >= 0);
 }
