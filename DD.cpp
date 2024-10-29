@@ -588,24 +588,24 @@ DDNode copyNode(const DDNode& node) {
  * Computes and returns a vector of nodes that are in exact cutset.
  * @return vector of nodes that are in exact cutset.
  */
-vector<DDNode> DD::generateExactCutSet() const {
+vector<Node_t> DD::generateExactCutSet() const {
 	/*
 	 * returns a vector containing the nodes in the exact layer as cutset.
 	 */
-	//vector<DDNode> cutsetNodes(tree[exactLayer-1].size());
-	vector<DDNode> cutsetNodes;
+	vector<Node_t> cutsetNodes;
 	cutsetNodes.reserve(MAX_WIDTH);
 
 	for (const auto id: tree[exactLayer]){
 		const auto& node = nodes.at(id);
-		DDNode newNode = copyNode(node);
-		newNode.solutionVector = computePathForExactNode(id);
-		cutsetNodes.emplace_back(newNode);
+		vi states{node.states.begin(), node.states.end()};
+		cutsetNodes.emplace_back(states, computePathForExactNode(id),
+						std::numeric_limits<double>::lowest(),std::numeric_limits<double>::lowest(),
+						node.globalLayer);
 	}
 	return cutsetNodes;
 }
 
-vector<DDNode> DD::getExactCutSet() const {
+vector<Node_t> DD::getExactCutSet() {
 	return cutSet;
 }
 

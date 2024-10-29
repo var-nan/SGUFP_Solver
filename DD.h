@@ -58,6 +58,21 @@ using namespace std;
 
 typedef vector<ulint> vulint;
 
+class Node_t {
+public:
+    vi states;
+    vi solutionVector;
+    double lb;
+    double ub;
+    uint globalLayer;
+
+    Node_t() = default;
+
+    Node_t(vi states_, vi solutionVector_, double lb_, double ub_, uint globalLayer_):
+        states{std::move(states_)}, solutionVector{std::move(solutionVector_)},
+        lb{lb_}, ub{ub_}, globalLayer{globalLayer_}{}
+} ;
+
 /*
  * INFO Ids of DDArc and DDNode are unsigned long ints.
  */
@@ -138,7 +153,7 @@ private:
 	bool isExact = true;
 	bool isInFeasible = false;
 	bool isTreeDeleted = false; // true if the entire tree is deleted while refinement.
-	vector<DDNode> cutSet;
+	vector<Node_t> cutSet;
 	// info below two variables should be updated during tree compilation.
 	uint startTree = 0; // the start position of the subtree in the global tree.
 	int exactLayer = 0; // the position of exact layer with respect to root of subtree.
@@ -146,7 +161,7 @@ private:
 
 	void updateTree();
 	[[nodiscard]] vi computePathForExactNode(ulint nodeId) const;
-	[[nodiscard]] vector<DDNode> generateExactCutSet() const;
+	[[nodiscard]] vector<Node_t> generateExactCutSet() const;
 
 	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
 
@@ -199,7 +214,7 @@ public:
 	/// getter functions ///
 	int getExactLayer() const { return exactLayer;}
 	int getGlobalPosition() const { return startTree; }
-	[[nodiscard]] vector<DDNode> getExactCutSet() const;
+	[[nodiscard]] vector<Node_t> getExactCutSet();
 	vi solution();
 	bool isTreeExact() const {return isExact;}
 

@@ -24,7 +24,9 @@ Pavani NodeExplorer::process( const Network& network, Node_t node) {
     relaxedDD1.build(network, root1);
     // refine tree with feasibility cuts
     for (const auto& cut: feasibilityCuts.cuts) {
-        if (relaxedDD1.applyFeasibilityCutHeuristic(network, cut)) return; // get next node
+        // if any of the cuts make the tree infeasible? get another node to explore.
+        if (relaxedDD1.applyFeasibilityCutHeuristic(network, cut))
+            return {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), {}, false}; // get next node
     }
 
     DDNode root2 {0, node.globalLayer, node.states, node.solutionVector};
@@ -34,7 +36,11 @@ Pavani NodeExplorer::process( const Network& network, Node_t node) {
 
     // apply feasibility cuts on restricted DD.
     for (const auto& cut: feasibilityCuts.cuts) {
-        restrictedDD.applyFeasibilityCutRestrictedLatest(network, cut);
+        if(!restrictedDD.applyFeasibilityCutRestrictedLatest(network, cut)) {
+            // tree is infeasible. a layer is removed. get cutset and set lb, ub to root's
+            auto cutSet = restrictedDD.getExactCutSet();
+
+        }
         // TODO handle case if the entire tree is removed or not.
     }
 
