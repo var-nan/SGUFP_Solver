@@ -137,7 +137,7 @@ private:
 	Type type;
 	bool isExact = true;
 	bool isInFeasible = false;
-	bool isTreeDeleted = false;
+	bool isTreeDeleted = false; // true if the entire tree is deleted while refinement.
 	vector<DDNode> cutSet;
 	// info below two variables should be updated during tree compilation.
 	uint startTree = 0; // the start position of the subtree in the global tree.
@@ -178,8 +178,9 @@ public:
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
-	void applyOptimalityCutRestrictedLatest(const Network& network, const Cut& cut);
-	void applyFeasibilityCutRestrictedLatest(const Network& network, const Cut& cut);
+
+	double applyOptimalityCutRestrictedLatest(const Network &network, const Cut &cut);
+	bool applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &cut);
 	double applyOptimalityCutHeuristic(const Network& network, const Cut& cut);
 	bool applyFeasibilityCutHeuristic(const Network& network, const Cut& cut);
 	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.

@@ -1155,10 +1155,10 @@ void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
  * @param network
  * @param cut
  */
-void DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut &cut) {
-
+double DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut &cut) {
+	#ifdef DEBUG
 	cout << "Applying optimality cut" << endl;
-
+	#endif
 	nodes[0].state2 = cut.RHS;
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
@@ -1202,8 +1202,11 @@ void DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut &c
 			terminalNode.state2 = arcs[inArcId].weight;
 		}
 	}
+	#ifdef DEBUG
 	cout << "Terminal state: " << terminalNode.state2 << endl;
 	cout << "Applied optimality cut for restricted tree" << endl;
+	#endif
+	return terminalNode.state2;
 }
 
 /**
@@ -1211,7 +1214,7 @@ void DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut &c
  * @param network
  * @param cut
  */
-void DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &cut) {
+bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &cut) {
 
 	#ifdef DEBUG
 		cout << "Applying feasibility cut on restricted tree...";
@@ -1222,13 +1225,16 @@ void DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 	auto lowerBounds = helperFunction(network, cut);
 	lowerBounds.push_back(0);
 
+	vulint nodesToRemove;
+	// nodesToRemove.reserve(MAX_WIDTH);
+
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
 
 		auto netArcId = network.processingOrder[startTree+layer-1].second;
 		auto iNetNodeId = network.networkArcs[netArcId].tailId;
 		auto qNetNodeId = network.networkArcs[netArcId].headId;
 
-		vulint nodesToRemove;
+		nodesToRemove.clear(); // not using lower bound heuristic
 		auto globalPosition = startTree + layer -1;
 
 		for(auto nodeId : tree[layer]) {
@@ -1242,40 +1248,52 @@ void DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 			if (inArc.decision != -1) {
 				auto jNetNodeId = network.networkArcs[inArc.decision].headId;
 				inArc.weight = cut.cutCoeff.at(make_tuple(iNetNodeId, qNetNodeId, jNetNodeId));
-				auto newState = parentNode.state2 + inArc.weight;
-				if ((newState + lowerBounds[node.globalLayer]) >= 0)
-					node.state2 = newState;
-				else {
-					node.state2 = newState;
-					nodesToRemove.push_back(nodeId);
-				}
+				node.state2 = parentNode.state2 + inArc.weight;
+				// if ((newState + lowerBounds[node.globalLayer]) >= 0)
+				// 	node.state2 = newState;
+				// else {
+				// 	node.state2 = newState;
+				// 	nodesToRemove.push_back(nodeId);
+				// }
 			}
 			else {
 				inArc.weight = 0;
 				node.state2 = parentNode.state2;
-				if ((node.state2 + lowerBounds[node.globalLayer]) < 0)
-					nodesToRemove.push_back(nodeId);
+				// if ((node.state2 + lowerBounds[node.globalLayer]) < 0)
+				// 	nodesToRemove.push_back(nodeId);
 			}
+			if(node.state2 < 0) nodesToRemove.push_back(node.id);
 		}
 
-		if (!nodesToRemove.empty()) {
-			#ifdef DEBUG
-				cout << " # of nodes that are infeasible in layer "<< layer << " : " << nodesToRemove.size() << endl;
-			#endif
-			if (nodesToRemove.size() == tree[layer].size()) {
-				#ifdef DEBUG
-					cout << "Removing entire layer.. " << layer << endl;
-				#endif
-				// set isFeasible flag to false
-				isInFeasible = true;
-				// TODO do not remove entire tree/nodes, set flags and discard current semi root.
-			}
-			batchRemoveNodes(nodesToRemove);
-		}
+		// if (!nodesToRemove.empty()) {
+		// 	#ifdef DEBUG
+		// 		cout << " # of nodes that are infeasible in layer "<< layer << " : " << nodesToRemove.size() << endl;
+		// 	#endif
+		// 	if (nodesToRemove.size() == tree[layer].size()) {
+		// 		#ifdef DEBUG
+		// 			cout << "Removing entire layer.. " << layer << endl;
+		// 		#endif
+		// 		// set isFeasible flag to false
+		// 		isInFeasible = true;
+		// 		// TODO do not remove entire tree/nodes, set flags and discard current semi root.
+		// 	}
+		// 	batchRemoveNodes(nodesToRemove);
+		// }
 	}
+	if (nodesToRemove.size() == tree[tree.size()-1].size()) {
+		// removing entire layer removes entire tree. update flags instead
+		#ifdef DEBUG
+		cout << endl << "Entire layer is deleted. DD is infeasible." << endl;
+		#endif
+		isInFeasible = true;
+		return false;
+	}
+	if (!nodesToRemove.empty()) batchRemoveNodes(nodesToRemove);
+
 	#ifdef DEBUG
 		cout<< " Completed." << endl;
 	#endif
+	return true;
 }
 
 
