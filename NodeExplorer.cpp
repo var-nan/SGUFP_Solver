@@ -6,39 +6,43 @@
 #include "DD.h"
 
 
-void NodeExplorer::process( Node_t node) {
+Pavani NodeExplorer::process( const Network& network, Node_t node) {
 
-    DDNode root1 {0, node.globalLayer, node.states, node.solutionVector};
-    CutContainer globalOptCuts{OPTIMALITY};
-    CutContainer globalFeasCuts{FEASIBILITY};
+  	/*
+		node should be eligible for processing.
+  	 */
 
-    CutContainer optCuts{OPTIMALITY};
-    CutContainer feasCuts{FEASIBILITY};
+    // check if restricted tree compiled with this node is exact?
 
     double lowerBound;
     double upperBound;
 
     // phase 1: refine relaxed tree with global feasibility cuts.
     // TODO: ASAP create copy of root for multiple DD.
+    DDNode root1 {0, node.globalLayer, node.states, node.solutionVector};
     DD relaxedDD1{RELAXED};
     relaxedDD1.build(network, root1);
-    // refine tree
-    bool inFeasible = false;
-    for (const auto& cut: globalFeasCuts.cuts) {
-
-        relaxedDD1.applyFeasibilityCutRestricted(network, cut);
-
-        if (inFeasible) {
-            // exit and get next node.
-            return;
-        }
+    // refine tree with feasibility cuts
+    for (const auto& cut: feasibilityCuts.cuts) {
+        if (relaxedDD1.applyFeasibilityCutHeuristic(network, cut)) return; // get next node
     }
 
     DDNode root2 {0, node.globalLayer, node.states, node.solutionVector};
-
     // build restricted DD
     DD restrictedDD{RESTRICTED};
     restrictedDD.build(network, root2);
+
+    // apply feasibility cuts on restricted DD.
+    for (const auto& cut: feasibilityCuts.cuts) {
+        restrictedDD.applyFeasibilityCutRestrictedLatest(network, cut);
+        // TODO handle case if the entire tree is removed or not.
+    }
+
+    // apply optimality cuts on restricted DD.
+    for (const auto& cut: optimalityCuts.cuts) {
+        restrictedDD.applyOptimalityCutRestrictedLatest(network, cut);
+        // TODO handle case if the LB is less than the global LB, break and output cutset.
+    }
 
     // refinement
 

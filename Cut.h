@@ -135,6 +135,15 @@ static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, con
 
 class CutContainer {
 	// unordered_set of containers or vector of containers.
+	#ifdef DEBUG
+	void displayCutStats() const {
+		string type = (cutType == FEASIBILITY) ? "FEASIBILITY" : "OPTIMALITY";
+		cout << "********************** Cut stats for nerds ************************" << endl;
+		cout << "Number of " << type <<" cuts: " << cuts.size() << endl;
+		cout << "*******************************************************************" << endl;
+	}
+	#endif
+
 public:
 	vector<Cut> cuts;
 	CutType cutType;
@@ -160,6 +169,10 @@ public:
 	}
 
 	~CutContainer() {
+
+		#ifdef DEBUG
+	 	displayCutStats();
+		#endif
 		cuts.clear();
 	}
 };
