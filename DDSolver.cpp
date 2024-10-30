@@ -9,13 +9,13 @@ void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     q.insert(q.end(), nodes.begin(), nodes.end());
 }
 
-void DDSolver::NodeQueue::pushNode(Node_t&& node) {
+void DDSolver::NodeQueue::pushNode(Node_t node) {
     q.push_back(node);
 }
 
 Node_t DDSolver::NodeQueue::getNode() {
-    auto node = q.back();
-    q.pop_back();
+    // auto node = q.back(); q.pop_back();
+    auto node = q.front(); q.erase(q.begin());
     return node;
 }
 
@@ -33,6 +33,17 @@ Node_t DDSolver::getNode() {
     return nodeQueue.getNode();
 }
 
+void DDSolver::initialize() {
+    // place root node to queue
+    Node_t node;
+
+    node.lb = std::numeric_limits<double>::lowest();
+    node.ub = std::numeric_limits<double>::max();
+    node.globalLayer = 0;
+
+    nodeQueue.pushNode(node);
+}
+
 void DDSolver::startSolve(const Network& network) {
 
     /*
@@ -48,14 +59,17 @@ void DDSolver::startSolve(const Network& network) {
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
         Node_t node = nodeQueue.getNode();
+        cout << "Node processor procesing node from layer " << node.globalLayer << endl;
 
-        if (node.ub < getLB()) {
+        if (node.ub < getOptimalLB()) {
             #ifdef DEBUG
             cout << "selected node's upper bound < optimal lower bound." << endl;
             numNodesDiscarded++;
             #endif
+            cout << "Pruned by bound" << endl;
             continue; // look for another
         }
+
         // start node processor
         auto result = explorer.process(network, node); // use co-routines to update globalLB in between.
 
@@ -65,26 +79,30 @@ void DDSolver::startSolve(const Network& network) {
         #endif
         // either this node returns cutset or nothing.
         if (result.success) {
-            if (result.lb > getLB()) {
+            if (result.lb > getOptimalLB()) {
                 setLB(result.lb);
-                nodeQueue.pushNodes(result.nodes);
+                cout << "Global Lower bound so far. ------" << getOptimalLB() << endl;
+
             }
+             nodeQueue.pushNodes(result.nodes);
         }
     }
 
     #ifdef DEBUG
     assert(nodeQueue.empty());
     cout << "Work queue is empty." << endl;
-    cout << "Optimal Solution: " << optimalLB << endl;
+    cout << "Optimal Solution: " << getOptimalLB() << endl;
     displayStats();
     #endif
+    cout << "Work queue is empty." << endl;
+    cout << "Optimal Solution: " << getOptimalLB() << endl;
 }
 
 void DDSolver::start() {
     // startSolve();
 }
 
-double DDSolver::getLB() const{
+double DDSolver::getOptimalLB() const{
     return optimalLB;
 }
 

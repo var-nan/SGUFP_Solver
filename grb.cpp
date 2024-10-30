@@ -365,14 +365,14 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 		}
 	}
 	//// constraint number 9 ////
-	// for (auto arcID1 : network.A4) {
-	// 	GRBLinExpr LHS = 0;
-	// 	uint q = network.networkArcs[arcID1].headId;
-	// 	uint i = network.networkArcs[arcID1].tailId;
-	// 	uint r_iq = network.networkArcs[arcID1].rewards[scenario];
-	// 	LHS += -beta[i][q] + gamma[i][q];
-	// 	model.addConstr(LHS >= r_iq, "7j");
-	// }
+	for (auto arcID1 : network.A4) {
+		GRBLinExpr LHS = 0;
+		uint q = network.networkArcs[arcID1].headId;
+		uint i = network.networkArcs[arcID1].tailId;
+		uint r_iq = network.networkArcs[arcID1].rewards[scenario];
+		LHS += -beta[i][q] + gamma[i][q];
+		model.addConstr(LHS >= r_iq, "7j");
+	}
 	model.update();
 
 	// run model.

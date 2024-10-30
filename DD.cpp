@@ -10,7 +10,7 @@
 /**
  * Compiles the decision diagram tree with given node as the root.
  */
-void DD::build(const Network& network, DDNode& node) {
+optional<vector<Node_t>> DD::build(const Network &network, DDNode &node) {
 	// node parameter should be initialized before calling this function. node should contain states.
 	// the given node parameter will be inserted as the root of the tree.
 
@@ -79,6 +79,9 @@ void DD::build(const Network& network, DDNode& node) {
 	#ifdef DEBUG
 		displayStats();
 	#endif
+	if (exactLayer == index-1) return {};
+	return generateExactCutSet();
+	// return (exactLayer == index+1) ? generateExactCutSet() : std::nullopt;
 }
 
 inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states){
@@ -780,7 +783,7 @@ void DD::updateTree() {
 		return false;
 	};
 	#ifdef DEBUG
-		cout << "Removing " << n_removed << " nodes from tree." << endl;
+		// cout << "Removing " << n_removed << " nodes from tree." << endl;
 	#endif
 	for (int i = tree.size()-2; i > 0; i--){ // iterate every layer until all deleted Ids are removed from tree.
 		if (n_removed){
@@ -1159,7 +1162,24 @@ double DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut 
 	#ifdef DEBUG
 	cout << "Applying optimality cut" << endl;
 	#endif
-	nodes[0].state2 = cut.RHS;
+
+	const auto& processingOrder = network.processingOrder;
+	const auto& netArcs = network.networkArcs;
+
+	// compute justified RHS for the sub root node.
+	auto& rootNode = nodes[0];
+	auto justifiedRHS = cut.RHS;
+	for (size_t i = 0; i < rootNode.solutionVector.size(); i++) {
+		auto decision = rootNode.solutionVector[i];
+		if (decision != -1) {
+			auto netArcId = processingOrder[i].second;
+			uint iNetId = netArcs[netArcId].tailId;
+			uint qNetId = netArcs[netArcId].headId;
+			uint jNetId = netArcs[decision].headId;
+			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
+		}
+	}
+	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
 
@@ -1220,10 +1240,27 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 		cout << "Applying feasibility cut on restricted tree...";
 	#endif
 
-	// TODO: compute partial RHS during branch and bound.
-	nodes[0].state2 = cut.RHS;
-	auto lowerBounds = helperFunction(network, cut);
-	lowerBounds.push_back(0);
+	const auto& processingOrder = network.processingOrder;
+	const auto& netArcs = network.networkArcs;
+
+	// compute justified RHS for the sub root node.
+	auto& rootNode = nodes[0];
+	auto justifiedRHS = cut.RHS;
+	for (size_t i = 0; i < rootNode.solutionVector.size(); i++) {
+		auto decision = rootNode.solutionVector[i];
+		if (decision != -1) {
+			auto netArcId = processingOrder[i].second;
+			uint iNetId = netArcs[netArcId].tailId;
+			uint qNetId = netArcs[netArcId].headId;
+			uint jNetId = netArcs[decision].headId;
+			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
+		}
+	}
+	rootNode.state2 = justifiedRHS;
+	cout << "Justified RHS for this cut: " << justifiedRHS << endl;
+
+	// auto lowerBounds = helperFunction(network, cut);
+	// lowerBounds.push_back(0);
 
 	vulint nodesToRemove;
 	// nodesToRemove.reserve(MAX_WIDTH);
@@ -1262,7 +1299,7 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 				// if ((node.state2 + lowerBounds[node.globalLayer]) < 0)
 				// 	nodesToRemove.push_back(nodeId);
 			}
-			if(node.state2 < 0) nodesToRemove.push_back(node.id);
+			if(node.state2 < -0.5) nodesToRemove.push_back(node.id);
 		}
 
 		// if (!nodesToRemove.empty()) {
@@ -1280,7 +1317,8 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 		// 	batchRemoveNodes(nodesToRemove);
 		// }
 	}
-	if (nodesToRemove.size() == tree[tree.size()-1].size()) {
+	cout << "\nNumber of nodes to be removed in last layer: " << nodesToRemove.size() << endl;
+	if (nodesToRemove.size() == tree[tree.size()-2].size()) {
 		// removing entire layer removes entire tree. update flags instead
 		#ifdef DEBUG
 		cout << endl << "Entire layer is deleted. DD is infeasible." << endl;
@@ -1301,7 +1339,24 @@ double DD::applyOptimalityCutHeuristic(const Network &network, const Cut &cut) {
 	#ifdef DEBUG
 		cout << "Applying optimality cut heuristic" << endl;
 	#endif
-	nodes[0].state2 = cut.RHS; // TODO partial rhs during branch and bound.
+
+	const auto& processingOrder = network.processingOrder;
+	const auto& netArcs = network.networkArcs;
+
+	// compute justified RHS for the sub root node.
+	auto& rootNode = nodes[0];
+	auto justifiedRHS = cut.RHS;
+	for (size_t i = 0; i < rootNode.solutionVector.size(); i++) {
+		auto decision = rootNode.solutionVector[i];
+		if (decision != -1) {
+			auto netArcId = processingOrder[i].second;
+			uint iNetId = netArcs[netArcId].tailId;
+			uint qNetId = netArcs[netArcId].headId;
+			uint jNetId = netArcs[decision].headId;
+			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
+		}
+	}
+	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
 		auto netArcId = network.processingOrder[startTree+layer-1].second;
@@ -1344,21 +1399,40 @@ double DD::applyOptimalityCutHeuristic(const Network &network, const Cut &cut) {
 		}
 	}
 	terminalNode.state2 = terminalState;
-	cout << "Applied Optimality cut heuristically" << endl;
+	// cout << "Applied Optimality cut heuristically" << endl;
 	return terminalState;
 }
 
-
+/**
+ * Applies given feasiblity cut on  the DD. Returns boolean true if the
+ * DD remains feasible after applying the cut, boolean false otherwise.
+ * This function will not prune solutions and should only be applied on the relaxed tree.
+ *
+ * @param network
+ * @param cut
+ * @return
+ */
 bool DD::applyFeasibilityCutHeuristic(const Network &network, const Cut &cut) {
-#ifdef DEBUG
+	#ifdef DEBUG
 	cout << "Applying feasibility cut heuristic" << endl;
-#endif
-
-	nodes[0].state2 = cut.RHS; // LATER incorporate semiroot partial solution
-
+	#endif
 	const auto& processingOrder = network.processingOrder;
 	const auto& netArcs = network.networkArcs;
-	//const auto& netNodes = network.networkNodes;
+
+	// compute justified RHS for the sub root node.
+	auto& rootNode = nodes[0];
+	auto justifiedRHS = cut.RHS;
+	for (size_t i = 0; i < rootNode.solutionVector.size(); i++) {
+		auto decision = rootNode.solutionVector[i];
+		if (decision != -1) {
+			auto netArcId = processingOrder[i].second;
+			uint iNetId = netArcs[netArcId].tailId;
+			uint qNetId = netArcs[netArcId].headId;
+			uint jNetId = netArcs[decision].headId;
+			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
+		}
+	}
+	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size() -1; layer++) {
 		auto theArc = network.processingOrder[startTree+layer-1].second;

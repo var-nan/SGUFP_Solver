@@ -8,18 +8,22 @@
 #include "DD.h"
 #include "Cut.h"
 #include "gurobi_c++.h"
+#include "grb.h"
 // #include "DDSolver.h"
 
 extern const Network network;
 
 
 
-class Pavani{
+class OutObject{
 public:
     double lb;
     double ub;
     vector<Node_t> nodes;
     bool success;
+
+    OutObject(double lb_, double ub_, vector<Node_t> nodes_, bool s) :
+        lb{lb_}, ub{ub_}, nodes{std::move(nodes_)}, success{s}{}
 };
 
 class NodeExplorer {
@@ -34,9 +38,10 @@ public:
 
     NodeExplorer() : feasibilityCuts{FEASIBILITY}, optimalityCuts{OPTIMALITY} {
         // env = GRBEnv();
+        env.set(GRB_IntParam_OutputFlag,0);
     }
 
-    Pavani process(const Network& network, Node_t node);
+    OutObject process(const Network& network, Node_t node);
 
     void doSomething() {
 

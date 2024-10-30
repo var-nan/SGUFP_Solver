@@ -25,7 +25,7 @@ class DDSolver {
         NodeQueue() = default;
 
         void pushNodes(vector<Node_t> nodes);
-        void pushNode(Node_t&& node);
+        void pushNode(Node_t node);
         Node_t getNode();
         vector<Node_t> getNodes(size_t n);
 
@@ -58,8 +58,10 @@ public:
     DDSolver():optimalLB{std::numeric_limits<double>::lowest()} { }
     [[nodiscard]] Node_t getNode();
 
-    [[nodiscard]] double getLB() const;
+    [[nodiscard]] double getOptimalLB() const;
     void setLB(double lb);
+
+    void initialize();
     void start();
     void startSolve(const Network& network);
 };

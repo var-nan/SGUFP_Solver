@@ -71,7 +71,7 @@ typedef map<tuple<int,int,int>,double> CutCoefficients; // LATER: change to unor
 class Cut{
 	size_t hash;
 public:
-	bool operator==(const Cut& cut2) const {
+	bool operator==(const Cut& cut2) const { // ASAP fix this
 		return (this->cutType == cut2.cutType) && (this->RHS == cut2.RHS) &&
 				(this->cutCoeff == cut2.cutCoeff);
 	}
@@ -157,11 +157,14 @@ public:
 	explicit CutContainer(CutType type_): cutType(type_){}
 
 	bool isCutExists(const Cut& cut) {
-		return true; // if cut exists? return true
+	 	for (const auto& c : cuts) {
+	 		if (c == cut) return true;
+	 	}
+	 	return false;
 	}
 
-	void insertCut(Cut&& cut) {
-
+	void insertCut(Cut cut) {
+		cuts.push_back(cut);
 	}
 
 	void clearContainer() {

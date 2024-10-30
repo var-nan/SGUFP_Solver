@@ -35,7 +35,7 @@
 #endif
 
 #ifndef DEBUG
-	#define DEBUG 1
+	// #define DEBUG 1
 	#define NDEBUG
 	#define STATIC static
 #else
@@ -51,6 +51,7 @@
 #include <algorithm>
 #include <ctime>
 #include <utility>
+#include <optional>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
@@ -105,7 +106,7 @@ public:
 
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
 	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
-	DDNode(ulint id, uint layer, vi states_, vi solutionVector_): id{0}, incomingArcs{}, outgoingArcs{},
+	DDNode(ulint id, uint layer, vi states_, vi solutionVector_): id{0}, incomingArcs{}, outgoingArcs{}, globalLayer{layer},
 					states{states_.begin(), states_.end()}, solutionVector(std::move(solutionVector_)), state2{0}{}
 
 	~DDNode(){
@@ -174,7 +175,7 @@ public:
 	DD(): type{RESTRICTED}{}
 	explicit DD(const Type type_): type{type_}{}
 
-	void build(const Network& network, DDNode& node);
+	optional<vector<Node_t>> build(const Network &network, DDNode &node);
 
 	/// refinement helper functions ///
 
@@ -237,14 +238,24 @@ public:
 			cout << " , Global order: " << startTree << endl;
 		}
 		else cout << " , Global Tree" << endl;
+		cout << "Position of root in global tree: " << startTree << endl;
 		cout << "Number of layers in tree: " << tree.size() - 2 << " + (root + terminal) = " << tree.size() << endl;
 		cout << "Number of nodes: " << nodes.size() << endl;
 		cout << "Number of arcs: " << arcs.size() << endl;
 		cout << "Index of exact layer: " << exactLayer << " (contains " << tree[exactLayer].size() << " nodes)" << endl;
+		cout << "Size of each layer : "; for (const auto& layer: tree) cout << layer.size() << " "; cout << endl;
 		cout << "*******************************************************************\n" << endl;
 	}
 	#endif
 };
+
+inline DDNode node2DDNode(const Node_t& node) {
+	DDNode ddnode{0};
+	ddnode.solutionVector = node.solutionVector;
+	ddnode.states = unordered_set(node.states.begin(), node.states.end());
+	ddnode.globalLayer = node.globalLayer;
+	return ddnode;
+}
 
 /* custom hash functions for tuple and set */
 
