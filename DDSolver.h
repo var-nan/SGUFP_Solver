@@ -5,22 +5,26 @@
 #ifndef DDSOLVER_H
 #define DDSOLVER_H
 
-#include <utility>
-
 #include "DD.h"
 #include "grb.h"
-// #include "Worker.h"
 #include "NodeExplorer.h"
+#include <queue>
 
 
 
 
 class DDSolver {
 
+    struct comparator {
+        bool operator() (const Node_t& node1, const Node_t& node2) const {
+            return node1.ub > node2.ub;
+        }
+    };
+
     class NodeQueue {
         // use either queue or vector or priority queue.
         // use mutex
-        vector<Node_t> q;
+        priority_queue<Node_t, vector<Node_t>, comparator> q;
     public:
         NodeQueue() = default;
 
@@ -40,13 +44,13 @@ class DDSolver {
     #ifdef DEBUG
     size_t numNodesExplored = 0;
     size_t numNodesFound = 0;
-    size_t numNodesDiscarded = 0;
+    size_t numPrunedByBound = 0;
     size_t numNodesUnnecessary = 0;
     void displayStats() const {
         cout << "************************ Stats for nerds **************************" << endl;
         cout << "Total number of nodes found: " << numNodesFound << endl;
         cout << "Number of nodes processed: " << numNodesExplored << endl;
-        cout << "Number of nodes discarded by feasibility: " << numNodesDiscarded << endl;
+        cout << "Number of nodes discarded by feasibility: " << numPrunedByBound << endl;
         cout << "Number of unnecessarily processed nodes: " << numNodesUnnecessary << endl;
         cout << "********************************************************************" << endl;
     }

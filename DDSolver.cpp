@@ -6,26 +6,29 @@
 
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     // push bunch of nodes.
-    q.insert(q.end(), nodes.begin(), nodes.end());
+    // q.insert(q.end(), nodes.begin(), nodes.end());
+    for (auto& node : nodes) {
+        q.push(node);
+    }
 }
 
 void DDSolver::NodeQueue::pushNode(Node_t node) {
-    q.push_back(node);
+    q.push(node);
 }
 
 Node_t DDSolver::NodeQueue::getNode() {
     // auto node = q.back(); q.pop_back();
-    auto node = q.front(); q.erase(q.begin());
+    auto node = q.top(); q.pop();
     return node;
 }
 
 vector<Node_t> DDSolver::NodeQueue::getNodes(size_t n = 8) {
     vector<Node_t> nodes;
-
-    for (size_t i = 0; i < n; i++) {
-        nodes.push_back(q.back());
-        q.pop_back();
-    }
+    //
+    // for (size_t i = 0; i < n; i++) {
+    //     nodes.push_back(q.back());
+    //     q.pop_back();
+    // }
     return nodes;
 }
 
@@ -59,14 +62,12 @@ void DDSolver::startSolve(const Network& network) {
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
         Node_t node = nodeQueue.getNode();
-        cout << "Node processor procesing node from layer " << node.globalLayer << endl;
 
         if (node.ub < getOptimalLB()) {
             #ifdef DEBUG
-            cout << "selected node's upper bound < optimal lower bound." << endl;
-            numNodesDiscarded++;
-            #endif
             cout << "Pruned by bound" << endl;
+            numPrunedByBound++;
+            #endif
             continue; // look for another
         }
 
@@ -84,7 +85,7 @@ void DDSolver::startSolve(const Network& network) {
                 cout << "Global Lower bound so far. ------" << getOptimalLB() << endl;
 
             }
-             nodeQueue.pushNodes(result.nodes);
+            if (!result.nodes.empty()) nodeQueue.pushNodes(result.nodes);
         }
     }
 
@@ -94,7 +95,6 @@ void DDSolver::startSolve(const Network& network) {
     cout << "Optimal Solution: " << getOptimalLB() << endl;
     displayStats();
     #endif
-    cout << "Work queue is empty." << endl;
     cout << "Optimal Solution: " << getOptimalLB() << endl;
 }
 

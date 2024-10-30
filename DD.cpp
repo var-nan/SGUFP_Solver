@@ -602,7 +602,7 @@ vector<Node_t> DD::generateExactCutSet() const {
 		const auto& node = nodes.at(id);
 		vi states{node.states.begin(), node.states.end()};
 		cutsetNodes.emplace_back(states, computePathForExactNode(id),
-						std::numeric_limits<double>::lowest(),std::numeric_limits<double>::lowest(),
+						std::numeric_limits<double>::lowest(),std::numeric_limits<double>::max(),
 						node.globalLayer);
 	}
 	return cutsetNodes;
