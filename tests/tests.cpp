@@ -233,6 +233,60 @@ TEST_F(DDSubRootTest, TestSolution) {
 	cout << endl;
 }
 
+// final testing of exact cutset.
+TEST(DDNew, TestCutSet) {
+	Network network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
+	DD restricted{RESTRICTED};
+	DDNode root{0};
+	// root.globalLayer = 5;
+	// root.solutionVector = {-1, 32,3,4,5};
+	// root.states = {-1,2,3};
+	auto cutset = restricted.build(network,root );
+	for (int i = 0; i < restricted.tree.size(); i++) cout << restricted.tree[i].size() << " ";
+	cout << endl;
+
+	cout << "Number of nodes in cutset: " << cutset.size() << endl;
+	int index = restricted.getExactLayer();
+	for (auto& node : cutset) {
+		// ASSERT_EQ(node.globalLayer, index);
+		cout << node.globalLayer << " ";
+	}
+	cout << endl;
+	cout << "Number of nodes in the layer after the cutset: " << restricted.tree[index+1].size() << endl;
+	int index2 = restricted.tree[restricted.getExactLayer()][0];
+	cout << "Index of local node layer. " << restricted.nodes[index2].nodeLayer << endl;
+	cout << "Index of global node layer " << restricted.nodes[index2].globalLayer << endl;
+	auto cutnode = cutset[6];
+	// print netowrk arc corresponding to nodelayer
+
+	auto ddnode = node2DDNode(cutnode);
+
+	DD restricted2{RESTRICTED};
+	cout << "States: "; for (auto s: ddnode.states) {cout << s << " ";} cout << endl;
+	auto cutset2 = restricted2.build(network, ddnode);
+	cout << "Number of nodes in cutset: " << cutset2.size() << endl;
+	for (auto& node : cutset2) {
+		// ASSERT_EQ(node.globalLayer, index);
+		cout << node.globalLayer << " ";
+	}
+	cout <<endl;
+
+	cutnode = cutset2[0];
+
+	for (auto layer: restricted2.tree) cout << layer.size() << " ";
+	cout <<endl;
+
+	cout << "Printing corresponding network attribute" << endl;
+
+	auto [_,arcId] = network.processingOrder[cutnode.globalLayer];
+	auto networkArc = network.networkArcs[arcId];
+	if (network.hasStateChanged[cutnode.globalLayer]) {
+		cout << "State changed ";
+		cout << network.stateUpdateMap.at(cutnode.globalLayer).size() << endl;
+	}
+
+}
+
 // int main(){
 // 	testing::InitGoogleTest();
 // 	return RUN_ALL_TESTS();

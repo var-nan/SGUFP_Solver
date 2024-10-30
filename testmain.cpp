@@ -194,7 +194,7 @@ TEST(DDTreeTest, TestGetSolutionFunction){
 
 TEST_F(DDTest, TestGetCutsetFunction){
 
-	const auto cutset = diagram.getExactCutset();
+	const auto cutset = diagram.generateExactCutSet();
 
 	for (auto node: cutset){
 		for (const auto i: node.solutionVector){ cout << i << " "; }

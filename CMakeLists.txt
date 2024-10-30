@@ -6,10 +6,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
 set(SOURCES Network.cpp DD.cpp grb.cpp OriginalProblem.h)
-add_executable(SGUFP_Solver main.cpp ${SOURCES})
+add_executable(SGUFP_Solver main.cpp ${SOURCES}
+        DDSolver.cpp
+        DDSolver.h
+        NodeExplorer.cpp
+        NodeExplorer.h
+#        Worker.cpp
+#        Worker.h)
+)
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=4096)
+add_compile_definitions(MAX_WIDTH=1000)
 
 # google test dependency
 include(FetchContent)
@@ -79,7 +86,9 @@ elseif(WIN32)
         set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
         set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
     endif()
-
+    # flag specific for Dr Memory
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd")
+    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
     find_package(GUROBI REQUIRED)
 
     include_directories(${GUROBI_INCLUDE_DIRS})
