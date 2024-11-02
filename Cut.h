@@ -174,7 +174,7 @@ public:
 	~CutContainer() {
 
 		#ifdef DEBUG
-	 	displayCutStats();
+	 	// displayCutStats();
 		#endif
 		cuts.clear();
 	}

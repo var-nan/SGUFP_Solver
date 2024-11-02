@@ -245,9 +245,9 @@ TEST(DDNew, TestCutSet) {
 	for (int i = 0; i < restricted.tree.size(); i++) cout << restricted.tree[i].size() << " ";
 	cout << endl;
 
-	cout << "Number of nodes in cutset: " << cutset.size() << endl;
+	cout << "Number of nodes in cutset: " << cutset.value().size() << endl;
 	int index = restricted.getExactLayer();
-	for (auto& node : cutset) {
+	for (auto& node : cutset.value()) {
 		// ASSERT_EQ(node.globalLayer, index);
 		cout << node.globalLayer << " ";
 	}
@@ -256,7 +256,7 @@ TEST(DDNew, TestCutSet) {
 	int index2 = restricted.tree[restricted.getExactLayer()][0];
 	cout << "Index of local node layer. " << restricted.nodes[index2].nodeLayer << endl;
 	cout << "Index of global node layer " << restricted.nodes[index2].globalLayer << endl;
-	auto cutnode = cutset[6];
+	auto cutnode = cutset.value()[6];
 	// print netowrk arc corresponding to nodelayer
 
 	auto ddnode = node2DDNode(cutnode);
@@ -264,14 +264,14 @@ TEST(DDNew, TestCutSet) {
 	DD restricted2{RESTRICTED};
 	cout << "States: "; for (auto s: ddnode.states) {cout << s << " ";} cout << endl;
 	auto cutset2 = restricted2.build(network, ddnode);
-	cout << "Number of nodes in cutset: " << cutset2.size() << endl;
-	for (auto& node : cutset2) {
+	cout << "Number of nodes in cutset: " << cutset2.value().size() << endl;
+	for (auto& node : cutset2.value()) {
 		// ASSERT_EQ(node.globalLayer, index);
 		cout << node.globalLayer << " ";
 	}
 	cout <<endl;
 
-	cutnode = cutset2[0];
+	cutnode = cutset2.value()[0];
 
 	for (auto layer: restricted2.tree) cout << layer.size() << " ";
 	cout <<endl;
@@ -285,6 +285,35 @@ TEST(DDNew, TestCutSet) {
 		cout << network.stateUpdateMap.at(cutnode.globalLayer).size() << endl;
 	}
 
+}
+
+
+class NewDD : public testing::Test {
+protected:
+	DD restricted{RESTRICTED};
+	Network network {"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
+
+	NewDD() {
+
+		DDNode root{0};
+		restricted.build(network,root );
+
+	}
+};
+
+
+TEST_F(NewDD, TestStates) {
+
+	// print all the states.
+	for (auto& layer : restricted.tree) {
+		for (auto nodeId : layer) {
+			const auto& node = restricted.nodes[nodeId];
+			cout << "(";
+			for (auto state: node.states) cout << state << ":";
+			cout << ") ";
+		}
+		cout << endl;
+	}
 }
 
 // int main(){

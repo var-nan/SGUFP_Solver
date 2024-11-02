@@ -249,21 +249,42 @@ int old_main() {
 void main() {
 	Network network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
 
+	#ifdef DEBUG
+	cout << "A4 size: " << network.A4.size() << endl;
+
 	for (auto id : network.Vbar) {
 		auto node = network.networkNodes[id];
 		cout << "Node : " << id << " inc size: " << node.incomingArcs.size() << " , outsize : " << node.outgoingArcs.size() << endl;
 	}
-
+	#endif
 
 	SolveOriginalProblem(network);
 
 	cout << "Solved Original problem " <<endl;
 	cout << endl;
 	cout << endl;
-	cout << "Starting solver" << endl;
+	using std::chrono::high_resolution_clock;
+	using std::chrono::duration_cast;
+	using std::chrono::duration;
+	using std::chrono::milliseconds;
+	using std::chrono::seconds;
+	auto t1 = high_resolution_clock::now();
+	const auto now = std::chrono::system_clock::now();
+	const auto t_c = std::chrono::system_clock::to_time_t(now);
+	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver;
 	solver.initialize();
-	solver.startSolve(network);
+	auto cuts = solver.initializeCuts(network);
+	cout << "Number of optimality cuts: " << cuts.second.cuts.size() << endl;
+	cout << "Number of feasibility cuts: " << cuts.first.cuts.size() << endl;
+	cout << "**********************************************************************************************************\n\n\n" << endl;
+
+	solver.startSolve(network,cuts);
+	auto t2 = high_resolution_clock::now();
+
+	auto ms_int = duration_cast<seconds>(t2-t1);
+	duration<double> ms_double = t2-t1;
+	std::cout <<"program took " << ms_int.count() << " seconds" << endl;
 
 	cout << "Solver finished" << endl;
 }

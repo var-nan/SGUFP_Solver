@@ -16,7 +16,9 @@ add_executable(SGUFP_Solver main.cpp ${SOURCES}
 )
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=1000)
+add_compile_definitions(MAX_WIDTH=100)
+
+# dynamic macro update?
 
 # google test dependency
 include(FetchContent)
@@ -93,7 +95,7 @@ elseif(WIN32)
 
     include_directories(${GUROBI_INCLUDE_DIRS})
 
-    add_compile_definitions(DEBUG)
+#    add_compile_definitions(DEBUG)
 
     message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
     message(STATUS "GUROBI_CXX_DEBUG LIBRARY: ${GUROBI_CXX_DEBUG_LIBRARY}")
