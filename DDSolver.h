@@ -24,7 +24,8 @@ class DDSolver {
     class NodeQueue {
         // use either queue or vector or priority queue.
         // use mutex
-        priority_queue<Node_t, vector<Node_t>, comparator> q;
+        // priority_queue<Node_t, vector<Node_t>, comparator> q;
+        queue<Node_t> q;
     public:
         NodeQueue() = default;
 
@@ -46,9 +47,10 @@ class DDSolver {
     size_t numNodesFound = 0;
     size_t numPrunedByBound = 0;
     size_t numNodesUnnecessary = 0;
+    size_t numQueueEntered = 0;
     void displayStats() const {
         cout << "************************ Stats for nerds **************************" << endl;
-        cout << "Total number of nodes found: " << numNodesFound << endl;
+        cout << "Total number of nodes added to queue: " << numQueueEntered << endl;
         cout << "Number of nodes processed: " << numNodesExplored << endl;
         cout << "Number of nodes discarded by feasibility: " << numPrunedByBound << endl;
         cout << "Number of unnecessarily processed nodes: " << numNodesUnnecessary << endl;
@@ -67,7 +69,8 @@ public:
 
     void initialize();
     void start();
-    void startSolve(const Network& network);
+    void startSolve(const Network& network, optional<pair<CutContainer, CutContainer>> initialCuts);
+    pair<CutContainer, CutContainer> initializeCuts(const Network &network);
 };
 
 

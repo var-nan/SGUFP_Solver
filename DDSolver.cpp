@@ -4,6 +4,8 @@
 
 #include "DDSolver.h"
 
+#include <chrono>
+
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     // push bunch of nodes.
     // q.insert(q.end(), nodes.begin(), nodes.end());
@@ -18,7 +20,7 @@ void DDSolver::NodeQueue::pushNode(Node_t node) {
 
 Node_t DDSolver::NodeQueue::getNode() {
     // auto node = q.back(); q.pop_back();
-    auto node = q.top(); q.pop();
+    auto node = q.front(); q.pop();
     return node;
 }
 
@@ -47,7 +49,7 @@ void DDSolver::initialize() {
     nodeQueue.pushNode(node);
 }
 
-void DDSolver::startSolve(const Network& network) {
+void DDSolver::startSolve(const Network& network, optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
 
     /*
      * 1. get node from node's queue
@@ -57,17 +59,14 @@ void DDSolver::startSolve(const Network& network) {
      * 6. insert cutset nodes to the queue.
      */
 
-    NodeExplorer explorer;
+    NodeExplorer explorer{initialCuts.value()};
 
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
         Node_t node = nodeQueue.getNode();
+        // if (getOptimalLB() > 5700) break;
 
         if (node.ub < getOptimalLB()) {
-            #ifdef DEBUG
-            cout << "Pruned by bound" << endl;
-            numPrunedByBound++;
-            #endif
             continue; // look for another
         }
 
@@ -82,15 +81,25 @@ void DDSolver::startSolve(const Network& network) {
         if (result.success) {
             if (result.lb > getOptimalLB()) {
                 setLB(result.lb);
-                cout << "Global Lower bound so far. ------" << getOptimalLB() << endl;
-
+                const auto now = std::chrono::system_clock::now();
+                const auto t_c = std::chrono::system_clock::to_time_t(now);
+                cout << "Optimal LB: " << getOptimalLB() <<" set at "<< std::ctime(&t_c) << endl;
+                cout << "Global Lower bound so far: " << getOptimalLB() << endl;
             }
-            if (!result.nodes.empty()) nodeQueue.pushNodes(result.nodes);
+            if (!result.nodes.empty()) {
+                if (result.ub > getOptimalLB()) {
+                    nodeQueue.pushNodes(result.nodes);
+                    #ifdef DEBUG
+                    numQueueEntered += result.nodes.size();
+                    #endif
+                }
+            }
         }
+        // explorer.clearCuts();
     }
 
     #ifdef DEBUG
-    assert(nodeQueue.empty());
+    //assert(nodeQueue.empty());
     cout << "Work queue is empty." << endl;
     cout << "Optimal Solution: " << getOptimalLB() << endl;
     displayStats();
@@ -108,4 +117,81 @@ double DDSolver::getOptimalLB() const{
 
 void DDSolver::setLB(double lb) {
     optimalLB = lb;
+}
+
+DDNode node2DDdfsNode(Node_t node) {
+    DDNode newNode;
+    newNode.states = unordered_set<int>(node.states.begin(), node.states.end());
+    newNode.solutionVector = node.solutionVector;
+    newNode.globalLayer = node.globalLayer;
+    newNode.nodeLayer = 0;
+    return newNode;
+}
+
+pair<CutContainer, CutContainer> DDSolver::initializeCuts(const Network &network) {
+    // build a restricted tree, get exact cutsets, build subtrees and get solutions for each of subtree.
+
+    // change the max_width
+    constexpr size_t max_width = MAX_WIDTH;
+    // #undef MAX_WIDTH
+    // #define MAX_WIDTH 20
+    // #undef DEBUG
+
+    // cout << "Current max width is : " << MAX_WIDTH << endl;
+
+    /// build tree
+    DDNode root{0};
+    root.nodeLayer = 0;
+    root.globalLayer = 0;
+    DD restricted {RESTRICTED};
+    auto cutset = restricted.build(network, root);
+    cout << "Cutset size " << cutset.value().size() << endl;
+
+    CutContainer fCuts{FEASIBILITY};
+    CutContainer oCuts{OPTIMALITY};
+
+    GRBEnv env = GRBEnv();
+    env.set(GRB_IntParam_OutputFlag,0);
+    if (cutset) {
+
+        for (const auto& node: cutset.value()) {
+            DDNode ddNode = node2DDNode(node);
+            DD subTree{RESTRICTED};
+            auto _ = subTree.build(network, ddNode);
+
+            // get solution
+            auto sol = subTree.solution();
+            // solve sub problem
+            GuroSolver solver{env, static_cast<int>(network.n)};
+            auto y_bar = w2y(sol, network);
+            auto cut = solver.solveSubProblemInstance(network, y_bar, 0);
+            // add cut to containers
+            if (cut.cutType == FEASIBILITY) {
+                if (!fCuts.isCutExists(cut))
+                    fCuts.insertCut(cut);
+            }
+            else {
+                if(!oCuts.isCutExists(cut)) oCuts.insertCut(cut);
+            }
+        }
+
+    }
+
+    // #undef MAX_WIDTH
+    // #define DEBUG
+    // #define MAX_WIDTH max_width
+
+    // for (auto cut : fCuts.cuts) {
+    //     cout << endl << "RHS: " << cut.RHS << endl;
+    //     if (cut.cutType == FEASIBILITY) cout << "Type: FEASIBILITY" << endl;
+    //     else cout << "Type: OPTIMALITY" << endl;
+    //     for (auto [k,v] : cut.cutCoeff) {
+    //         auto [i,q,j] = k;
+    //         cout << "i: " << i << ", q: " << q << " j: " << j << " val: " << v << endl;
+    //     }
+    // }
+
+    // cout << "Current max width is : " << MAX_WIDTH  << endl;
+    return make_pair(fCuts, oCuts);
+
 }

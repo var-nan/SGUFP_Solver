@@ -13,7 +13,7 @@
 
 extern const Network network;
 
-
+//
 
 class OutObject{
 public:
@@ -41,11 +41,14 @@ public:
         env.set(GRB_IntParam_OutputFlag,0);
     }
 
+    explicit NodeExplorer(pair<CutContainer, CutContainer> cuts): feasibilityCuts{cuts.first}, optimalityCuts{cuts.second} {
+        env.set(GRB_IntParam_OutputFlag,0);
+    }
+
+
     OutObject process(const Network& network, Node_t node);
 
-    void doSomething() {
-
-    }
+    void clearCuts();
 
 };
 
