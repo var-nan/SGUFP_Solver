@@ -112,6 +112,10 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 
 		#if RESTRICTED_STRATEGY == 1
 		{
+			if (currentLayer.size() >= MAX_WIDTH) { // new strategy after tree becomes non-exact.
+				buildNextLayer2(currentLayer, nextLayer);
+				return false;
+			}
 			uint count = 0;
 
 			for (const auto id: currentLayer) {
@@ -120,7 +124,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 				const auto parentStates = parentNode.states;
 				// INFO; states should contain -1.
 				for (const auto decision: parentNode.states) {
-					if (count >= MAX_WIDTH) {isExact = false; break; }
+					if (count >= MAX_WIDTH) {isExact = false; break; } // jump with goto, instead of this.
 					auto lastInserted = number.getNext();
 					DDNode node{lastInserted};
 					DDArc arc{lastInserted, parentNode.id, node.id, decision};
@@ -337,6 +341,55 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 		#endif
 	}
 	return isExact;
+}
+
+/**
+ * Creates a child node for the given parent node, and the corresponding arc
+ * between them. Inserts the child node and the arc to the map. Returns the
+ * id of the child node, this id is same for the arc between them.
+ * @param parent parent node
+ * @param decision decision of the arc between parent and child node.
+ * @return id of the child node (= id of arc between parent and child).
+ */
+ulint DD::createChild(DDNode& parent, int decision) {
+	// create child for this node with the decision.
+	auto nextId = number.getNext();
+	DDNode newNode{nextId};
+	newNode.states = parent.states;
+	if (decision != -1) newNode.states.erase(decision);
+	DDArc arc {nextId, parent.id, nextId, decision};
+	newNode.incomingArcs.push_back(nextId);
+	parent.outgoingArcs.push_back(nextId);
+	nodes.insert(make_pair(nextId, newNode));
+	arcs.insert(make_pair(nextId, arc));
+	return nextId;
+}
+
+/**
+ * Build next layer with minimum number of nodes that can be created with -1.
+ * Assumes next layer is not exact. DO NOT CALL this function if DD is still exact.
+ * @param currentLayer
+ * @param nextLayer
+ */
+void DD::buildNextLayer2(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+	uint count = 0;
+
+	for (const auto id: currentLayer) {
+		auto& node = nodes[id];
+		if (node.states.size() > 1) {
+			for (auto decision: node.states) {
+				if (decision == -1) continue;
+				auto childId = createChild(node, decision);
+				nextLayer.push_back(childId);
+				if (count++ >= MAX_WIDTH) return;
+			}
+		}
+		else {
+			auto childId = createChild(node, -1);
+			nextLayer.push_back(childId);
+			if (count++ >= MAX_WIDTH) return;
+		}
+	}
 }
 
 
@@ -1159,9 +1212,6 @@ void DD::applyOptimalityCutRelaxed(const Network &network, const Cut &cut) {
  * @param cut
  */
 double DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut &cut) {
-	#ifdef DEBUG
-	cout << "Applying optimality cut" << endl;
-	#endif
 
 	const auto& processingOrder = network.processingOrder;
 	const auto& netArcs = network.networkArcs;
@@ -1222,10 +1272,7 @@ double DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut 
 			terminalNode.state2 = arcs[inArcId].weight;
 		}
 	}
-	#ifdef DEBUG
-	cout << "Terminal state: " << terminalNode.state2 << endl;
-	cout << "Applied optimality cut for restricted tree" << endl;
-	#endif
+
 	return terminalNode.state2;
 }
 
@@ -1235,10 +1282,6 @@ double DD::applyOptimalityCutRestrictedLatest(const Network &network, const Cut 
  * @param cut
  */
 bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &cut) {
-
-	#ifdef DEBUG
-		cout << "Applying feasibility cut on restricted tree...";
-	#endif
 
 	const auto& processingOrder = network.processingOrder;
 	const auto& netArcs = network.networkArcs;
@@ -1257,7 +1300,6 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 		}
 	}
 	rootNode.state2 = justifiedRHS;
-	cout << "Justified RHS for this cut: " << justifiedRHS << endl;
 
 	// auto lowerBounds = helperFunction(network, cut);
 	// lowerBounds.push_back(0);
@@ -1317,7 +1359,7 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 		// 	batchRemoveNodes(nodesToRemove);
 		// }
 	}
-	cout << "\nNumber of nodes to be removed in last layer: " << nodesToRemove.size() << endl;
+
 	if (nodesToRemove.size() == tree[tree.size()-2].size()) {
 		// removing entire layer removes entire tree. update flags instead
 		#ifdef DEBUG
@@ -1328,17 +1370,11 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &
 	}
 	if (!nodesToRemove.empty()) batchRemoveNodes(nodesToRemove);
 
-	#ifdef DEBUG
-		cout<< " Completed." << endl;
-	#endif
 	return true;
 }
 
 
 double DD::applyOptimalityCutHeuristic(const Network &network, const Cut &cut) {
-	#ifdef DEBUG
-		cout << "Applying optimality cut heuristic" << endl;
-	#endif
 
 	const auto& processingOrder = network.processingOrder;
 	const auto& netArcs = network.networkArcs;
@@ -1413,9 +1449,7 @@ double DD::applyOptimalityCutHeuristic(const Network &network, const Cut &cut) {
  * @return
  */
 bool DD::applyFeasibilityCutHeuristic(const Network &network, const Cut &cut) {
-	#ifdef DEBUG
-	cout << "Applying feasibility cut heuristic" << endl;
-	#endif
+
 	const auto& processingOrder = network.processingOrder;
 	const auto& netArcs = network.networkArcs;
 

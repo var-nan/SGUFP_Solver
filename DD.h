@@ -165,6 +165,8 @@ private:
 	[[nodiscard]] vector<Node_t> generateExactCutSet() const;
 
 	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
+	ulint createChild(DDNode& parent, int decision);
+	void buildNextLayer2(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 
 public:
 
