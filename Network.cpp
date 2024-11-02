@@ -85,18 +85,12 @@ Network::Network(const std::string& p_fileName){
 			}
 		}
 
-		vui goodOnes;
-		for (auto id : vBarNodes) {
-			if(netNodes[id].incomingArcs.size() > 1 || netNodes[id].outgoingArcs.size() > 1) {
-				goodOnes.push_back(id);
-			}
-		}
 		this->n = nNodes;
 		this->edges = m;
 		this->networkNodes = std::move(netNodes);
 		this->networkArcs = std::move(netArcs);
 		this->nScenarios = scenarios;
-		this->Vbar = std::move(goodOnes);
+		this->Vbar = std::move(vBarNodes);
 		this->A1 = std::move(a1);
 		this->A2 = std::move(a2);
 		this->A3 = std::move(a3);
