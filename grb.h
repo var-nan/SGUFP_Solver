@@ -14,6 +14,7 @@
 using namespace std;
 
 class GuroSolver{
+	const shared_ptr<Network> networkPtr;
 public:
 	GRBEnv environment;
 
@@ -29,7 +30,8 @@ public:
 
 	GRBModel model;
 
-	GuroSolver(const GRBEnv& env_, int n_): environment(env_), n{n_},model {environment} {
+	GuroSolver(const shared_ptr<Network>& networkPtr_, const GRBEnv& env_): networkPtr{networkPtr_},
+							environment(env_), n{static_cast<int>(networkPtr_->n)},model {environment} {
 
 		// set model parameters and initialize gurobi variables.
 		model.set(GRB_IntParam_InfUnbdInfo, 1);
@@ -45,9 +47,9 @@ public:
 
 	void initializeVariables();
 
-	Cut solveSubProblem(const Network& network, const vector<vector<vector<shi>>> &y_bar);
+	Cut solveSubProblem(const vector<vector<vector<shi>>> &y_bar);
 
-	Cut solveSubProblemInstance(const Network &network, const vector<vector<vector<shi>>> &y_bar, int scenario);
+	Cut solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar, int scenario);
 
 	void addConstraints(const Network& network, int scenario);
 
@@ -56,8 +58,9 @@ public:
 	~GuroSolver(){
 
 		// clear up the heap.
-		cout << "Cleaning up gurobi variables" << endl;
-
+		#ifdef DEBUG
+			cout << "Cleaning up gurobi variables... ";
+		#endif
 		for (int i = 0; i < n; i++){
 			delete[](beta[i]);
 			delete[](gamma[i]);
@@ -79,6 +82,9 @@ public:
 		delete[](phi);
 		delete[](lambda);
 		delete[](mu);
+		#ifdef DEBUG
+			cout << " Completed." << endl;
+		#endif
 	}
 };
 

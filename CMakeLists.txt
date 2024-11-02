@@ -6,10 +6,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
 set(SOURCES Network.cpp DD.cpp grb.cpp OriginalProblem.h)
-add_executable(SGUFP_Solver main.cpp ${SOURCES})
+add_executable(SGUFP_Solver main.cpp ${SOURCES}
+        DDSolver.cpp
+        DDSolver.h
+        NodeExplorer.cpp
+        NodeExplorer.h
+#        Worker.cpp
+#        Worker.h)
+)
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=5)
+add_compile_definitions(MAX_WIDTH=100)
+
+# dynamic macro update?
 
 # google test dependency
 include(FetchContent)
@@ -47,7 +56,8 @@ if (UNIX)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
     # test targets
-    add_executable(tests2 tests/tests.cpp ${SOURCES})
+    add_executable(tests2 tests/tests.cpp ${SOURCES}
+            tests/test_utils.h)
     target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
     target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
 
@@ -78,12 +88,14 @@ elseif(WIN32)
         set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
         set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
     endif()
-
+    # flag specific for Dr Memory
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd")
+    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
     find_package(GUROBI REQUIRED)
 
     include_directories(${GUROBI_INCLUDE_DIRS})
 
-    add_compile_definitions(DEBUG)
+#    add_compile_definitions(DEBUG)
 
     message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
     message(STATUS "GUROBI_CXX_DEBUG LIBRARY: ${GUROBI_CXX_DEBUG_LIBRARY}")
@@ -101,7 +113,11 @@ elseif(WIN32)
     add_executable(testmain testmain.cpp ${SOURCES})
     target_link_libraries(testmain GTest::gtest_main)
 
-    add_executable(tests2 tests/tests.cpp ${SOURCES})
+    add_executable(tests2 tests/tests.cpp ${SOURCES}
+            tests/test_utils.h)
+    target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
+            debug ${GUROBI_CXX_DEBUG_LIBRARY})
+    target_link_libraries(tests2 ${GUROBI_LIBRARY})
     target_link_libraries(tests2 GTest::gtest_main)
 
     include(GoogleTest)

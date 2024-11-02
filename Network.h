@@ -39,16 +39,16 @@ public:
 
 class NetworkNode {
 public:
-	uint nodeId;
+	uint nodeId=0;
 	//uint inDegree; // INFO removed inDegree, outDegree, inNodeIds, outNodeIds fields.
 	//uint outDegree;
 	vui inNodeIds;
 	vui outNodeIds;
 	vui incomingArcs; // store the id of incoming arcs in the network.
 	vui outgoingArcs; // store the id of outgoing arcs in the network.
-	bool isVbar;
+	bool isVbar = false;
 
-	NetworkNode(){} // INFO this constructor is only for map's [] operator.
+	NetworkNode()= default; // INFO this constructor is only for map's [] operator.
 
 	explicit NetworkNode(uint id):nodeId{id}, isVbar{false} {}
 
@@ -77,11 +77,11 @@ public:
 	// if key is not present in the stateUpdateMap, then no need to change the state at the respective arc.
 
 	// different sets of nodes based on node's incoming and outgoing neighbors.
+	vector<bool> isNodeInVbar;
 	vui A1;
 	vui A2;
 	vui A3;
 	vui A4;
-	vector<bool> isNodeInVbar;
 	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,

@@ -22,6 +22,9 @@
 #ifndef RELAXED_STRATEGY
 	#define RELAXED_STRATEGY 1
 #endif
+#ifndef EXACT_STRATEGY
+	#define EXACT_STRATEGY 1
+#endif
 
 #ifndef MAX_WIDTH
 	#define MAX_WIDTH 128
@@ -32,7 +35,7 @@
 #endif
 
 #ifndef DEBUG
-	#define DEBUG 1
+	// #define DEBUG 1
 	#define NDEBUG
 	#define STATIC static
 #else
@@ -47,12 +50,29 @@
 #include <set>
 #include <algorithm>
 #include <ctime>
+#include <utility>
+#include <optional>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
 using namespace std;
 
 typedef vector<ulint> vulint;
+
+class Node_t {
+public:
+    vi states;
+    vi solutionVector;
+    double lb;
+    double ub;
+    uint globalLayer;
+
+    Node_t() = default;
+
+    Node_t(vi states_, vi solutionVector_, double lb_, double ub_, uint globalLayer_):
+        states{std::move(states_)}, solutionVector{std::move(solutionVector_)},
+        lb{lb_}, ub{ub_}, globalLayer{globalLayer_}{}
+} ;
 
 /*
  * INFO Ids of DDArc and DDNode are unsigned long ints.
@@ -76,6 +96,7 @@ class DDNode{
 public:
 	ulint id;
 	uint nodeLayer = 0;
+	uint globalLayer = 0;
 	vector<ulint> incomingArcs;
 	vector<ulint> outgoingArcs;
 	unordered_set<int> states;
@@ -85,6 +106,8 @@ public:
 
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
 	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
+	DDNode(ulint id, uint layer, vi states_, vi solutionVector_): id{0}, incomingArcs{}, outgoingArcs{}, globalLayer{layer},
+					states{states_.begin(), states_.end()}, solutionVector(std::move(solutionVector_)), state2{0}{}
 
 	~DDNode(){
 		incomingArcs.clear();
@@ -125,21 +148,37 @@ private:
 			numbers.push_back(x);
 		}
 	};
-	Type type;
-	vi cutset{};
 
-public:
+	const shared_ptr<Network> networkPtr;
 	Number number;
-	unordered_map<ulint,DDNode> nodes;
-	unordered_map<ulint, DDArc> arcs;
-	vector<vector<ulint>> tree; // layer corresponds to vector of node ids.
+	Type type;
+	bool isExact = true;
+	bool isInFeasible = false;
+	bool isTreeDeleted = false; // true if the entire tree is deleted while refinement.
+	vector<Node_t> cutSet;
 	// info below two variables should be updated during tree compilation.
-	int startTree = 0; // the start position of the subtree in the global tree.
+	uint startTree = 0; // the start position of the subtree in the global tree.
 	int exactLayer = 0; // the position of exact layer with respect to root of subtree.
 	unordered_set<ulint> deletedNodeIds; // deleted node ids during refinement on a single node.
 
+	void updateTree();
+	[[nodiscard]] vi computePathForExactNode(ulint nodeId) const;
+	[[nodiscard]] vector<Node_t> generateExactCutSet() const;
 
-	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, int index, bool stateChangesNext);
+	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
+	ulint createChild(DDNode& parent, int decision);
+	void buildNextLayer2(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+
+public:
+
+	unordered_map<ulint,DDNode> nodes;
+	unordered_map<ulint, DDArc> arcs;
+	vector<vector<ulint>> tree; // layer corresponds to vector of node ids.
+
+	explicit DD(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_}, type{RESTRICTED}{}
+	explicit DD(const shared_ptr<Network>& networkPtr_, const Type type_): networkPtr{networkPtr_}, type{type_}{}
+
+	optional<vector<Node_t>> build(DDNode &node);
 
 	/// refinement helper functions ///
 
@@ -153,36 +192,72 @@ public:
 
 	void applyFeasibilityCutRestricted(const Network& network, const Cut& cut);
 	void applyFeasibilityCutRelaxed(const Network& network, const Cut& cut);
-	void applyOptimalityCutRestricted(const Network& network, const Cut& cut);
-	void applyOptimalityCutRelaxed(const Network& network, const Cut& cut);
+	void applyOptimalityCutRestricted(const Cut &cut);
+	void applyOptimalityCutRelaxed(const Cut &cut);
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
-	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.
+
+	double applyOptimalityCutRestrictedLatest(const Cut &cut);
+	bool applyFeasibilityCutRestrictedLatest(const Cut &cut);
+	double applyOptimalityCutHeuristic(const Cut &cut);
+	bool applyFeasibilityCutHeuristic(const Cut &cut);
 
 	/// node deletion functions ///
 
 	void deleteArcById(ulint id);
 	void deleteNodeById(ulint id);
-	void removeNode(ulint id);
+	void removeNode(ulint id, bool isBatch=false);
+	void batchRemoveNodes(const vulint& ids);
 	void bottomUpDelete(ulint id);
 	void topDownDelete(ulint id);
 	void deleteNode(DDNode& node);
 	void deleteArc(DDNode& parentNode, DDArc& arc, DDNode& childNode);
 
-	/// other functions ///
-
-	vi computePathForExactNode(ulint nodeId);
-
-
-	DD(): type{RESTRICTED}{}
-	explicit DD(Type type_): type{type_}{}
-
-	void build(const Network& network, DDNode& node, int index);
+	/// getter functions ///
+	int getExactLayer() const { return exactLayer;}
+	int getGlobalPosition() const { return startTree; }
+	[[nodiscard]] vector<Node_t> getExactCutSet();
 	vi solution();
-	vector<DDNode> getExactCutset();
+	bool isTreeExact() const {return isExact;}
 
+
+	#ifdef DEBUG
+	void displayStats() const {
+		cout << "\n*********************** DD Stats for nerds ************************" << endl;
+		string ddtype;
+		if (type == RESTRICTED) ddtype = "RESTRICTED";
+		else if (type == RELAXED) ddtype = "RELAXED";
+		else {
+            #if EXACT_STRATEGY == 1
+                ddtype = "EXACT (State-Reduction)";
+            #else
+                ddtype = "EXACT";
+            #endif
+		}
+		cout << "Type: " << ddtype;
+		if (startTree) {
+			cout << " , Global order: " << startTree << endl;
+		}
+		else cout << " , Global Tree" << endl;
+		cout << "Position of root in global tree: " << startTree << endl;
+		cout << "Number of layers in tree: " << tree.size() - 2 << " + (root + terminal) = " << tree.size() << endl;
+		cout << "Number of nodes: " << nodes.size() << endl;
+		cout << "Number of arcs: " << arcs.size() << endl;
+		cout << "Index of exact layer: " << exactLayer << " (contains " << tree[exactLayer].size() << " nodes)" << endl;
+		cout << "Size of each layer : "; for (const auto& layer: tree) cout << layer.size() << " "; cout << endl;
+		cout << "*******************************************************************\n" << endl;
+	}
+	#endif
 };
+
+inline DDNode node2DDNode(const Node_t& node) {
+	DDNode ddnode{0};
+	ddnode.solutionVector = node.solutionVector;
+	ddnode.states = unordered_set(node.states.begin(), node.states.end());
+	ddnode.globalLayer = node.globalLayer;
+	return ddnode;
+}
 
 /* custom hash functions for tuple and set */
 

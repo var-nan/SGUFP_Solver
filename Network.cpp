@@ -49,7 +49,7 @@ Network::Network(const std::string& p_fileName){
 			}
 			netArcs[i] = {i, tailId, headId, upperCapacities, lowerCapacities, rewards};
 			// update node's incoming and outgoing attributes.
-			netNodes[tailId].outNodeIds.push_back(headId); // netNodes[tailId].outDegree++;
+			netNodes[tailId].outNodeIds.push_back(headId); // netNodes[tailId].outDegree++; useful in computing heuristic in helper function.
 			netNodes[headId].inNodeIds.push_back(tailId); // netNodes[headId].inDegree++;
 			netNodes[tailId].outgoingArcs.push_back(i);
 			netNodes[headId].incomingArcs.push_back(i);
@@ -62,9 +62,11 @@ Network::Network(const std::string& p_fileName){
 		vector<uint> vBarNodes;
 
 		uint index;
+		//for (size_t i = 0; i < netNodes.size() ; i++) isNodeInVbar.push_back(false); // init isNodeInVbar
 		while (file >> index){
 			vBarNodes.push_back(index);
 			netNodes[index].isVbar = true;
+			//isNodeInVbar[index] = true;
 		}
 
 		// populate a1,a2,a3,a4 for subproblem formulation.
@@ -93,6 +95,7 @@ Network::Network(const std::string& p_fileName){
 		this->A2 = std::move(a2);
 		this->A3 = std::move(a3);
 		this->A4 = std::move(a4);
+		//this->isNodeInVbar = nodeInVbar;
 
 		// reduce the size of vBar. just for testing.
 		//this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());

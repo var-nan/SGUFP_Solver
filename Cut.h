@@ -7,6 +7,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <map>
 #include <tuple>
 
 using namespace std;
@@ -47,11 +48,30 @@ struct cut_tuple_equal{
 	}
 };
 
-typedef unordered_map<tuple<int,int,int>, double, cut_tuple_hash, cut_tuple_equal> CutCoefficients;
+struct unordered_map_hash {
+	/*
+	 * Hash value of the unordered_map<tuple<int,int,int>>, double>
+	 */
+	size_t operator()(const unordered_map<tuple<int,int,int>, double>& coeff) {
+		size_t seed = 0;
+		for (const auto& pair: coeff) {
+			// get hash of tuple
+			auto h1 = cut_tuple_hash()(pair.first);
+			auto h2 = hash<double>{}(pair.second);
 
+			// TODO; use h1 and h2 in seed somehow.
+			// naive hashing (INFO highly inefficient)
+		}
+		return seed;
+	}
+};
+
+// typedef unordered_map<tuple<int,int,int>, double, cut_tuple_hash, cut_tuple_equal> CutCoefficients;
+typedef map<tuple<int,int,int>,double> CutCoefficients; // LATER: change to unordered_map
 class Cut{
+	size_t hash;
 public:
-	bool operator==(const Cut& cut2) const {
+	bool operator==(const Cut& cut2) const { // ASAP fix this
 		return (this->cutType == cut2.cutType) && (this->RHS == cut2.RHS) &&
 				(this->cutCoeff == cut2.cutCoeff);
 	}
@@ -60,12 +80,20 @@ public:
 		return *this == cut2;
 	}
 
+	size_t getHash(){return hash;}
+
 	CutType cutType;
 	double RHS;
 	CutCoefficients cutCoeff;
 
+	[[nodiscard]] double get(uint a, uint b, uint c) const {
+		return cutCoeff.at(make_tuple(a,b,c));
+	}
+
 	Cut(CutType cutType_, double RHS_, CutCoefficients cutCoeff_):
 		cutType{cutType_}, RHS{RHS_}, cutCoeff{std::move(cutCoeff_)}{
+			// compute hash here.
+
 
 	}
 };
@@ -87,22 +115,69 @@ struct cut_hash{
 };
 
 
-static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, const Network& network){
-	vector<shi> y_1 (network.n,0);
-	vector<vector<shi>> y_2(network.n, y_1);
-	vector<vector<vector<shi>>> y_bar(network.n, y_2);
+static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, const shared_ptr<Network>& networkPtr){
+	vector<shi> y_1 (networkPtr->n,0);
+	vector<vector<shi>> y_2(networkPtr->n, y_1);
+	vector<vector<vector<shi>>> y_bar(networkPtr->n, y_2);
 
 	for (uint a = 0; a < w_solution.size(); a++){
 		if (w_solution[a] != -1){
-			auto arcId = network.processingOrder[a].second;
-			auto q = network.networkArcs[arcId].headId;
-			auto i = network.networkArcs[arcId].tailId;
-			auto j = network.networkArcs[w_solution[a]].headId;
+			auto arcId = networkPtr->processingOrder[a].second;
+			auto q = networkPtr->networkArcs[arcId].headId;
+			auto i = networkPtr->networkArcs[arcId].tailId;
+			auto j = networkPtr->networkArcs[w_solution[a]].headId;
 			y_bar[i][q][j] = 1;
-			cout << "i: " << i << ", q: " << q << ", j " << j << endl;
+			//cout << "i: " << i << ", q: " << q << ", j " << j << endl;
 		}
 	}
 	return y_bar;
 }
+
+class CutContainer {
+	// unordered_set of containers or vector of containers.
+	#ifdef DEBUG
+	void displayCutStats() const {
+		string type = (cutType == FEASIBILITY) ? "FEASIBILITY" : "OPTIMALITY";
+		cout << "********************** Cut stats for nerds ************************" << endl;
+		cout << "Number of " << type <<" cuts: " << cuts.size() << endl;
+		cout << "*******************************************************************" << endl;
+	}
+	#endif
+
+public:
+	vector<Cut> cuts;
+	CutType cutType;
+
+public:
+
+	 // begin(){ return cuts.begin();};
+	 void doSomething() {
+		auto it = cuts.begin();
+	}
+	explicit CutContainer(CutType type_): cutType(type_){}
+
+	bool isCutExists(const Cut& cut) {
+	 	for (const auto& c : cuts) {
+	 		if (c == cut) return true;
+	 	}
+	 	return false;
+	}
+
+	void insertCut(Cut cut) {
+		cuts.push_back(cut);
+	}
+
+	void clearContainer() {
+		cuts.clear();
+	}
+
+	~CutContainer() {
+
+		#ifdef DEBUG
+	 	// displayCutStats();
+		#endif
+		cuts.clear();
+	}
+};
 
 //#endif //SGUFP_SOLVER_CUT_H
