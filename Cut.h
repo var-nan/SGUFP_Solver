@@ -115,17 +115,17 @@ struct cut_hash{
 };
 
 
-static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, const Network& network){
-	vector<shi> y_1 (network.n,0);
-	vector<vector<shi>> y_2(network.n, y_1);
-	vector<vector<vector<shi>>> y_bar(network.n, y_2);
+static inline vector<vector<vector<shi>>> w2y(const vector<int>& w_solution, const shared_ptr<Network>& networkPtr){
+	vector<shi> y_1 (networkPtr->n,0);
+	vector<vector<shi>> y_2(networkPtr->n, y_1);
+	vector<vector<vector<shi>>> y_bar(networkPtr->n, y_2);
 
 	for (uint a = 0; a < w_solution.size(); a++){
 		if (w_solution[a] != -1){
-			auto arcId = network.processingOrder[a].second;
-			auto q = network.networkArcs[arcId].headId;
-			auto i = network.networkArcs[arcId].tailId;
-			auto j = network.networkArcs[w_solution[a]].headId;
+			auto arcId = networkPtr->processingOrder[a].second;
+			auto q = networkPtr->networkArcs[arcId].headId;
+			auto i = networkPtr->networkArcs[arcId].tailId;
+			auto j = networkPtr->networkArcs[w_solution[a]].headId;
 			y_bar[i][q][j] = 1;
 			//cout << "i: " << i << ", q: " << q << ", j " << j << endl;
 		}

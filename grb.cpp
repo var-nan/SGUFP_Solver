@@ -184,12 +184,12 @@ void GuroSolver::setObjectiveFunction(const Network &network, const vector<vecto
 	model.update();
 }
 
-Cut GuroSolver::solveSubProblem(const Network &network, const vector<vector<vector<shi>>> &y_bar) {
+Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
 	// TODO: run all scenarios and return feasiblity/optimality cut.
-	return solveSubProblemInstance(network, y_bar, 0);
+	return solveSubProblemInstance(y_bar, 0);
 }
 
-Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vector<vector<shi>>> &y_bar, int scenario) {
+Cut GuroSolver::solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar, int scenario) {
 
 	/// Initialilze variables ///
 	for (int i = 0; i < n; i++)
@@ -238,8 +238,8 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 	/// Set Objective function ///
 	GRBLinExpr obj = 0;
 
-	const auto& nodes = network.networkNodes;
-	const auto& arcs = network.networkArcs;
+	const auto& nodes = networkPtr->networkNodes;
+	const auto& arcs = networkPtr->networkArcs;
 
 	// TODO optimize read pattern. load arcs by reference.
 	// first term
@@ -253,7 +253,7 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 	}
 
 	// second term and third term
-	for (uint q : network.Vbar){
+	for (uint q : networkPtr->Vbar){
 		for (uint inArc : nodes[q].incomingArcs){
 			uint i = arcs[inArc].tailId;
 			int u_iq = arcs[inArc].upperCapacities[scenario];
@@ -272,7 +272,7 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 	}
 
 	// fourth term
-	for (uint q : network.Vbar){
+	for (uint q : networkPtr->Vbar){
 		for (uint outArc : nodes[q].outgoingArcs){
 			auto j = arcs[outArc].headId;
 			int u_qj = arcs[outArc].upperCapacities[scenario];
@@ -289,15 +289,15 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 
 	/// Add constraints ///
 	/// constraint number 1 & 2 ///
-	for (uint arcID : network.A1) {
+	for (uint arcID : networkPtr->A1) {
 		GRBLinExpr LHS = 0;
-		uint q = network.networkArcs[arcID].headId;
-		uint i = network.networkArcs[arcID].tailId;
-		int r_iq = network.networkArcs[arcID].rewards[scenario];
+		uint q = arcs[arcID].headId;
+		uint i = arcs[arcID].tailId;
+		int r_iq = arcs[arcID].rewards[scenario];
 		LHS += alpha[q] - beta[i][q] + gamma[i][q];
-		if (network.networkNodes[q].isVbar) {
-			for (uint outArc : network.networkNodes[q].outgoingArcs) {
-				uint j = network.networkArcs[outArc].headId;
+		if (nodes[q].isVbar) {
+			for (uint outArc : nodes[q].outgoingArcs) {
+				uint j = arcs[outArc].headId;
 				LHS += lambda[i][q][j] - mu[i][q][j];
 			}
 			LHS += sigma[i][q];
@@ -307,15 +307,15 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 		}
 	}
 	/// constraint number 3 & 4 ///
-	for (uint arcID : network.A2) {
+	for (uint arcID : networkPtr->A2) {
 		GRBLinExpr LHS = 0;
-		uint j = network.networkArcs[arcID].headId;
-		uint q = network.networkArcs[arcID].tailId;
-		int r_qj = network.networkArcs[arcID].rewards[scenario];
+		uint j = arcs[arcID].headId;
+		uint q = arcs[arcID].tailId;
+		int r_qj = arcs[arcID].rewards[scenario];
 		LHS += -alpha[q] - beta[q][j] + gamma[q][j];
 		if (nodes[q].isVbar) {
-			for (uint outArc : network.networkNodes[q].incomingArcs) {
-				uint i = network.networkArcs[outArc].tailId;
+			for (uint outArc : nodes[q].incomingArcs) {
+				uint i = arcs[outArc].tailId;
 				LHS += -lambda[i][q][j] + mu[i][q][j];
 			}
 			LHS += phi[q][j];
@@ -325,27 +325,27 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 		}
 	}
 	//// constraint number 5 & 6 & 7 & 8 ////
-	for (uint arcID : network.A3) {
+	for (uint arcID : networkPtr->A3) {
 		GRBLinExpr LHS = 0;
-		uint j = network.networkArcs[arcID].headId;
-		uint q = network.networkArcs[arcID].tailId;
-		int r_qj = network.networkArcs[arcID].rewards[scenario];
+		uint j = arcs[arcID].headId;
+		uint q = arcs[arcID].tailId;
+		int r_qj = arcs[arcID].rewards[scenario];
 		LHS += -alpha[q] + alpha[j] - beta[q][j] + gamma[q][j];
 		if (nodes[q].isVbar) {
 			if (nodes[j].isVbar) {
-				for (uint inArc : network.networkNodes[q].incomingArcs) {
-					uint i = network.networkArcs[inArc].tailId;
+				for (uint inArc : nodes[q].incomingArcs) {
+					uint i = arcs[inArc].tailId;
 					LHS += mu[i][q][j] - lambda[i][q][j];
 				}
-				for (uint outArc : network.networkNodes[j].outgoingArcs) {
-					uint i = network.networkArcs[outArc].headId;
+				for (uint outArc : nodes[j].outgoingArcs) {
+					uint i = arcs[outArc].headId;
 					LHS += lambda[q][j][i] - mu[q][j][i];
 				}
 				LHS += phi[q][j]+sigma[q][j];
 				model.addConstr(LHS >= r_qj, "7f");
 			}else {
-				for (uint inArc : network.networkNodes[q].incomingArcs) {
-					uint i = network.networkArcs[inArc].tailId;
+				for (uint inArc : nodes[q].incomingArcs) {
+					uint i = arcs[inArc].tailId;
 					LHS += mu[i][q][j] - lambda[i][q][j];
 				}
 				LHS +=phi[q][j];
@@ -353,8 +353,8 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 			}
 		}else {
 			if (nodes[j].isVbar) {
-				for (uint outArc : network.networkNodes[j].outgoingArcs) {
-					uint i = network.networkArcs[outArc].headId;
+				for (uint outArc : nodes[j].outgoingArcs) {
+					uint i = arcs[outArc].headId;
 					LHS += lambda[q][j][i] - mu[q][j][i];
 				}
 				LHS += sigma[q][j];
@@ -365,11 +365,11 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 		}
 	}
 	//// constraint number 9 ////
-	for (auto arcID1 : network.A4) {
+	for (auto arcID1 : networkPtr->A4) {
 		GRBLinExpr LHS = 0;
-		uint q = network.networkArcs[arcID1].headId;
-		uint i = network.networkArcs[arcID1].tailId;
-		uint r_iq = network.networkArcs[arcID1].rewards[scenario];
+		uint q = arcs[arcID1].headId;
+		uint i = arcs[arcID1].tailId;
+		uint r_iq = arcs[arcID1].rewards[scenario];
 		LHS += -beta[i][q] + gamma[i][q];
 		model.addConstr(LHS >= r_iq, "7j");
 	}
@@ -380,64 +380,66 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 
 	int status = model.get(GRB_IntAttr_Status);
 
+	const auto& processingOrder = networkPtr->processingOrder;
+
 	if (status == GRB_OPTIMAL){
 		//////////////////////////
 		/// optimality cut ///////
 		/////////////////////////
 		CutCoefficients Y_bar_coef;
-		for (uint i0 = 0; i0 < network.processingOrder.size(); i0++){
-			uint arcID = network.processingOrder[i0].second;
-			uint i = network.networkArcs[arcID].tailId;
-			uint q = network.networkArcs[arcID].headId;
-			for (uint outArc : network.networkNodes[q].outgoingArcs){
-				uint j = network.networkArcs[outArc].headId;
+		for (uint i0 = 0; i0 < processingOrder.size(); i0++){
+			uint arcID = processingOrder[i0].second;
+			uint i = arcs[arcID].tailId;
+			uint q = arcs[arcID].headId;
+			for (uint outArc : nodes[q].outgoingArcs){
+				uint j = arcs[outArc].headId;
 				Y_bar_coef[make_tuple(i, q, j)] = 0;
 			}
 		}
 		double rhs = 0;
 
 		/// first term ///
-		for (uint q = 0; q < network.n; q++){
-			for (uint arcID : network.networkNodes[q].outgoingArcs){
-				uint j = network.networkArcs[arcID].headId;
-				rhs += network.networkArcs[arcID].upperCapacities[scenario] * gamma[q][j].get(GRB_DoubleAttr_X);
-				rhs -= network.networkArcs[arcID].lowerCapacities[scenario] * beta[q][j].get(GRB_DoubleAttr_X);
+		for (uint q = 0; q < n; q++){
+			for (uint arcID : nodes[q].outgoingArcs){
+				uint j = arcs[arcID].headId;
+				rhs += arcs[arcID].upperCapacities[scenario] * gamma[q][j].get(GRB_DoubleAttr_X);
+				rhs -= arcs[arcID].lowerCapacities[scenario] * beta[q][j].get(GRB_DoubleAttr_X);
 			}
 		}
 
 		/// second term ///
-		for (uint q : network.Vbar){
-			for (uint inArcID : network.networkNodes[q].incomingArcs){
-				uint i = network.networkArcs[inArcID].tailId;
-				for (uint outArcID : network.networkNodes[q].outgoingArcs){
-					uint j = network.networkArcs[outArcID].headId;
-					rhs += network.networkArcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_X);
-					rhs += network.networkArcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_X);
-					Y_bar_coef[make_tuple(i, q, j)] -= network.networkArcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_X);
-					Y_bar_coef[make_tuple(i, q, j)] -= network.networkArcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_X);
+		for (uint q : networkPtr->Vbar){
+			for (uint inArcID : nodes[q].incomingArcs){
+				uint i = arcs[inArcID].tailId;
+				for (uint outArcID : nodes[q].outgoingArcs){
+					uint j = arcs[outArcID].headId;
+					rhs += arcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_X);
+					rhs += arcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_X);
+					Y_bar_coef[make_tuple(i, q, j)] -= arcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_X);
+					Y_bar_coef[make_tuple(i, q, j)] -= arcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_X);
 				}
 			}
 		}
 
 		/// third term ///
-		for (uint q : network.Vbar){
-			for (uint inArcID : network.networkNodes[q].incomingArcs){
-				uint i = network.networkArcs[inArcID].tailId;
-				uint u_iq = network.networkArcs[inArcID].upperCapacities[scenario];
-				for (uint outArcID : network.networkNodes[q].outgoingArcs){
-					uint j = network.networkArcs[outArcID].headId;
+		for (uint q : networkPtr->Vbar){
+			for (uint inArcID : nodes[q].incomingArcs){
+				uint i = arcs[inArcID].tailId;
+				uint u_iq = arcs[inArcID].upperCapacities[scenario];
+				for (uint outArcID : nodes[q].outgoingArcs){
+					uint j = arcs[outArcID].headId;
 					Y_bar_coef[make_tuple(i, q, j)] += u_iq * sigma[i][q].get(GRB_DoubleAttr_X);
 				}
 			}
 		}
 
 		/// fourth term ///
-		for (uint q : network.Vbar){
-			for (uint outArcID : network.networkNodes[q].outgoingArcs){
-				uint j = network.networkArcs[outArcID].headId;
-				uint u_qj = network.networkArcs[outArcID].upperCapacities[scenario];
-				for (uint inArcID : network.networkNodes[q].incomingArcs){
-					uint i = network.networkArcs[inArcID].tailId;
+		for (uint q : networkPtr->Vbar){
+			for (uint outArcID : nodes[q].outgoingArcs){
+				uint j = arcs[outArcID].headId;
+				uint u_qj = arcs[outArcID].upperCapacities[scenario];
+				for (uint inArcID : nodes[q].incomingArcs){
+					uint i = arcs[inArcID].tailId;
 					Y_bar_coef[make_tuple(i, q, j)] += u_qj * phi[q][j].get(GRB_DoubleAttr_X);
 				}
 			}
@@ -451,12 +453,12 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 		//////////////////////////////
 
 		CutCoefficients Y_bar_coef;
-		for (uint i0 = 0; i0 < network.processingOrder.size(); i0++){
-			uint arcID = network.processingOrder[i0].second;
-			uint i = network.networkArcs[arcID].tailId;
-			uint q = network.networkArcs[arcID].headId;
-			for (uint outArc : network.networkNodes[q].outgoingArcs){
-				uint j = network.networkArcs[outArc].headId;
+		for (uint i0 = 0; i0 < processingOrder.size(); i0++){
+			uint arcID = processingOrder[i0].second;
+			uint i = arcs[arcID].tailId;
+			uint q = arcs[arcID].headId;
+			for (uint outArc : nodes[q].outgoingArcs){
+				uint j = arcs[outArc].headId;
 				// cout << "(" << i << "," << q << "," << j << ")" << endl;
 				Y_bar_coef[make_tuple(i, q, j)] = 0;
 			}
@@ -464,47 +466,47 @@ Cut GuroSolver::solveSubProblemInstance(const Network &network, const vector<vec
 		double rhs = 0;
 
 		/// first term ///
-		for (uint q = 0; q < network.n; q++){
-			for (uint arcID : network.networkNodes[q].outgoingArcs){
-				uint j = network.networkArcs[arcID].headId;
-				rhs += network.networkArcs[arcID].upperCapacities[scenario] * gamma[q][j].get(GRB_DoubleAttr_UnbdRay);
-				rhs -= network.networkArcs[arcID].lowerCapacities[scenario] * beta[q][j].get(GRB_DoubleAttr_UnbdRay);
+		for (uint q = 0; q < n; q++){
+			for (uint arcID : nodes[q].outgoingArcs){
+				uint j = arcs[arcID].headId;
+				rhs += arcs[arcID].upperCapacities[scenario] * gamma[q][j].get(GRB_DoubleAttr_UnbdRay);
+				rhs -= arcs[arcID].lowerCapacities[scenario] * beta[q][j].get(GRB_DoubleAttr_UnbdRay);
 			}
 		}
 
 		/// second term ///
-		for (uint q : network.Vbar){
-			for (uint inArcID : network.networkNodes[q].incomingArcs){
-				uint i = network.networkArcs[inArcID].tailId;
-				for (uint outArcID : network.networkNodes[q].outgoingArcs){
-					uint j = network.networkArcs[outArcID].headId;
-					rhs += network.networkArcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
-					rhs += network.networkArcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
-					Y_bar_coef[make_tuple(i, q, j)] -= network.networkArcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
-					Y_bar_coef[make_tuple(i, q, j)] -= network.networkArcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+		for (uint q : networkPtr->Vbar){
+			for (uint inArcID : nodes[q].incomingArcs){
+				uint i = arcs[inArcID].tailId;
+				for (uint outArcID : nodes[q].outgoingArcs){
+					uint j = arcs[outArcID].headId;
+					rhs += arcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+					rhs += arcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+					Y_bar_coef[make_tuple(i, q, j)] -= arcs[inArcID].upperCapacities[scenario] * lambda[i][q][j].get(GRB_DoubleAttr_UnbdRay);
+					Y_bar_coef[make_tuple(i, q, j)] -= arcs[outArcID].upperCapacities[scenario] * mu[i][q][j].get(GRB_DoubleAttr_UnbdRay);
 				}
 			}
 		}
 
 		/// third term ///
-		for (uint q : network.Vbar){
-			for (uint inArcID : network.networkNodes[q].incomingArcs){
-				uint i = network.networkArcs[inArcID].tailId;
-				uint u_iq = network.networkArcs[inArcID].upperCapacities[scenario];
-				for (uint outArcID : network.networkNodes[q].outgoingArcs){
-					uint j = network.networkArcs[outArcID].headId;
+		for (uint q : networkPtr->Vbar){
+			for (uint inArcID : nodes[q].incomingArcs){
+				uint i = arcs[inArcID].tailId;
+				uint u_iq = arcs[inArcID].upperCapacities[scenario];
+				for (uint outArcID : nodes[q].outgoingArcs){
+					uint j = arcs[outArcID].headId;
 					Y_bar_coef[make_tuple(i, q, j)] += u_iq * sigma[i][q].get(GRB_DoubleAttr_UnbdRay);
 				}
 			}
 		}
 
 		/// fourth term ///
-		for (uint q : network.Vbar){
-			for (uint outArcID : network.networkNodes[q].outgoingArcs){
-				uint j = network.networkArcs[outArcID].headId;
-				uint u_qj = network.networkArcs[outArcID].upperCapacities[scenario];
-				for (uint inArcID : network.networkNodes[q].incomingArcs){
-					uint i = network.networkArcs[inArcID].tailId;
+		for (uint q : networkPtr->Vbar){
+			for (uint outArcID : nodes[q].outgoingArcs){
+				uint j = arcs[outArcID].headId;
+				uint u_qj = arcs[outArcID].upperCapacities[scenario];
+				for (uint inArcID : nodes[q].incomingArcs){
+					uint i = arcs[inArcID].tailId;
 					Y_bar_coef[make_tuple(i, q, j)] += u_qj * phi[q][j].get(GRB_DoubleAttr_UnbdRay);
 				}
 			}

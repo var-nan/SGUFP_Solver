@@ -49,7 +49,7 @@ void DDSolver::initialize() {
     nodeQueue.pushNode(node);
 }
 
-void DDSolver::startSolve(const Network& network, optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
+void DDSolver::startSolve(optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
 
     /*
      * 1. get node from node's queue
@@ -59,7 +59,7 @@ void DDSolver::startSolve(const Network& network, optional<pair<CutContainer, Cu
      * 6. insert cutset nodes to the queue.
      */
 
-    NodeExplorer explorer{initialCuts.value()};
+    NodeExplorer explorer{networkPtr, initialCuts.value()};
 
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
@@ -71,7 +71,7 @@ void DDSolver::startSolve(const Network& network, optional<pair<CutContainer, Cu
         }
 
         // start node processor
-        auto result = explorer.process(network, node); // use co-routines to update globalLB in between.
+        auto result = explorer.process(node); // use co-routines to update globalLB in between.
 
         #ifdef DEBUG
         numNodesExplored++;
@@ -128,7 +128,7 @@ DDNode node2DDdfsNode(Node_t node) {
     return newNode;
 }
 
-pair<CutContainer, CutContainer> DDSolver::initializeCuts(const Network &network) {
+pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
     // build a restricted tree, get exact cutsets, build subtrees and get solutions for each of subtree.
 
     // change the max_width
@@ -143,8 +143,8 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts(const Network &network
     DDNode root{0};
     root.nodeLayer = 0;
     root.globalLayer = 0;
-    DD restricted {RESTRICTED};
-    auto cutset = restricted.build(network, root);
+    DD restricted {networkPtr,RESTRICTED};
+    auto cutset = restricted.build(root);
     cout << "Cutset size " << cutset.value().size() << endl;
 
     CutContainer fCuts{FEASIBILITY};
@@ -156,15 +156,15 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts(const Network &network
 
         for (const auto& node: cutset.value()) {
             DDNode ddNode = node2DDNode(node);
-            DD subTree{RESTRICTED};
-            auto _ = subTree.build(network, ddNode);
+            DD subTree{networkPtr,RESTRICTED};
+            auto _ = subTree.build(ddNode);
 
             // get solution
             auto sol = subTree.solution();
             // solve sub problem
-            GuroSolver solver{env, static_cast<int>(network.n)};
-            auto y_bar = w2y(sol, network);
-            auto cut = solver.solveSubProblemInstance(network, y_bar, 0);
+            GuroSolver solver{networkPtr,env};
+            auto y_bar = w2y(sol, networkPtr);
+            auto cut = solver.solveSubProblemInstance(y_bar, 0);
             // add cut to containers
             if (cut.cutType == FEASIBILITY) {
                 if (!fCuts.isCutExists(cut))

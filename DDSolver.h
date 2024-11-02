@@ -42,6 +42,8 @@ class DDSolver {
     NodeQueue nodeQueue;
     double optimalLB;
 
+    const shared_ptr<Network> networkPtr;
+
     #ifdef DEBUG
     size_t numNodesExplored = 0;
     size_t numNodesFound = 0;
@@ -61,7 +63,10 @@ class DDSolver {
 
 public:
 
-    DDSolver():optimalLB{std::numeric_limits<double>::lowest()} { }
+
+    explicit DDSolver(const shared_ptr<Network>& networkPtr_):networkPtr{networkPtr_}, optimalLB{std::numeric_limits<double>::lowest()} { }
+    // DDSolver() : optimalLB{std::numeric_limits<double>::lowest()}{}
+
     [[nodiscard]] Node_t getNode();
 
     [[nodiscard]] double getOptimalLB() const;
@@ -69,8 +74,8 @@ public:
 
     void initialize();
     void start();
-    void startSolve(const Network& network, optional<pair<CutContainer, CutContainer>> initialCuts);
-    pair<CutContainer, CutContainer> initializeCuts(const Network &network);
+    void startSolve(optional<pair<CutContainer, CutContainer>> initialCuts);
+    pair<CutContainer, CutContainer> initializeCuts();
 };
 
 

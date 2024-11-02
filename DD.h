@@ -149,6 +149,7 @@ private:
 		}
 	};
 
+	const shared_ptr<Network> networkPtr;
 	Number number;
 	Type type;
 	bool isExact = true;
@@ -174,10 +175,10 @@ public:
 	unordered_map<ulint, DDArc> arcs;
 	vector<vector<ulint>> tree; // layer corresponds to vector of node ids.
 
-	DD(): type{RESTRICTED}{}
-	explicit DD(const Type type_): type{type_}{}
+	explicit DD(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_}, type{RESTRICTED}{}
+	explicit DD(const shared_ptr<Network>& networkPtr_, const Type type_): networkPtr{networkPtr_}, type{type_}{}
 
-	optional<vector<Node_t>> build(const Network &network, DDNode &node);
+	optional<vector<Node_t>> build(DDNode &node);
 
 	/// refinement helper functions ///
 
@@ -191,17 +192,16 @@ public:
 
 	void applyFeasibilityCutRestricted(const Network& network, const Cut& cut);
 	void applyFeasibilityCutRelaxed(const Network& network, const Cut& cut);
-	void applyOptimalityCutRestricted(const Network& network, const Cut& cut);
-	void applyOptimalityCutRelaxed(const Network& network, const Cut& cut);
+	void applyOptimalityCutRestricted(const Cut &cut);
+	void applyOptimalityCutRelaxed(const Cut &cut);
 	void applyOptimalityCut(const Network& network, const Cut& cut);
 	void refineTree(const Network& network, Cut cut);
 	void applyFeasibilityCut(const Network& network, const Cut& cut);
 
-	double applyOptimalityCutRestrictedLatest(const Network &network, const Cut &cut);
-	bool applyFeasibilityCutRestrictedLatest(const Network &network, const Cut &cut);
-	double applyOptimalityCutHeuristic(const Network& network, const Cut& cut);
-	bool applyFeasibilityCutHeuristic(const Network& network, const Cut& cut);
-	// LATER add Network pointer to the DD class. remove Network parameter in all the functions.
+	double applyOptimalityCutRestrictedLatest(const Cut &cut);
+	bool applyFeasibilityCutRestrictedLatest(const Cut &cut);
+	double applyOptimalityCutHeuristic(const Cut &cut);
+	bool applyFeasibilityCutHeuristic(const Cut &cut);
 
 	/// node deletion functions ///
 

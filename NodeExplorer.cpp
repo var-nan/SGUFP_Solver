@@ -7,7 +7,7 @@
 #include "DD.h"
 
 
-OutObject NodeExplorer::process( const Network& network, const Node_t node) {
+OutObject NodeExplorer::process(const Node_t node) {
 
   	/*
 		node should be eligible for processing.
@@ -18,15 +18,15 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
 
     STEP_1: // refine relaxed tree with global feasibility cuts.
     DDNode root1 {0, node.globalLayer, node.states, node.solutionVector};
-    DD relaxedDD1{EXACT};
-    auto _ = relaxedDD1.build(network, root1);
+    DD relaxedDD1{networkPtr,EXACT};
+    auto _ = relaxedDD1.build(root1);
     // refine tree with feasibility cuts
     for (auto start = feasibilityCuts.cuts.rbegin(); start != feasibilityCuts.cuts.rend(); ++start) {
         const auto cut = *start;
     // for (const auto& cut: feasibilityCuts.cuts) {
         // cout << "-----------------------------------------------------------------------Zart" << endl;
         // if any of the cuts make the tree infeasible? get another node to explore.
-        if (!relaxedDD1.applyFeasibilityCutHeuristic(network, cut)) {
+        if (!relaxedDD1.applyFeasibilityCutHeuristic(cut)) {
             return {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), {}, false}; // get next node
         }
     }
@@ -36,8 +36,8 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
     STEP_2:
     DDNode root2 {0, node.globalLayer, node.states, node.solutionVector};
     // build restricted DD
-    DD restrictedDD{RESTRICTED};
-    auto cutset = restrictedDD.build(network, root2);
+    DD restrictedDD{networkPtr,RESTRICTED};
+    auto cutset = restrictedDD.build(root2);
     // goto STEP_2C;
     // if(!cutset) goto STEP_2C;
 
@@ -48,7 +48,7 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
     for (auto start = feasibilityCuts.cuts.rbegin(); start != feasibilityCuts.cuts.rend(); ++start){
         const auto cut = *start;
     // for (const auto& cut: feasibilityCuts.cuts) {
-        if(!restrictedDD.applyFeasibilityCutRestrictedLatest(network, cut)) {
+        if(!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
             // tree is infeasible. a layer is removed. get cutset and set lb, ub to root's
             // auto cs = cutset.value();
 
@@ -67,7 +67,7 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
     {
         //applying optimality cuts in reverse order.
         for (auto start = optimalityCuts.cuts.rbegin(); start != optimalityCuts.cuts.rend(); ++start) {
-            lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(network, *start);
+            lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(*start);
         }
     }
     // // for (const auto& cut: optimalityCuts.cuts) {
@@ -97,9 +97,9 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
         // }
         // solutions.push_back(solution);
         // cout << "Solution from tree: "; for (auto s : solution) cout << s << " " ; cout << endl;
-        GuroSolver solver {env, static_cast<int>(network.n)};
-        auto y_bar = w2y(solution, network);
-        auto cut = solver.solveSubProblemInstance(network,y_bar, 0);
+        GuroSolver solver {networkPtr,env};
+        auto y_bar = w2y(solution, networkPtr);
+        auto cut = solver.solveSubProblemInstance(y_bar,0);
 
         if (cut.cutType == FEASIBILITY) {
             // check if cut exists
@@ -107,7 +107,7 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
             //     break; // does it happen?
             // }
             feasibilityCuts.insertCut(cut);
-            if (!restrictedDD.applyFeasibilityCutRestrictedLatest(network, cut)) {
+            if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
                 // tree is removed, return the cutset and lower bound and upper bound.
                 lowerBound  = node.lb;
                 goto FINAL;
@@ -122,7 +122,7 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
             //     // cout << "Optimality cut exists" << endl;
             //     break; // set lower bound
             // }
-            lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(network, cut);
+            lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
             // LATER if lower bound is < global lower bound, break it
             optimalityCuts.insertCut(cut);
         }
@@ -131,11 +131,11 @@ OutObject NodeExplorer::process( const Network& network, const Node_t node) {
     STEP_3:
     {
         DDNode root3 {0, node.globalLayer, node.states, node.solutionVector};
-        DD relaxedDD2{EXACT};
-        relaxedDD2.build(network, root3);
+        DD relaxedDD2{networkPtr, EXACT};
+        relaxedDD2.build(root3);
         //double upperBound = node.ub;
         for (auto start = optimalityCuts.cuts.rbegin(); start != optimalityCuts.cuts.rend(); ++start) {
-            upperBound = relaxedDD2.applyOptimalityCutHeuristic(network, *start);
+            upperBound = relaxedDD2.applyOptimalityCutHeuristic(*start);
         }
     }
     // for (const auto& cut : optimalityCuts.cuts) {
