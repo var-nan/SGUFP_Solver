@@ -17,7 +17,7 @@ class DDSolver {
 
     struct comparator {
         bool operator() (const Node_t& node1, const Node_t& node2) const {
-            return node1.ub > node2.ub;
+            return (node1.ub+node1.lb) > (node2.ub+node2.lb);
         }
     };
 
@@ -60,6 +60,7 @@ class DDSolver {
     }
     #endif
 
+    void process(NodeExplorer explorer);
 
 public:
 

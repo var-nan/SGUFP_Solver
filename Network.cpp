@@ -85,6 +85,8 @@ Network::Network(const std::string& p_fileName){
 			}
 		}
 
+		//reorder vBar nodes, and do not add -1 to it.
+
 		this->n = nNodes;
 		this->edges = m;
 		this->networkNodes = std::move(netNodes);
@@ -97,6 +99,7 @@ Network::Network(const std::string& p_fileName){
 		this->A4 = std::move(a4);
 		//this->isNodeInVbar = nodeInVbar;
 
+		shuffleVBarNodes();
 		// reduce the size of vBar. just for testing.
 		//this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
 
@@ -106,6 +109,7 @@ Network::Network(const std::string& p_fileName){
 			// another way of doing state update map.
 			const auto& node = networkNodes[id];
 			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
+			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1))
 			states.insert(-1); // add -1 to states.
 			stateUpdateMap.insert({i, states});
 			bool first = true;
@@ -138,6 +142,41 @@ Network::Network(const std::string& p_fileName){
 		cerr << "Error code: " << strerror(errno);
 	}
 
+}
+
+#include <algorithm>
+void Network::shuffleVBarNodes() noexcept {
+	// shift vbar nodes that  have one incoming arc and one outgoing arc to the front.
+	// int i = 0, j = 0;
+	//
+	// while (j < this->Vbar.size()) {
+	// 	const auto& node = this->networkNodes[this->Vbar[j]];
+	// 	if (node.incomingArcs.size() == 1 && node.outgoingArcs.size() == 1) {
+	// 		// swap i and j.
+	// 		auto temp = this->Vbar[i];
+	// 		this->Vbar[i] = this->Vbar[j];
+	// 		this->Vbar[j] = temp;
+	// 		i++;
+	// 	}
+	// 	j++;
+	// }
+
+	// rank : 1.05* # incomingArcs + 1.0 outgoing Arcs
+	// auto rank = [this](const uint i, const uint j) {
+	// 	const auto& node_i = this->networkNodes[i];
+	// 	const auto& node_j = this->networkNodes[j];
+	//
+	// 	return (1.05 * node_i.incomingArcs.size() + 1.0 * node_i.outgoingArcs.size()) >
+	// 		(1.05 * node_j.incomingArcs.size() + 1.0 * node_j.outgoingArcs.size());
+	// };
+
+	std::sort(Vbar.begin(), Vbar.end(), [this](const uint a, const uint b) {
+		const auto& node_i = this->networkNodes[a];
+		const auto& node_j = this->networkNodes[b];
+
+		return (1.05 * static_cast<double>(node_i.incomingArcs.size()) + 1.0 * static_cast<double>(node_i.outgoingArcs.size())) <
+			(1.05 * static_cast<double>(node_j.incomingArcs.size()) + 1.0 * static_cast<double>(node_j.outgoingArcs.size()));
+	});
 }
 
 void postProcess(){

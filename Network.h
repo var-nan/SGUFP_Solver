@@ -61,6 +61,7 @@ public:
 
 class Network {
 
+	void shuffleVBarNodes() noexcept;
 public:
 	uint32_t n;
 	uint32_t edges;

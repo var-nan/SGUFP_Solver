@@ -50,6 +50,17 @@ void DDSolver::initialize() {
 }
 
 void DDSolver::startSolve(optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
+    if (initialCuts) {
+        NodeExplorer explorer{networkPtr, initialCuts.value()};
+        process(explorer);
+    }
+    else {
+        NodeExplorer explorer{networkPtr};
+        process(explorer);
+    }
+}
+
+void DDSolver::process(NodeExplorer explorer) {
 
     /*
      * 1. get node from node's queue
@@ -59,7 +70,7 @@ void DDSolver::startSolve(optional<pair<CutContainer, CutContainer>> initialCuts
      * 6. insert cutset nodes to the queue.
      */
 
-    NodeExplorer explorer{networkPtr, initialCuts.value()};
+    // NodeExplorer explorer{networkPtr, initialCuts.value()};
 
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
