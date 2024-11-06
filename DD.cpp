@@ -7,6 +7,7 @@
 #include <queue>
 #include <limits>
 
+static int second = 0;
 /**
  * Compiles the decision diagram tree with given node as the root.
  */
@@ -77,6 +78,13 @@ optional<vector<Node_t>> DD::build(DDNode &node) {
 	// generate cutset.
 	//cutSet = generateExactCutSet(); TODO uncomment this.
 
+	if (second == 2) {
+		cout << "First tree: " << endl;
+		for (int i = 0; i< tree.size(); i++) {
+			cout << "Layer: " << i << " , size: " << tree[i].size() << endl;
+		}
+	} second++;
+
 	#ifdef DEBUG
 		displayStats();
 	#endif
@@ -114,7 +122,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 		#if RESTRICTED_STRATEGY == 1
 		{
 			if (currentLayer.size() >= MAX_WIDTH) { // new strategy after tree becomes non-exact.
-				buildNextLayer2(currentLayer, nextLayer);
+				buildNextLayer4(currentLayer, nextLayer);
 				return false;
 			}
 			uint count = 0;
@@ -393,6 +401,43 @@ void DD::buildNextLayer2(vector<ulint> &currentLayer, vector<ulint> &nextLayer) 
 	}
 }
 
+
+void DD::buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer) {
+	uint count = 0;
+
+	// for each node, create only one child
+	for (const auto id: currentLayer) {
+		auto& node = nodes[id];
+		if (node.states.size() > 1) {
+			for (auto state: node.states) {
+				if (state == -1) continue;
+				// create child
+				auto childId = createChild(node, state);
+				nextLayer.push_back(childId);
+				break;
+			}
+		}
+		else {
+			auto childId = createChild(node, -1);
+			nextLayer.push_back(childId);
+		}
+		count++;
+		if (count >= MAX_WIDTH) return;
+	}
+}
+
+void DD::buildNextLayer4(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+	// select arc with maximum reward. for each parent create single child
+
+	for (const auto id: currentLayer) {
+		auto& node = nodes[id];
+		int decision = -1;
+		if (node.states.size() > 1) // select arc with maximum reward.
+			decision = networkPtr->getBestArc(node.states);
+		auto childId = createChild(node, decision);
+		nextLayer.push_back(childId);
+	}
+}
 
 /**
  * Merges the second DDNode into the first DDNode.

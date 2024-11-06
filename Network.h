@@ -85,6 +85,18 @@ public:
 	vui A4;
 	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
 
+	[[nodiscard]] int getBestArc(const unordered_set<int>& states) const noexcept{
+
+		int max = std::numeric_limits<int>::min();
+		int i = -1;
+		for (const auto& state: states) {
+			if (state != -1) {
+				if (const auto& arc = networkArcs[state]; arc.rewards[0] > max) {max = arc.rewards[0]; i = state;}
+			}
+		}
+		return i;
+	}
+
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)
 		: n{nNodes}, edges{nEdges}, networkNodes{netNodes}, networkArcs{netArcs},

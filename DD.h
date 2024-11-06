@@ -168,6 +168,8 @@ private:
 	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
 	ulint createChild(DDNode& parent, int decision);
 	void buildNextLayer2(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer4(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 
 public:
 

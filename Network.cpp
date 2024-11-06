@@ -109,8 +109,7 @@ Network::Network(const std::string& p_fileName){
 			// another way of doing state update map.
 			const auto& node = networkNodes[id];
 			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
-			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1))
-			states.insert(-1); // add -1 to states.
+			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1)) states.insert(-1); // add -1 to states.
 			stateUpdateMap.insert({i, states});
 			bool first = true;
 			for (const auto& inId: node.incomingArcs){
