@@ -16,21 +16,29 @@ add_executable(SGUFP_Solver main.cpp ${SOURCES}
 )
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=100)
+add_compile_definitions(MAX_WIDTH=20)
 
-# dynamic macro update?
 
-# google test dependency
-include(FetchContent)
-FetchContent_Declare(googletest URL https://github.com/google/googletest/archive/5376968f6948923e2411081fd9372e71a59d8e77.zip)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
-enable_testing()
-
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(STATUS "Fetching google test")
+    # google test dependency
+    include(FetchContent)
+    FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    enable_testing()
+endif()
 
 if (UNIX)
-
     message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
+    message(STATUS "CMake Version: ${CMAKE_VERSION}")
+    message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
+    message(STATUS "C compier: ${CMAKE_C_COMPILER}")
+    message(STATUS "C compiler version: ${CMAKE_C_COMPILER_VERSION}")
+    message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+    message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
     # gurobi libraries
     set(GUROBI_HOME "/opt/gurobi1102/linux64/")
@@ -82,6 +90,14 @@ elseif(WIN32)
         set(CMAKE_BUILD_TYPE "Debug")
     endif()
 
+    message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
+    message(STATUS "CMake Version: ${CMAKE_VERSION}")
+    message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
+    message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
+    message(STATUS "C compiler version: ${CMAKE_C_COMPILER_VERSION}")
+    message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
+    message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
+
     if (MSVC AND MT)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
@@ -90,12 +106,13 @@ elseif(WIN32)
     endif()
     # flag specific for Dr Memory
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd")
-    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
+#    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
     find_package(GUROBI REQUIRED)
 
     include_directories(${GUROBI_INCLUDE_DIRS})
 
 #    add_compile_definitions(DEBUG)
+    add_compile_definitions(SOLVER_STATS)
 
     message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
     message(STATUS "GUROBI_CXX_DEBUG LIBRARY: ${GUROBI_CXX_DEBUG_LIBRARY}")
@@ -110,18 +127,18 @@ elseif(WIN32)
         feature_summary(WHAT ALL)
     endif()
 
-    add_executable(testmain testmain.cpp ${SOURCES})
-    target_link_libraries(testmain GTest::gtest_main)
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_executable(testmain testmain.cpp ${SOURCES})
+        target_link_libraries(testmain GTest::gtest_main)
 
-    add_executable(tests2 tests/tests.cpp ${SOURCES}
-            tests/test_utils.h)
-    target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
-            debug ${GUROBI_CXX_DEBUG_LIBRARY})
-    target_link_libraries(tests2 ${GUROBI_LIBRARY})
-    target_link_libraries(tests2 GTest::gtest_main)
+        add_executable(tests2 tests/tests.cpp ${SOURCES} tests/test_utils.h)
+        target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
+                debug ${GUROBI_CXX_DEBUG_LIBRARY})
+        target_link_libraries(tests2 ${GUROBI_LIBRARY})
+        target_link_libraries(tests2 GTest::gtest_main)
 
-    include(GoogleTest)
-    gtest_discover_tests(testmain)
-    gtest_discover_tests(tests2)
-
+        include(GoogleTest)
+        gtest_discover_tests(testmain)
+        gtest_discover_tests(tests2)
+    endif()
 endif()
