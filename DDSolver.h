@@ -9,7 +9,7 @@
 #include "grb.h"
 #include "NodeExplorer.h"
 #include <queue>
-
+#include <stack>
 
 
 
@@ -18,14 +18,15 @@ class DDSolver {
     struct comparator {
         bool operator() (const Node_t& node1, const Node_t& node2) const {
             return (node1.ub+node1.lb) > (node2.ub+node2.lb);
+            // return node1.globalLayer < node2.globalLayer;
         }
     };
 
     class NodeQueue {
         // use either queue or vector or priority queue.
         // use mutex
-        // priority_queue<Node_t, vector<Node_t>, comparator> q;
-        queue<Node_t> q;
+        priority_queue<Node_t, vector<Node_t>, comparator> q;
+        // stack<Node_t> q;
     public:
         NodeQueue() = default;
 
@@ -44,7 +45,7 @@ class DDSolver {
 
     const shared_ptr<Network> networkPtr;
 
-    #ifdef DEBUG
+    #ifdef SOLVER_STATS
     size_t numNodesExplored = 0;
     size_t numNodesFound = 0;
     size_t numPrunedByBound = 0;
@@ -77,6 +78,7 @@ public:
     void start();
     void startSolve(optional<pair<CutContainer, CutContainer>> initialCuts);
     pair<CutContainer, CutContainer> initializeCuts();
+    pair<CutContainer, CutContainer> initializeCuts2(size_t n = 50);
 };
 
 

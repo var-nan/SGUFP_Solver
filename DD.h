@@ -330,3 +330,42 @@ STATIC inline vector<uint> getShuffledList(const size_t n, const size_t m){
 	std::sort(result.begin(), result.end());
 	return result;
 }
+
+class RestrictedDD {
+private:
+	const shared_ptr<Network> networkPtr;
+	ulint number = 0;
+
+	bool isExact = false;
+	bool isTreeDeleted = false;
+	bool isTreeBuilt = false;
+
+	const uint MAXWIDTH;
+
+	uint startTree = 0;
+	uint exactLayer = 0;
+
+	vector<Node_t> cutset;
+
+	// deletion functions
+
+	// refinement functions
+
+
+public:
+	vector<vector<ulint>> tree;
+	unordered_map<ulint, DDNode> nodes;
+	unordered_map<ulint, DDArc> arcs;
+
+	RestrictedDD(const shared_ptr<Network>& networkPtr_, uint mw): networkPtr{networkPtr_}, MAXWIDTH{mw}{}
+
+	[[nodiscard]] optional<vector<Node_t>> compile(DDNode root);
+	[[nodiscard]] bool applyFeasibilityCut(const Cut& cut) noexcept;
+	[[nodiscard]] double applyOptimalityCut(const Cut& cut) noexcept;
+	[[nodiscard]] vi solution() const noexcept;
+};
+
+class RelaxedDD {
+	const shared_ptr<Network> networkPtr;
+
+};

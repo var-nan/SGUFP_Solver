@@ -7,7 +7,6 @@
 #include <queue>
 #include <limits>
 
-static int second = 0;
 /**
  * Compiles the decision diagram tree with given node as the root.
  */
@@ -78,12 +77,6 @@ optional<vector<Node_t>> DD::build(DDNode &node) {
 	// generate cutset.
 	//cutSet = generateExactCutSet(); TODO uncomment this.
 
-	if (second == 2) {
-		cout << "First tree: " << endl;
-		for (int i = 0; i< tree.size(); i++) {
-			cout << "Layer: " << i << " , size: " << tree[i].size() << endl;
-		}
-	} second++;
 
 	#ifdef DEBUG
 		displayStats();
@@ -1273,6 +1266,9 @@ double DD::applyOptimalityCutRestrictedLatest(const Cut &cut) {
 		}
 	}
 	rootNode.state2 = justifiedRHS;
+#ifdef DEBUG
+	cout << "Optimality cut. Justified RHS: " << justifiedRHS;
+#endif
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
 
@@ -1316,6 +1312,9 @@ double DD::applyOptimalityCutRestrictedLatest(const Cut &cut) {
 		}
 	}
 
+#ifdef DEBUG
+	cout << "\t terminal state: " << terminalNode.state2 << endl;
+#endif
 	return terminalNode.state2;
 }
 
@@ -1342,6 +1341,9 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Cut &cut) {
 		}
 	}
 	rootNode.state2 = justifiedRHS;
+#ifdef DEBUG
+	cout << "Feasibility cut. Justified RHS: " << justifiedRHS;
+#endif
 
 	// auto lowerBounds = helperFunction(network, cut);
 	// lowerBounds.push_back(0);
@@ -1405,11 +1407,15 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Cut &cut) {
 	if (nodesToRemove.size() == tree[tree.size()-2].size()) {
 		// removing entire layer removes entire tree. update flags instead
 		#ifdef DEBUG
-		cout << endl << "Entire layer is deleted. DD is infeasible." << endl;
+		cout << "Entire layer is deleted. DD is infeasible." << endl;
 		#endif
 		isInFeasible = true;
 		return false;
 	}
+#ifdef DEBUG
+	if (!nodesToRemove.empty()) cout << " Removing " << nodesToRemove.size() << " nodes from the tree";
+#endif
+	cout << endl;
 	if (!nodesToRemove.empty()) batchRemoveNodes(nodesToRemove);
 
 	return true;
@@ -1435,6 +1441,9 @@ double DD::applyOptimalityCutHeuristic(const Cut &cut) {
 		}
 	}
 	rootNode.state2 = justifiedRHS;
+#ifdef DEBUG
+	cout << "Optimality cut heuristic. Justified RHS: " << justifiedRHS;
+#endif
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
 		auto netArcId = processingOrder[startTree+layer-1].second;
@@ -1477,6 +1486,9 @@ double DD::applyOptimalityCutHeuristic(const Cut &cut) {
 		}
 	}
 	terminalNode.state2 = terminalState;
+#ifdef DEBUG
+	cout << "\t terminal state: " << terminalState << endl;
+#endif
 	// cout << "Applied Optimality cut heuristically" << endl;
 	return terminalState;
 }
@@ -1507,6 +1519,9 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
 		}
 	}
+#ifdef DEBUG
+	cout << "Feasibility cut heuristic. Justified RHS: " << justifiedRHS;
+#endif
 	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size() -1; layer++) {
@@ -1537,6 +1552,9 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 		state = (state < arc.weight) ? arc.weight : state;
 	}
 
+#ifdef DEBUG
+	cout << "\t terminal state: " << state << endl;
+#endif
 	terminalNode.state2 = state;
 	return (state >= 0);
 }
