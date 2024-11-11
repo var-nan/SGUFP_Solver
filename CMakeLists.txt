@@ -5,18 +5,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-set(SOURCES Network.cpp DD.cpp grb.cpp OriginalProblem.h)
-add_executable(SGUFP_Solver main.cpp ${SOURCES}
-        DDSolver.cpp
-        DDSolver.h
-        NodeExplorer.cpp
-        NodeExplorer.h
-#        Worker.cpp
-#        Worker.h)
-)
+set(SOURCES Network.cpp DD.cpp grb.cpp DDSolver.cpp NodeExplorer.cpp OriginalProblem.h)
+add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=20)
+add_compile_definitions(MAX_WIDTH=120)
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -35,7 +28,7 @@ if (UNIX)
     message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
     message(STATUS "CMake Version: ${CMAKE_VERSION}")
     message(STATUS "CMake generator: ${CMAKE_GENERATOR}")
-    message(STATUS "C compier: ${CMAKE_C_COMPILER}")
+    message(STATUS "C compiler: ${CMAKE_C_COMPILER}")
     message(STATUS "C compiler version: ${CMAKE_C_COMPILER_VERSION}")
     message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
     message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
@@ -52,12 +45,16 @@ if (UNIX)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
     add_compile_definitions(DEBUG)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -O0 ) # add -O2 flag in final phase. -Wunused
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -O0 -pg -g) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -g)
+#    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
+#    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
+#    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
     # compiler flags: -Wuseless-cast -Wshadow, -Wduplicated-cond, -Wduplicated-branches
-    # compiler flags: -fsanitize=pointer-subtract, -fsanitize=address
+    # compiler flags: -fsanitize=pointer-subtract, -fsanitize=address -fno-rtti,
     # compiler flags : -Wnull-dereference, -Wold-style-cast
     # add -Werror flag later
-    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wnull-dereference)
+#    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wnull-dereference)
     # target_compile_features(SGUFP_Solver PUBLIC cxx_std_17)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi_c++)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
@@ -73,6 +70,11 @@ if (UNIX)
     target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
     target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
 
+
+#    if (CMAKE_BUILD_TYPE STREQUAL "Release")
+#        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
+#        set_target_properties(tests2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
+#    endif()
     include(GoogleTest)
     gtest_discover_tests(testmain)
     gtest_discover_tests(tests2)
