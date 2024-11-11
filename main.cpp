@@ -250,14 +250,20 @@ int old_main() {
 void main() {
 	Network network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
 
-	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"})};
+
+	// print v bar nodes and its outoging arcs.
+	for (auto id: network.Vbar) {
+		cout << id << " : incoming= " << network.networkNodes[id].incomingArcs.size()
+				<< " , outgoing= " << network.networkNodes[id].outgoingArcs.size() << endl;
+	}
+
 
 	#ifdef DEBUG
 	cout << "A4 size: " << network.A4.size() << endl;
 
 	for (auto id : network.Vbar) {
 		auto node = network.networkNodes[id];
-		cout << "Node : " << id << " inc size: " << node.incomingArcs.size() << " , outsize : " << node.outgoingArcs.size() << endl;
+		// cout << "Node : " << id << " inc size: " << node.incomingArcs.size() << " , outsize : " << node.outgoingArcs.size() << endl;
 	}
 	#endif
 
@@ -266,6 +272,11 @@ void main() {
 	cout << "Solved Original problem " <<endl;
 	cout << endl;
 	cout << endl;
+
+	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"})};
+	cout << "Vbar order: "; for (auto id : networkPtr->Vbar) cout << id << " "; cout << endl;
+	cout << "Max Width : " << MAX_WIDTH << endl;
+	cout << "DEBUG enabled, solving for a subset of V Bar nodes. Single scenario." << endl;
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration_cast;
 	using std::chrono::duration;
@@ -277,14 +288,15 @@ void main() {
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver{networkPtr};
 	solver.initialize();
-	auto cuts = solver.initializeCuts();
-	cout << "Number of optimality cuts: " << cuts.second.cuts.size() << endl;
-	cout << "Number of feasibility cuts: " << cuts.first.cuts.size() << endl;
+	int n_initial_cuts = 25;
+	auto cuts = solver.initializeCuts2(n_initial_cuts);
+	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
+		" , Feasibility: " << cuts.first.cuts.size() << endl;
 	cout << "**********************************************************************************************************\n\n\n" << endl;
 
 	solver.startSolve(cuts);
 	auto t2 = high_resolution_clock::now();
-
+	// cout << "Node queue strategy: LIFO" << endl;
 	auto ms_int = duration_cast<seconds>(t2-t1);
 	duration<double> ms_double = t2-t1;
 	std::cout <<"program took " << ms_int.count() << " seconds" << endl;

@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <map>
 #include <tuple>
+#include <memory>
 
 using namespace std;
 
