@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <iostream>
+#include <algorithm>
 
 using namespace std;
 
@@ -84,6 +85,10 @@ public:
 	vui A3;
 	vui A4;
 	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
+	vi layerRewards;
+	vector<uint8_t> troubleMaker; // contains zero if layer is not a trouble maker.
+
+	vector<uint> getTroubleNodes() const noexcept;
 
 	[[nodiscard]] int getBestArc(const unordered_set<int>& states) const noexcept{
 

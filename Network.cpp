@@ -5,6 +5,7 @@
 #include "Network.h"
 #include <fstream>
 #include <cstring>
+#include <string>
 
 Network::Network(const std::string& p_fileName){
 
@@ -99,6 +100,8 @@ Network::Network(const std::string& p_fileName){
 		this->A4 = std::move(a4);
 		//this->isNodeInVbar = nodeInVbar;
 
+		auto troubleMakerNodes = getTroubleNodes();
+
 		shuffleVBarNodes();
 		// reduce the size of vBar. just for testing.
 		//this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
@@ -107,18 +110,33 @@ Network::Network(const std::string& p_fileName){
 		int i = 0;
 		for (const auto& id: Vbar){
 			// another way of doing state update map.
-			const auto& node = networkNodes[id];
+			auto& node = networkNodes[id];
 			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
-			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1)) states.insert(-1); // add -1 to states.
+			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1) && (node.outgoingArcs.size() < node.incomingArcs.size())) states.insert(-1); // add -1 to states.
+			// if (id == 37)states.erase(-1);
 			stateUpdateMap.insert({i, states});
 			bool first = true;
+			// sort incoming arcs based in decreasing order of reward
+			std::sort(node.incomingArcs.begin(), node.incomingArcs.end(),
+				[this](const auto a, const auto b) constexpr {
+					return this->networkArcs[a].rewards[0] > this->networkArcs[b].rewards[0];
+
+			});
 			for (const auto& inId: node.incomingArcs){
 				if (first) {this->hasStateChanged.push_back(true); first = false;}
 				else this->hasStateChanged.push_back(false);
 				processingOrder.emplace_back(i++, inId);
+				layerRewards.push_back(networkArcs[inId].rewards[0]);
+				troubleMaker.push_back(0);
 			}
+			if (find(troubleMakerNodes.begin(), troubleMakerNodes.end(), id) != troubleMakerNodes.end())
+				troubleMaker.back() = 1; // set last element to 1.
+
 		}
 		hasStateChanged.push_back(false); // extra element for buildNextLayer in DD class.
+		// troubleMaker.insert(troubleMaker.begin(), 0);
+		cout <<"Trouble Maker structure: "; for (auto s: troubleMaker) cout << to_string(s) <<" "; cout << endl;
+		cout <<"Incoming Nodes: "; for (auto id: Vbar) cout << networkNodes[id].incomingArcs.size() << " "; cout << endl;
 
 //		// build stateUpdate map.
 //		int lastId = -1;
@@ -189,4 +207,21 @@ NetworkArc Network::getArc(uint32_t i, uint32_t j) const {
 		if (arc.tailId == i && arc.headId == j)
 			return arc;
 	}
+}
+
+
+vector<uint> Network::getTroubleNodes() const noexcept {
+
+	vector<uint> troubleMakers;
+	auto terminalNode = networkNodes.back().nodeId; // last node is terminal node.
+	for (const auto id: Vbar) {
+		// if node has arc to terminal node, trouble maker.
+		const auto& node = networkNodes[id];
+		// assuming trouble maker nodes have one outgoing edge and its connected to terminal.
+		if (node.outNodeIds.size() == 1 && node.outNodeIds[0] == terminalNode) {
+			troubleMakers.push_back(id);
+		}
+	}
+	cout << "Trouble Maker nodes: "; for (auto id: troubleMakers) {cout << id << ", ";} cout << endl;
+	return troubleMakers;
 }
