@@ -3,7 +3,7 @@
 //
 
 #include "DDSolver.h"
-
+#include <random>
 #include <chrono>
 
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
@@ -43,8 +43,8 @@ void DDSolver::initialize() {
     // place root node to queue
     Node_t node;
 
-    node.lb = std::numeric_limits<double>::lowest();
-    node.ub = std::numeric_limits<double>::max();
+    node.lb = std::numeric_limits<int64_t>::min();
+    node.ub = std::numeric_limits<int64_t>::max();
     node.globalLayer = 0;
 
     nodeQueue.pushNode(node);
@@ -76,8 +76,9 @@ void DDSolver::process(NodeExplorer explorer) {
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
         Node_t node = nodeQueue.getNode();
+        cout << "Procesisng Node from layer: "<< node.globalLayer << " LB: " << node.lb << " , UB: " << node.ub << " global: " << getOptimalLB()<< endl;
         #ifdef DEBUG
-        cout << "Processing node from layer: " << node.globalLayer << " lb: " << node.lb << " , ub: " << node.ub;
+        // cout << "Processing node from layer: " << node.globalLayer << " lb: " << node.lb << " , ub: " << node.ub;
         cout << " . global lower bound: " << getOptimalLB() << endl;
         #endif
         if (node.ub < getOptimalLB()) {
@@ -155,7 +156,12 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts2(size_t n) {
     DDNode root{0};
     dd.build(root);
 
-    srand(time(nullptr));
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::uniform_int_distribution<> dist(0, std::numeric_limits<int>::max());
+
+    // srand(time(nullptr));
 
     // start with root and find random paths to terminal.
     vector<vi> solutions;
@@ -171,21 +177,22 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts2(size_t n) {
         vi solution;
         ulint currentId = 0;
 
-        for (size_t i = 1; i < dd.tree.size()-2; i++) {
-            const auto& current = dd.nodes.at(currentId);
-            const uint nArcs = current.outgoingArcs.size();
-            auto selection = current.outgoingArcs[0];
-            if (nArcs != 1) selection = current.outgoingArcs[ rand()%nArcs]; // randomly choose arc
+        for (size_t i = 0; i < dd.tree.size() -2; i++) {
+            const auto& node = dd.nodes.at(currentId);
+            const auto& nArcs = node.outgoingArcs.size();
+            auto selection = node.outgoingArcs[ dist(gen)%nArcs];
             const auto& arc = dd.arcs.at(selection);
             solution.push_back(arc.decision);
-            currentId =  arc.head;
+            currentId = arc.head;
         }
+
         // check if solution exists.
         bool isExist = false;
         for (const auto& sol : solutions) {
             if (sol == solution) isExist = true; break;
         }
         if (isExist) continue;
+        cout << "Solution selected: "; for (auto s: solution) cout << s <<" "; cout <<endl;
         solutions.push_back(solution);
         // cout << "Solution: "; for (auto sol: solution) cout << sol << " "; cout << endl;
         // get cut

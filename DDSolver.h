@@ -17,7 +17,7 @@ class DDSolver {
 
     struct comparator {
         bool operator() (const Node_t& node1, const Node_t& node2) const {
-            return (node1.ub+node1.lb) > (node2.ub+node2.lb);
+            return (node1.ub + node2.lb) < (node2.ub + node2.lb); // need to optimize this with ints
             // return node1.globalLayer < node2.globalLayer;
         }
     };
