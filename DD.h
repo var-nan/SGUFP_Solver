@@ -63,7 +63,7 @@ class Node_t {
 public:
     vi states;
     vi solutionVector;
-    double lb;
+    double lb; // change to ints?
     double ub;
     uint globalLayer;
 
@@ -168,6 +168,10 @@ private:
 	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
 	ulint createChild(DDNode& parent, int decision);
 	void buildNextLayer2(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer4(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer5(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer6(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 
 public:
 
@@ -223,6 +227,21 @@ public:
 
 
 	#ifdef DEBUG
+
+	void displayArcLabels() const noexcept{
+		cout << "\n ************************** Arcs **********************************" << endl;
+
+		for (const auto& layer: tree) {
+			for (auto id: layer) {
+				const auto& node = nodes.at(id);
+				for (auto outer : node.outgoingArcs) {
+					const auto& arc = arcs.at(outer);
+					cout << arc.decision <<" ";
+				} cout << " : ";
+			}
+			cout << endl;
+		}
+	}
 	void displayStats() const {
 		cout << "\n*********************** DD Stats for nerds ************************" << endl;
 		string ddtype;
@@ -246,6 +265,9 @@ public:
 		cout << "Number of arcs: " << arcs.size() << endl;
 		cout << "Index of exact layer: " << exactLayer << " (contains " << tree[exactLayer].size() << " nodes)" << endl;
 		cout << "Size of each layer : "; for (const auto& layer: tree) cout << layer.size() << " "; cout << endl;
+		cout << "Size of each arc layer: "; for (const auto& layer: tree) { int count = 0;
+			for (auto id: layer) count += nodes.at(id).outgoingArcs.size(); cout << count << " ";
+		} cout << endl;
 		cout << "*******************************************************************\n" << endl;
 	}
 	#endif
@@ -328,3 +350,65 @@ STATIC inline vector<uint> getShuffledList(const size_t n, const size_t m){
 	std::sort(result.begin(), result.end());
 	return result;
 }
+//
+// class RestrictedDD {
+// private:
+// 	const shared_ptr<Network> networkPtr;
+// 	ulint number = 1;
+//
+// 	bool isExact = false;
+// 	bool isTreeDeleted = false;
+// 	bool isTreeBuilt = false;
+//
+// 	const uint MAXWIDTH;
+//
+// 	uint startTree = 0;
+// 	// uint exactLayer = 0;
+//
+// 	vector<Node_t> cutset;
+//
+// 	void updateStates(const vui& currentLayer, const unordered_set<int>& states);
+//
+// 	[[nodiscard]] vui buildNextLayer(const vui& currentLayer, bool hasStateChanged, bool& isExact, uint& nextSize);
+//
+// 	[[nodiscard]] vector<Node_t> generateExactCutSet(uint exactLayer) const;
+//
+// 	[[nodiscard]] vi computePathForNode(uint nodeId) const;
+//
+// 	/// deletion functions ///
+//
+// 	// void topDownDelete(uint id);
+// 	// void bottomUpDelete(uint id);
+// 	// void removeNode(uint id, bool isBatch);
+// 	void batchRemoveNodes(const vui& nodeIds);
+//
+// 	void updateTree();
+//
+// 	// refinement functions
+//
+//
+// public:
+// 	vector<vector<uint>> tree;
+// 	unordered_map<uint, DDNode> nodes;
+// 	unordered_map<uint, DDArc> arcs;
+//
+// 	RestrictedDD(const shared_ptr<Network>& networkPtr_, const uint mw): networkPtr{networkPtr_}, MAXWIDTH{mw}{}
+//
+// 	[[nodiscard]] optional<vector<Node_t>> compile(DDNode root);
+// 	/// refinement functions ///
+// 	[[nodiscard]] bool applyFeasibilityCut(const Cut& cut) noexcept;
+// 	[[nodiscard]] double applyOptimalityCut(const Cut& cut) noexcept;
+// 	[[nodiscard]] vi solution() const noexcept;
+//
+// 	void displayStats() const noexcept {
+//
+// 	};
+// };
+//
+// class RelaxedDD {
+// 	const shared_ptr<Network> networkPtr;
+//
+// 	uint number = 1;
+//
+//
+// };

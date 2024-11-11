@@ -48,9 +48,17 @@ public:
     }
 
 
-    OutObject process(Node_t node);
+    OutObject process(Node_t node, double optimalLB);
+    OutObject process2(Node_t node, double optimalLB);
 
     void clearCuts();
+
+    #ifdef SOLVER_STATS
+    void displayCutStats() const noexcept {
+        cout << "Number of feasibility cuts in the container " << feasibilityCuts.cuts.size() << endl;
+        cout << "Number of optimality cuts in the container: " << optimalityCuts.cuts.size() << endl;
+    }
+    #endif
 
 };
 

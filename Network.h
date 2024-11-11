@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <iostream>
+#include <algorithm>
 
 using namespace std;
 
@@ -61,6 +62,7 @@ public:
 
 class Network {
 
+	void shuffleVBarNodes() noexcept;
 public:
 	uint32_t n;
 	uint32_t edges;
@@ -83,6 +85,22 @@ public:
 	vui A3;
 	vui A4;
 	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
+	vi layerRewards;
+	vector<uint8_t> troubleMaker; // contains zero if layer is not a trouble maker.
+
+	vector<uint> getTroubleNodes() const noexcept;
+
+	[[nodiscard]] int getBestArc(const unordered_set<int>& states) const noexcept{
+
+		int max = std::numeric_limits<int>::min();
+		int i = -1;
+		for (const auto& state: states) {
+			if (state != -1) {
+				if (const auto& arc = networkArcs[state]; arc.rewards[0] > max) {max = arc.rewards[0]; i = state;}
+			}
+		}
+		return i;
+	}
 
 	/*Network(uint nNodes, uint nEdges, vector<NetworkNode>&& netNodes,
 			vector<NetworkArc>&& netArcs, unordered_set<uint>&& v_bar, uint scenarios)
