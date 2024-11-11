@@ -240,7 +240,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 #ifdef DEBUG
                 cout << "tree became infeasible" << endl;
 #endif
-                return {std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), {}, false};
+                return {0, 0, {}, false};
             }
         }
     }
@@ -295,6 +295,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 
         for (; start2 != end2; ++start2) {
             lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(*start2);
+            if (lowerBound <= optimalLB) goto FIN;
         }
     }
     cout << "STEP 2 completed" << endl;
@@ -333,6 +334,11 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 
                 lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
                 optimalityCuts.insertCut(cut);
+                if (lowerBound <= optimalLB) {
+                    //
+                    lowerBound = node.lb;
+                    break;
+                }
             }
         }
     }
