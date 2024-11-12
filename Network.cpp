@@ -63,12 +63,155 @@ Network::Network(const std::string& p_fileName){
 		vector<uint> vBarNodes;
 
 		uint index;
-		//for (size_t i = 0; i < netNodes.size() ; i++) isNodeInVbar.push_back(false); // init isNodeInVbar
 		while (file >> index){
 			vBarNodes.push_back(index);
 			netNodes[index].isVbar = true;
 			//isNodeInVbar[index] = true;
 		}
+
+
+
+
+
+
+
+		//for (size_t i = 0; i < netNodes.size() ; i++) isNodeInVbar.push_back(false); // init isNodeInVbar
+
+		vi nodesToBeRemoved={};
+		vi arcIDsToBeRemoved={};
+		// cout <<"zart"<<endl;
+		cout << netNodes[nNodes-1].incomingArcs.size() << endl;
+		for (auto inArcID: netNodes[nNodes-1].incomingArcs) {
+			auto middleNodeID = netArcs[inArcID].tailId;
+			if(netNodes[middleNodeID].isVbar) {
+
+				// int maxDemand = *max_element( netArcs[inArcID].upperCapacities.begin(), netArcs[inArcID].upperCapacities.end());
+				int maxDemand = netArcs[inArcID].upperCapacities[0];
+				// cout << "in arc of the terminal: " << inArcID << endl;
+				// cout << "max demand: " << maxDemand << endl;
+				// cout << "middle node ID: " << middleNodeID << endl;
+				for (auto inArcID2 : netNodes[middleNodeID].incomingArcs) {
+					if (netArcs[inArcID2].upperCapacities[0] < maxDemand) {
+						// cout << "new arc to be removed: " << inArcID2 << endl;
+						arcIDsToBeRemoved.push_back(inArcID2);
+					}
+				}
+			}
+		}
+		vector<NetworkArc> theArcsToBeRemoved={};
+		for (auto item: arcIDsToBeRemoved) {
+			theArcsToBeRemoved.push_back(netArcs[item]);
+		}
+
+		for(auto item :theArcsToBeRemoved) {
+			cout << item.tailId << " - " << item.headId << endl;
+		}
+
+
+
+
+
+
+
+		cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << endl;
+
+
+		std::ifstream file {p_fileName};
+
+
+
+
+		// nNodes,m; // nNodes = number of nodes, m = number of arcs // LATER change the way n,m,scenarios reads.
+		// scenarios; // number of scenarios
+
+		//file >> nNodes >> m >> scenarios;
+		nNodes = 43 - nodesToBeRemoved.size();
+		m = m-arcIDsToBeRemoved.size(); //
+		scenarios = 50;
+
+		netNodes=vector<NetworkNode>(nNodes);
+		netArcs=vector<NetworkArc>(m);
+
+		for (uint i = 0; i < nNodes; i++){
+			// initialize a vector with nNodes empty elements.
+			netNodes[i].nodeId = i;
+		}
+		uint i=0;
+
+		while (i < m){
+			// cout << " ZART " << endl;
+			// from second line, read each line and its corresponding scenario.
+			// each line contains headId, headId,
+			uint tailId, headId;
+			file >> tailId >> headId;
+			// cout << tailId << endl;
+			bool sww=0;
+			for (auto item : theArcsToBeRemoved) {
+				if (item.headId == headId && item.tailId == tailId) {
+					sww = true;
+				}
+			}
+
+			// cout << " ZART " << endl;
+			vi lowerCapacities(scenarios);
+			vi upperCapacities (scenarios);
+			vi rewards (scenarios);
+			for (uint j = 0; j < scenarios; j++){
+				// for each scenario read lb, ub, reward
+				int lb, ub, reward;
+				file >> lb >> ub >> reward;
+
+				lowerCapacities[j] = lb;
+				upperCapacities[j] = ub;
+				rewards[j] = reward;
+			}
+			if (sww) {
+				continue;
+			}
+			// cout << " ZART " << endl;
+			netArcs[i] = {i, tailId, headId, upperCapacities, lowerCapacities, rewards};
+			// cout << " ZART 1" << endl;
+			// cout << headId << endl;;
+			// update node's incoming and outgoing attributes.
+			netNodes[tailId].outNodeIds.push_back(headId); // netNodes[tailId].outDegree++; useful in computing heuristic in helper function.
+			netNodes[headId].inNodeIds.push_back(tailId); // netNodes[headId].inDegree++;
+			// cout << " ZART 2" << endl;
+			netNodes[tailId].outgoingArcs.push_back(i);
+			netNodes[headId].incomingArcs.push_back(i);
+			i+=1;
+			// cout << " ZART 3" << endl;
+		}
+
+		// read v_bar
+		file >> temp;
+
+		// read v_bar nodes and build network.
+		vBarNodes={};
+
+		index=0;
+
+		while (file >> index){
+			vBarNodes.push_back(index);
+			netNodes[index].isVbar = true;
+			//isNodeInVbar[index] = true;
+		}
+		cout <<  endl;
+		cout << "************************************"<< endl;
+		cout << "************************************"<< endl;
+		cout << "************************************"<< endl;
+		cout << "************************************"<< endl;
+		cout << "************************************"<< endl;
+		cout <<  endl;
+
+
+
+		for(auto item :netArcs) {
+			cout << item.tailId << " - " << item.headId << endl;
+		}
+
+
+
+
 
 		// populate a1,a2,a3,a4 for subproblem formulation.
 		vui a1 = {}, a2 = {}, a3 = {}, a4 = {};
@@ -107,7 +250,7 @@ Network::Network(const std::string& p_fileName){
 		//this->Vbar.erase(this->Vbar.begin()+2, this->Vbar.end());
 
 		// INFO change the order of nodes in the Vbar. Make sure that arcs of a particular node are together.
-		int i = 0;
+		i = 0;
 		for (const auto& id: Vbar){
 			// another way of doing state update map.
 			auto& node = networkNodes[id];
@@ -158,6 +301,10 @@ Network::Network(const std::string& p_fileName){
 		cerr << "File could not be opened!" << endl;
 		cerr << "Error code: " << strerror(errno);
 	}
+
+
+
+
 
 }
 
