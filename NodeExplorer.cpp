@@ -284,7 +284,6 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
         for (; start != end; ++start) {
             if (!restrictedDD.applyFeasibilityCutRestrictedLatest(*start)) {
                 lowerBound = node.lb;
-                cout << "Heuristic feasibility cut made tree infeasible" << endl;
                 // upperBound = upperBound;
                 goto FIN;
             }
@@ -298,7 +297,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
             if (lowerBound <= optimalLB) goto FIN;
         }
     }
-    cout << "STEP 2 completed" << endl;
+    // cout << "STEP 2 completed" << endl;
 
     STEP_3: // actual refinement
     {
@@ -325,7 +324,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
                 if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
                     // tree became infeasible.
                     lowerBound = node.lb;
-                    cout << "Feasibility cut made tree infeasible." << endl;
+                    // cout << "Feasibility cut made tree infeasible." << endl;
                     // upperBound = no;
                     goto FIN;
                 }
