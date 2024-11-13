@@ -206,7 +206,7 @@ public:
 	bool applyFeasibilityCutRestrictedLatest(const Cut &cut);
 	double applyOptimalityCutHeuristic(const Cut &cut);
 	bool applyFeasibilityCutHeuristic(const Cut &cut);
-
+	void resetRelaxedDD();
 	/// node deletion functions ///
 
 	void deleteArcById(ulint id);

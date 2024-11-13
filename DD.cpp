@@ -276,7 +276,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 			 	// if current layer is trouble maker, then handle edge case.
 			 	const auto& layer = nodes[currentLayer.front()].globalLayer;
 			 	bool res = networkPtr->troubleMaker[layer] == 1;
-
+				res=1;
 				 auto nextNodeId = number.getNext();
 				 DDNode newNode{nextNodeId};
 				 //newNode.nodeLayer = index;
@@ -1300,6 +1300,9 @@ void DD::applyOptimalityCutRelaxed(const Cut &cut) {
 	terminalNode.state2 = terminalState;
 }
 
+
+
+
 /**
  * Applies optimality cut to the restricted DD.
  * @param cut
@@ -1375,6 +1378,8 @@ double DD::applyOptimalityCutRestrictedLatest(const Cut &cut) {
 	return terminalNode.state2;
 }
 
+
+
 /**
  * Applies feasibility cut on the restricted DD. Removes infeasible solutions from DD.
  * @param cut
@@ -1442,7 +1447,7 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Cut &cut) {
 				// if ((node.state2 + lowerBounds[node.globalLayer]) < 0)
 				// 	nodesToRemove.push_back(nodeId);
 			}
-			if(node.state2 < -0.5) nodesToRemove.push_back(node.id);
+			if(node.state2 < 0) nodesToRemove.push_back(node.id);
 		}
 
 		// if (!nodesToRemove.empty()) {
@@ -1600,6 +1605,7 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 		}
 	}
 	// terminal layer
+	vector<uint>  arcsToBeDeleted = {};
 	double state = std::numeric_limits<double>::lowest();
 	auto terminalNode = nodes[tree[tree.size()-1][0]];
 	for (auto inArcId : terminalNode.incomingArcs) {
@@ -1607,6 +1613,25 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 		const auto& parentNode = nodes[arc.tail];
 		arc.weight = (arc.weight > parentNode.state2) ? parentNode.state2 : arc.weight;
 		state = (state < arc.weight) ? arc.weight : state;
+		if(arc.weight<0) {
+			arcsToBeDeleted.push_back(inArcId);
+		}
+	}
+
+	if (state<0) {
+		return false;
+	}
+
+	for (auto arcID : arcsToBeDeleted) {
+		cout << "this happened ZART this happened" << endl;
+		auto& arc = arcs[arcID];
+		if(arc.weight<0) {
+			auto headID =arc.head;
+			nodes.at(headID).incomingArcs.erase(std::find(nodes.at(headID).incomingArcs.begin(),nodes.at(headID).incomingArcs.end(),arc));
+			auto tailID = arc.tail;
+			nodes.at(tailID).outgoingArcs={};
+			arcs.erase(arcID);
+		}
 	}
 
 #ifdef DEBUG
@@ -1615,6 +1640,19 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 	terminalNode.state2 = state;
 	return (state >= 0);
 }
+
+void DD::resetRelaxedDD() {
+	auto& terminalNode = nodes[tree[tree.size()-1][0]];
+	for (auto inArcId : terminalNode.incomingArcs) {
+		auto& arc = arcs[inArcId];
+		arc.weight = 100000000;
+	}
+}
+
+
+
+
+
 
 
 /**
