@@ -226,7 +226,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
     double upperBound = node.ub;
 
     STEP_1:
-    {
+
         DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
         DD relaxedDD1{networkPtr, EXACT};
         relaxedDD1.build(root1);
@@ -243,7 +243,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
                 return {0, 0, {}, false};
             }
         }
-    }
+
 
 #ifdef DEBUG
     cout << "Step 1 completed" << endl;
@@ -321,6 +321,8 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 
             if (cut.cutType == FEASIBILITY) {
                 feasibilityCuts.insertCut(cut);
+                if (!relaxedDD1.applyFeasibilityCutHeuristic(cut)){return {0,0,{}, false};}
+
                 if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
                     // tree became infeasible.
                     lowerBound = node.lb;

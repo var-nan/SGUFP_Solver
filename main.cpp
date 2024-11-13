@@ -248,14 +248,16 @@ int old_main() {
 #include "DDSolver.h"
 
 void main() {
-	Network network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"};
+
+	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt";
+	Network network{fileName};
 
 
 	// print v bar nodes and its outoging arcs.
-	for (auto id: network.Vbar) {
-		cout << id << " : incoming= " << network.networkNodes[id].incomingArcs.size()
-				<< " , outgoing= " << network.networkNodes[id].outgoingArcs.size() << endl;
-	}
+	// for (int id = 0; id < network.n; ++id) {
+	// 	cout << id << " : incoming= " << network.networkNodes[id].incomingArcs.size()
+	// 			<< " , outgoing= " << network.networkNodes[id].outgoingArcs.size() << endl;
+	// }
 
 
 	#ifdef DEBUG
@@ -273,7 +275,7 @@ void main() {
 	cout << endl;
 	cout << endl;
 
-	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt"})};
+	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 	cout << "Vbar order: "; for (auto id : networkPtr->Vbar) cout << id << " "; cout << endl;
 	cout << "Max Width : " << MAX_WIDTH << endl;
 	cout << "DEBUG enabled, solving for a subset of V Bar nodes. Single scenario." << endl;

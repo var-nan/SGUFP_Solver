@@ -275,7 +275,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 
 			 	// if current layer is trouble maker, then handle edge case.
 			 	const auto& layer = nodes[currentLayer.front()].globalLayer;
-			 	bool res = networkPtr->troubleMaker[layer] == 1;
+			 	bool res = stateChangesNext; //networkPtr->troubleMaker[layer] == 1;
 
 				 auto nextNodeId = number.getNext();
 				 DDNode newNode{nextNodeId};
@@ -465,7 +465,8 @@ void DD::buildNextLayer6(vector<ulint> &currentLayer, vector<ulint> &nextLayer) 
 	// if current layer is trouble maker, then handle troublemaker node.
 	const auto& layerNumber = nodes[currentLayer.front()].globalLayer;
 	// bool res = (networkPtr->troubleMaker[layerNumber] == 1);
-	if (networkPtr->troubleMaker[layerNumber] == 1) {
+	// if (networkPtr->troubleMaker[layerNumber] == 1) {
+	if (networkPtr->hasStateChanged[layerNumber+1]){ // state changes in next layer, thus remove -1 arcs from this layer.
 		// for all the nodes, remove paths that contains all -1's for this node.
 		for (const auto id: currentLayer) {
 			auto& node = nodes[id];
@@ -1353,25 +1354,30 @@ double DD::applyOptimalityCutRestrictedLatest(const Cut &cut) {
 	assert(nodes.count(tree[tree.size()-1][0])> 0);
 	auto& terminalNode = nodes[tree[tree.size()-1][0]];
 	terminalNode.state2 = 0;
+	double terminalState = INT32_MIN;
 	for (auto inArcId : terminalNode.incomingArcs) {
 		auto& arc = arcs[inArcId];
 		const auto& parentNode = nodes[arc.tail];
 
-		if (arc.weight > parentNode.state2) {
-			arc.weight = parentNode.state2;
-		}
+		// if (arc.weight > parentNode.state2) {
+		// 	arc.weight = parentNode.state2;
+		// }
 		// if(terminalNode.state2 < arc.weight)
 		// 	terminalNode.state2 = arc.weight;
+		arc.weight = min(arc.weight, parentNode.state2);
+		terminalState = max(terminalState, arc.weight);
+
 	}
-	for (auto inArcId : terminalNode.incomingArcs) { // fuse this loop with above.
-		if (terminalNode.state2 < arcs[inArcId].weight) {
-			terminalNode.state2 = arcs[inArcId].weight;
-		}
-	}
+	// for (auto inArcId : terminalNode.incomingArcs) { // fuse this loop with above.
+	// 	if (terminalNode.state2 < arcs[inArcId].weight) {
+	// 		terminalNode.state2 = arcs[inArcId].weight;
+	// 	}
+	// }
 
 #ifdef DEBUG
 	cout << "\t terminal state: " << terminalNode.state2 << endl;
 #endif
+	terminalNode.state2 = terminalState;
 	return terminalNode.state2;
 }
 
@@ -1533,15 +1539,18 @@ double DD::applyOptimalityCutHeuristic(const Cut &cut) {
 	for (auto inArcId : terminalNode.incomingArcs) {
 		auto& inArc = arcs[inArcId];
 		auto& parentNode = nodes[inArc.tail];
-		if (inArc.weight > parentNode.state2) {
-			inArc.weight = parentNode.state2;
-		}
+		// if (inArc.weight > parentNode.state2) {
+		// 	inArc.weight = parentNode.state2;
+		// }
+		// min of terminal arc weight and parent state. and maximum of terminal arcs weights.
+		inArc.weight = min(inArc.weight, parentNode.state2);
+		terminalState = std::max(terminalState, inArc.weight);
 	}
-	for (auto inArcId : terminalNode.incomingArcs) {
-		if (terminalState < arcs[inArcId].weight) {
-			terminalState = arcs[inArcId].weight;
-		}
-	}
+	// for (auto inArcId : terminalNode.incomingArcs) {
+	// 	if (terminalState < arcs[inArcId].weight) {
+	// 		terminalState = arcs[inArcId].weight;
+	// 	}
+	// }
 	terminalNode.state2 = terminalState;
 #ifdef DEBUG
 	cout << "\t terminal state: " << terminalState << endl;
@@ -1600,14 +1609,21 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 		}
 	}
 	// terminal layer
+	vui arcToDeleted;
 	double state = std::numeric_limits<double>::lowest();
 	auto terminalNode = nodes[tree[tree.size()-1][0]];
 	for (auto inArcId : terminalNode.incomingArcs) {
 		auto& arc = arcs[inArcId];
 		const auto& parentNode = nodes[arc.tail];
-		arc.weight = (arc.weight > parentNode.state2) ? parentNode.state2 : arc.weight;
-		state = (state < arc.weight) ? arc.weight : state;
+		// arc.weight = (arc.weight > parentNode.state2) ? parentNode.state2 : arc.weight;
+		// state = (state < arc.weight) ? arc.weight : state;
+		arc.weight = min(arc.weight,parentNode.state2);
+		state = max(state, arc.weight);
+		if (arc.weight < 0) arcToDeleted.push_back(inArcId);
 	}
+
+	if (state < 0) return false;
+	for (auto arcId : arcToDeleted) { deleteArcById(arcId);} // should work.
 
 #ifdef DEBUG
 	cout << "\t terminal state: " << state << endl;
