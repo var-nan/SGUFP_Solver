@@ -88,9 +88,9 @@ elseif(WIN32)
     endif()
 
     list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR})
-    if (CMAKE_BUILD_TYPE)
-        set(CMAKE_BUILD_TYPE "Debug")
-    endif()
+#    if (CMAKE_BUILD_TYPE)
+#        set(CMAKE_BUILD_TYPE "Debug")
+#    endif()
 
     message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
     message(STATUS "CMake Version: ${CMAKE_VERSION}")

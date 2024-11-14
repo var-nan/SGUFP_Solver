@@ -41,15 +41,18 @@ public:
     explicit NodeExplorer(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}, feasibilityCuts{FEASIBILITY}, optimalityCuts{OPTIMALITY} {
         // env = GRBEnv();
         env.set(GRB_IntParam_OutputFlag,0);
+        env.set(GRB_IntParam_Threads,1);
     }
 
     NodeExplorer(const shared_ptr<Network>& networkPtr_, pair<CutContainer, CutContainer> cuts): networkPtr{networkPtr_}, feasibilityCuts{cuts.first}, optimalityCuts{cuts.second} {
         env.set(GRB_IntParam_OutputFlag,0);
+        env.set(GRB_IntParam_Threads,1);
     }
 
 
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);
+    OutObject process3(Node_t node, double optimalLB);
 
     void clearCuts();
 
