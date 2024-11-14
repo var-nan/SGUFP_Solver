@@ -360,6 +360,112 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 
 }
 
+OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
+    double lowerBound = node.lb;
+    double upperBound = node.ub;
+
+    DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
+    DD restrictedDD {networkPtr, RESTRICTED};
+    auto cutset = restrictedDD.build(root1);
+
+    DD relaxedDD{networkPtr, EXACT};
+
+    if (cutset) {
+        DDNode root2{0, node.globalLayer, node.states, node.solutionVector};
+        relaxedDD.build(root2);
+
+        // apply cuts on the relaxed DD. if any cut make DD infeasible, process new node.
+        auto start = feasibilityCuts.cuts.rbegin();
+        auto end = feasibilityCuts.cuts.rend();
+
+        for (; start != end; ++start) {
+            if (!relaxedDD.applyFeasibilityCutHeuristic(*start)) return {0,0,{}, false};
+        }
+
+        auto start2 = optimalityCuts.cuts.rbegin();
+        auto end2 = optimalityCuts.cuts.rend();
+
+        for (; start2 != end2; ++start2) {
+            upperBound = relaxedDD.applyOptimalityCutHeuristic(*start2);
+            // this node cannot do better.
+            if (upperBound <= optimalLB) { return {0,0,{}, false};}
+        }
+    }
+
+    // apply cuts to restricted tree.
+    auto start = feasibilityCuts.cuts.rbegin();
+    auto end = feasibilityCuts.cuts.rend();
+
+    for (; start != end; ++start) {
+        if (!restrictedDD.applyFeasibilityCutRestrictedLatest(*start)) {
+            if (cutset) {
+                for (auto& c_node: cutset.value()) {
+                    c_node.ub = upperBound;
+                    // c_node.ub = node.ub;
+                    c_node.lb = node.lb;
+                }
+                return {node.lb, upperBound, cutset.value(), true};
+            }
+            return{node.lb, upperBound, {}, true};
+        }
+    }
+
+    auto start2 = optimalityCuts.cuts.rbegin();
+    auto end2 = optimalityCuts.cuts.rend();
+
+    for (; start2 != end2; ++start2) {
+        lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(*start2);
+    }
+
+    /// actual refinement ///
+
+    vi previousSolution;
+
+    while (true) {
+        vi solution = restrictedDD.solution();
+        if (previousSolution == solution) {break;}
+        previousSolution = solution;
+
+        auto y_bar = w2y(solution , networkPtr);
+        GuroSolver solver{networkPtr, env};
+        auto cut = solver.solveSubProblemInstance(y_bar, 0);
+
+        if (cut.cutType == FEASIBILITY) {
+            feasibilityCuts.insertCut(cut);
+            if (cutset){if (!relaxedDD.applyFeasibilityCutHeuristic(cut)) return {0,0,{}, false};}
+            if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+                // copy lower bound from parent, upper bound achieved so far.
+                if (cutset) {
+                    for (auto& c_node: cutset.value()) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    }
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+                return {node.lb,upperBound,{}, true};
+            }
+
+        }
+        else {
+            optimalityCuts.insertCut(cut);
+            if (cutset) upperBound = relaxedDD.applyOptimalityCutHeuristic(cut);
+            if (upperBound <= optimalLB) {
+                return {0,0,{}, false};
+            }
+            lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+        }
+    }
+
+    if (cutset) {
+        for (auto& c_node: cutset.value()) {
+            c_node.ub = upperBound;
+            c_node.lb = lowerBound;
+        }
+        return {lowerBound, upperBound, cutset.value(), true};
+    }
+    return {lowerBound, upperBound, {}, true};
+
+}
 void NodeExplorer::clearCuts() {
     feasibilityCuts.clearContainer();
     optimalityCuts.clearContainer();

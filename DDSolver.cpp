@@ -90,7 +90,7 @@ void DDSolver::process(NodeExplorer explorer) {
         }
 
         // start node processor
-        auto result = explorer.process2(node, getOptimalLB()); // use co-routines to update globalLB in between.
+        auto result = explorer.process3(node, getOptimalLB()); // use co-routines to update globalLB in between.
 
         #ifdef SOLVER_STATS
         numNodesExplored++;

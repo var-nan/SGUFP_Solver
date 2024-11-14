@@ -1325,7 +1325,8 @@ double DD::applyOptimalityCutRestrictedLatest(const Cut &cut) {
 	}
 	rootNode.state2 = justifiedRHS;
 #ifdef DEBUG
-	cout << "Optimality cut. Justified RHS: " << justifiedRHS;
+	cout << "Optimality Actual" << endl;
+	// cout << "Optimality cut. Justified RHS: " << justifiedRHS;
 #endif
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
@@ -1405,7 +1406,7 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Cut &cut) {
 	}
 	rootNode.state2 = justifiedRHS;
 #ifdef DEBUG
-	cout << "Feasibility cut. Justified RHS: " << justifiedRHS;
+	 cout << "Feasibility cut. Acutal" << endl;
 #endif
 
 	// auto lowerBounds = helperFunction(network, cut);
@@ -1476,7 +1477,7 @@ bool DD::applyFeasibilityCutRestrictedLatest(const Cut &cut) {
 		return false;
 	}
 #ifdef DEBUG
-	if (!nodesToRemove.empty()) cout << " Removing " << nodesToRemove.size() << " nodes from the tree";
+	if (!nodesToRemove.empty()) cout << " Removing " << nodesToRemove.size() << " nodes from the tree" << endl;
 #endif
 	// cout << endl;
 	if (!nodesToRemove.empty()) batchRemoveNodes(nodesToRemove);
@@ -1505,7 +1506,7 @@ double DD::applyOptimalityCutHeuristic(const Cut &cut) {
 	}
 	rootNode.state2 = justifiedRHS;
 #ifdef DEBUG
-	cout << "Optimality cut heuristic. Justified RHS: " << justifiedRHS;
+	cout << "Optimality cut heuristic" << endl;
 #endif
 
 	for (size_t layer = 1; layer < tree.size()-1; layer++) {
@@ -1585,9 +1586,7 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
 		}
 	}
-#ifdef DEBUG
-	cout << "Feasibility cut heuristic. Justified RHS: " << justifiedRHS;
-#endif
+
 	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size() -1; layer++) {
@@ -1608,6 +1607,14 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 			node.state2 = newState;
 		}
 	}
+
+	vector<ulint> nodesToRemove; // remove nodes that have negative state.
+	for (auto nodeId : tree[tree.size()-2]) {
+		if (nodes[nodeId].state2 < 0) nodesToRemove.push_back(nodeId);
+	}
+	if (nodesToRemove.size() == tree[tree.size()-2].size()) return false;
+	if (!nodesToRemove.empty())batchRemoveNodes(nodesToRemove);
+	return true;
 	// terminal layer
 	vui arcToDeleted;
 	double state = std::numeric_limits<double>::lowest();
@@ -1623,6 +1630,7 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 	}
 
 	if (state < 0) return false;
+	cout << "Feasibility Heuristic: deleting..." << arcToDeleted.size() << " arcs from terminal layer" << endl;
 	for (auto arcId : arcToDeleted) { deleteArcById(arcId);} // should work.
 
 #ifdef DEBUG

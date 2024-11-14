@@ -52,6 +52,7 @@ public:
 
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);
+    OutObject process3(Node_t node, double optimalLB);
 
     void clearCuts();
 
