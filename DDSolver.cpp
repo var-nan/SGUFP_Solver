@@ -76,7 +76,7 @@ void DDSolver::process(NodeExplorer explorer) {
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
         Node_t node = nodeQueue.getNode();
-        cout << "Procesisng Node from layer: "<< node.globalLayer << " LB: " << node.lb << " , UB: " << node.ub << " global: " << getOptimalLB()<< endl;
+        // cout << "Procesisng Node from layer: "<< node.globalLayer << " LB: " << node.lb << " , UB: " << node.ub << " global: " << getOptimalLB()<< endl;
         #ifdef DEBUG
         // cout << "Processing node from layer: " << node.globalLayer << " lb: " << node.lb << " , ub: " << node.ub;
         cout << " . global lower bound: " << getOptimalLB() << endl;
@@ -84,13 +84,13 @@ void DDSolver::process(NodeExplorer explorer) {
         if (node.ub < getOptimalLB()) {
             #ifdef SOLVER_STATS
             numPrunedByBound++;
-            cout << "Pruned by bound." << endl;
+            // cout << "Pruned by bound." << endl;
             #endif
             continue; // look for another
         }
 
         // start node processor
-        auto result = explorer.process2(node, getOptimalLB()); // use co-routines to update globalLB in between.
+        auto result = explorer.process3(node, getOptimalLB()); // use co-routines to update globalLB in between.
 
         #ifdef SOLVER_STATS
         numNodesExplored++;
@@ -108,7 +108,7 @@ void DDSolver::process(NodeExplorer explorer) {
                 if (result.ub > getOptimalLB()) {
                     nodeQueue.pushNodes(result.nodes);
                     #ifdef SOLVER_STATS
-                    cout << result.nodes.size() << " nodes entered queue." << endl;
+                    // cout << result.nodes.size() << " nodes entered queue." << endl;
                     numQueueEntered += result.nodes.size();
                     #endif
                 }

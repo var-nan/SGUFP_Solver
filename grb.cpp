@@ -217,6 +217,7 @@ Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
 Cut GuroSolver::solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar, int scenario) {
 
 	GRBModel model = GRBModel(environment);
+	model.set(GRB_IntParam_Threads,1);
 	model.set(GRB_IntParam_InfUnbdInfo, 1);
 	GRBVar* alpha = model.addVars(n, GRB_CONTINUOUS);
 	GRBVar** beta = new GRBVar*[n];
