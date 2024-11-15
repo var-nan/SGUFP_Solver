@@ -290,13 +290,13 @@ void main() {
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver{networkPtr};
 	solver.initialize();
-	int n_initial_cuts = 25;
-	auto cuts = solver.initializeCuts2(n_initial_cuts);
+	int n_initial_cuts = 60;
+	auto cuts = solver.initializeCutsParallel(n_initial_cuts);
 	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
 		" , Feasibility: " << cuts.first.cuts.size() << endl;
 	cout << "**********************************************************************************************************\n\n\n" << endl;
 
-	solver.startSolve(cuts);
+	solver.startSolveParallel(cuts);
 	auto t2 = high_resolution_clock::now();
 	// cout << "Node queue strategy: LIFO" << endl;
 	auto ms_int = duration_cast<seconds>(t2-t1);
