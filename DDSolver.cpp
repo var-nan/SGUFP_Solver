@@ -6,7 +6,7 @@
 #include <random>
 #include <chrono>
 #include <omp.h>
-
+#define OMP_NUM_THREADS 2
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     // push bunch of nodes.
     // q.insert(q.end(), nodes.begin(), nodes.end());
@@ -331,7 +331,7 @@ pair<CutContainer, CutContainer> DDSolver::initializeCutsParallel(size_t n) {
     }
     n = temp_n;
     // generate cuts in parallel
-    #pragma omp parallel num_threads(4) shared(fCuts, oCuts, solutions, n)
+    #pragma omp parallel num_threads(OMP_NUM_THREADS) shared(fCuts, oCuts, solutions, n)
     {
         // cout << "Number of threads in parallel: " << omp_get_num_threads() << endl;
         // divide work between threads.
@@ -388,12 +388,12 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
     int NUM_THREADS = 4;
 
     // distribute work by master.
-    vector<NodeQueue> queues(NUM_THREADS);
+    vector<NodeQueue> queues(OMP_NUM_THREADS);
     for (int i = 0; i < nodeQueue.size() ;i++) {
-        queues[i%4].pushNode(nodeQueue.getNode());
+        queues[i%OMP_NUM_THREADS].pushNode(nodeQueue.getNode());
     }
 
-    #pragma omp parallel num_threads(NUM_THREADS) default(none) shared(queues, cout) firstprivate(initialCuts)
+    #pragma omp parallel num_threads(OMP_NUM_THREADS) default(none) shared(queues, cout) firstprivate(initialCuts)
     {
 
         #pragma omp single
@@ -454,7 +454,7 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
                     if(!result.nodes.empty()) {
 //                        optLB = getOptimalLB();
                         if (result.ub > optLB) {
-                            const int LOCAL_QUEUE_LIMIT = 4000;
+                            const int LOCAL_QUEUE_LIMIT = 10000;
                             auto result_nodes = result.nodes;
                             while ((localQ.size() < LOCAL_QUEUE_LIMIT) && !result_nodes.empty()) {
                                 localQ.pushNode(result_nodes.back());
