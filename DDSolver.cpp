@@ -6,7 +6,7 @@
 #include <random>
 #include <chrono>
 #include <omp.h>
-#define OMP_NUM_THREADS 2
+#define OMP_NUM_THREADS 4
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     // push bunch of nodes.
     // q.insert(q.end(), nodes.begin(), nodes.end());
@@ -412,7 +412,7 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
         uint n_processed =0;
         uint n_pruned_by_bound = 0;
 
-        NodeExplorer explorer{networkPtr, initialCuts.value()};
+        NodeExplorer explorer{networkPtr};
         // until work queue is empty.
 
         while (true) {

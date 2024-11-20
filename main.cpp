@@ -290,7 +290,7 @@ int main() {
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver{networkPtr};
 	solver.initialize();
-	int n_initial_cuts = 60;
+	int n_initial_cuts = 4;
 	auto cuts = solver.initializeCutsParallel(n_initial_cuts);
 	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
 		" , Feasibility: " << cuts.first.cuts.size() << endl;
