@@ -136,17 +136,17 @@ void DDSolver::start() {
 
 double DDSolver::getOptimalLB() const{
     double lb = 0;
-    #pragma omp atomic
-        lb += optimalLB;
+    #pragma omp atomic read
+	lb = optimalLB;
 
     return lb;
 }
 
 void DDSolver::setLB(double lb) {
     #pragma omp critical
-    {
-        if (lb > optimalLB)
-            optimalLB = lb;
+	{
+		optimalLB = (lb > optimalLB)? lb : optimalLB;
+		#pragma omp flush(optimalLB)
     }
 }
 
@@ -393,7 +393,7 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
         queues[i%4].pushNode(nodeQueue.getNode());
     }
 
-    #pragma omp parallel num_threads(NUM_THREADS)
+    #pragma omp parallel num_threads(NUM_THREADS) default(none) shared(queues, cout) firstprivate(initialCuts)
     {
 
         #pragma omp single
@@ -416,6 +416,7 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
         // until work queue is empty.
 
         while (true) {
+//			double optLB = 0;
             {
                 Node_t node;
                 bool isEmpty = false;
@@ -423,14 +424,18 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
                 {
                     if (nodeQueue.empty()) isEmpty = true;
                     else node = nodeQueue.getNode();
+					#pragma omp flush (nodeQueue)
+					// call getOptimalLB here.
                 }
                 if (localQ.empty() && isEmpty) break;
                 localQ.pushNode(node);
             }
 
+			double optLB = getOptimalLB(); // get latest value if processed a node.
+
             while (!localQ.empty()) {
                 Node_t node = localQ.getNode();
-                double optLB = getOptimalLB();
+//                double optLB = getOptimalLB();
                 if (node.ub < optLB) {n_pruned_by_bound++; continue;}
 
                 auto result = explorer.process3(node, optLB);
@@ -447,15 +452,21 @@ void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> ini
                             << std::ctime(&t_c)<< endl;
                     }
                     if(!result.nodes.empty()) {
-                        optLB = getOptimalLB();
+//                        optLB = getOptimalLB();
                         if (result.ub > optLB) {
-                            const int LOCAL_QUEUE_LIMIT = 400;
+                            const int LOCAL_QUEUE_LIMIT = 4000;
                             auto result_nodes = result.nodes;
                             while ((localQ.size() < LOCAL_QUEUE_LIMIT) && !result_nodes.empty()) {
                                 localQ.pushNode(result_nodes.back());
                                 result_nodes.pop_back();
                             }
-                            if (!result_nodes.empty()) nodeQueue.pushNodes(result_nodes);
+                            if (!result_nodes.empty()) {
+								#pragma omp critical
+	                            {
+									nodeQueue.pushNodes(result_nodes);
+									#pragma omp flush(nodeQueue)
+								}
+							}
                         }
                     }
                 }

@@ -247,9 +247,9 @@ int old_main() {
 
 #include "DDSolver.h"
 
-void main() {
+int main() {
 
-	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt";
+	string fileName ="/home/nandgate/CLionProjects/SGUFP_Solver/42_85_20.txt";
 	Network network{fileName};
 
 
@@ -304,4 +304,5 @@ void main() {
 	std::cout <<"program took " << ms_int.count() << " seconds" << endl;
 
 	cout << "Solver finished" << endl;
+	return 0;
 }
