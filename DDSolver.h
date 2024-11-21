@@ -5,6 +5,9 @@
 #ifndef DDSOLVER_H
 #define DDSOLVER_H
 
+#include <thread>
+#include <mutex>
+#include <atomic>
 #include "DD.h"
 #include "grb.h"
 #include "NodeExplorer.h"
@@ -62,6 +65,10 @@ class DDSolver {
     #endif
 
     void process(NodeExplorer explorer);
+	void processWork();
+
+	std::mutex queueLock;
+	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
 
 public:
 
@@ -79,6 +86,8 @@ public:
     void startSolve(optional<pair<CutContainer, CutContainer>> initialCuts);
     pair<CutContainer, CutContainer> initializeCuts();
     pair<CutContainer, CutContainer> initializeCuts2(size_t n = 50);
+
+	void startPThreadSolver();
 };
 
 

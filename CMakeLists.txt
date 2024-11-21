@@ -44,9 +44,9 @@ if (UNIX)
     add_library(gurobi110 SHARED IMPORTED)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
-    add_compile_definitions(DEBUG)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -O0 -pg -g) # add -O3 flag in final phase. -Wunused
-    target_link_options(SGUFP_Solver PRIVATE -pg -g)
+    add_compile_definitions(SOLVER_STATS)
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g -pthread) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -g -pthread)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
@@ -61,6 +61,7 @@ if (UNIX)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
     # test targets
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_executable(tests2 tests/tests.cpp ${SOURCES}
             tests/test_utils.h)
     target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
@@ -78,6 +79,7 @@ if (UNIX)
     include(GoogleTest)
     gtest_discover_tests(testmain)
     gtest_discover_tests(tests2)
+    endif()
 
 elseif(WIN32)
     # windows system

@@ -278,3 +278,97 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
     return make_pair(fCuts, oCuts);
 
 }
+
+
+void DDSolver::processWork() {
+	NodeExplorer explorer{networkPtr};
+
+	NodeQueue localQueue;
+
+	double zOpt = globalLB.load();
+	size_t nProcessed = 0;
+
+	while (true) {
+		// acquire lock get a node from global queue
+		Node_t node;
+		{
+			lock_guard<mutex> guard(queueLock);
+			if (nodeQueue.empty()) break;
+			node = nodeQueue.getNode();
+		}
+
+		localQueue.pushNode(node);
+		zOpt = globalLB.load(memory_order_acquire);
+
+		while (!localQueue.empty()){
+
+			Node_t node1 = localQueue.getNode();
+//			zOpt = globalLB.load();
+			if (node1.ub < zOpt){
+				continue;
+				// pruned by bound.
+			}
+
+			auto result = explorer.process3(node1, zOpt);
+			nProcessed++;
+
+			if (result.success){
+				if (result.lb > zOpt){
+					// read lower bound.
+					zOpt = globalLB.load(memory_order_acquire);
+					if(result.lb > zOpt){
+						zOpt = result.lb;
+						globalLB.store(result.lb, memory_order_release); // check this in case of multiple threads.
+						const auto now = std::chrono::system_clock::now();
+						const auto t_c = std::chrono::system_clock::to_time_t(now);
+						cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
+								<< " set at " << std::ctime(&t_c) << endl;
+					}
+				}
+				if (!result.nodes.empty()){
+					if (result.ub > zOpt){
+						localQueue.pushNodes(result.nodes);
+					}
+				}
+			}
+		}
+	}
+	cout << "Processed " << nProcessed << " nodes. " << endl;
+	explorer.displayCutStats();
+
+	//
+}
+
+void DDSolver::startPThreadSolver() {
+	// fill up work queue, make thread lock queue before accessing.
+//	std::mutex queueLock;
+
+	{
+		DDNode root{0};
+		root.globalLayer = 0;
+		DD restrictedDD{networkPtr, RESTRICTED};
+		auto cutset = restrictedDD.build(root);
+
+		// insert to cutset.
+		if (cutset)
+			nodeQueue.pushNodes(cutset.value());
+
+		cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
+
+		// start thread
+	}
+
+	std::thread worker{&DDSolver::processWork, this};
+
+	if (worker.joinable()) {
+		//cout << "Worker thread is joinable" << endl;
+		worker.join();
+	}
+	//else {cout << "worker thread is not joinable" << endl;}
+
+	assert(nodeQueue.empty());
+	//cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
+
+	cout << "Optimal Solution : " << globalLB.load() << endl;
+
+}
