@@ -280,95 +280,164 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
 }
 
 
-void DDSolver::processWork() {
-	NodeExplorer explorer{networkPtr};
-
-	NodeQueue localQueue;
-
-	double zOpt = globalLB.load();
-	size_t nProcessed = 0;
-
-	while (true) {
-		// acquire lock get a node from global queue
-		Node_t node;
-		{
-			lock_guard<mutex> guard(queueLock);
-			if (nodeQueue.empty()) break;
-			node = nodeQueue.getNode();
-		}
-
-		localQueue.pushNode(node);
-		zOpt = globalLB.load(memory_order_acquire);
-
-		while (!localQueue.empty()){
-
-			Node_t node1 = localQueue.getNode();
-//			zOpt = globalLB.load();
-			if (node1.ub < zOpt){
-				continue;
-				// pruned by bound.
-			}
-
-			auto result = explorer.process3(node1, zOpt);
-			nProcessed++;
-
-			if (result.success){
-				if (result.lb > zOpt){
-					// read lower bound.
-					zOpt = globalLB.load(memory_order_acquire);
-					if(result.lb > zOpt){
-						zOpt = result.lb;
-						globalLB.store(result.lb, memory_order_release); // check this in case of multiple threads.
-						const auto now = std::chrono::system_clock::now();
-						const auto t_c = std::chrono::system_clock::to_time_t(now);
-						cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
-								<< " set at " << std::ctime(&t_c) << endl;
-					}
-				}
-				if (!result.nodes.empty()){
-					if (result.ub > zOpt){
-						localQueue.pushNodes(result.nodes);
-					}
-				}
-			}
-		}
-	}
-	cout << "Processed " << nProcessed << " nodes. " << endl;
-	explorer.displayCutStats();
-
-	//
-}
+//void DDSolver::processWork() {
+//	NodeExplorer explorer{networkPtr};
+//
+//	NodeQueue localQueue;
+//
+//	double zOpt = globalLB.load();
+//	size_t nProcessed = 0;
+//	Node_t rootNode;
+//	rootNode.lb = numeric_limits<double>::lowest();
+//	rootNode.ub = numeric_limits<double>::max();
+//	rootNode.globalLayer = 0;
+//	localQueue.pushNode(rootNode);
+//	// insert all but one node to the local queue.
+////	while (!nodeQueue.empty()) {localQueue.pushNode(nodeQueue.getNode());}
+////	localQueue = nodeQueue;
+//	while (true) {
+//		// acquire lock get a node from global queue
+////		Node_t node;
+////		{
+////			lock_guard<mutex> guard(queueLock);
+////			if (nodeQueue.empty()) break;
+////			node = nodeQueue.getNode();
+////		}
+////
+////		localQueue.pushNode(node);
+//		if (localQueue.empty()) break;
+//		zOpt = globalLB.load(memory_order_acquire);
+//
+//		while (!localQueue.empty()){
+//
+//			Node_t node1 = localQueue.getNode();
+////			zOpt = globalLB.load();
+//			if (node1.ub < zOpt){
+//				continue;
+//				// pruned by bound.
+//			}
+//
+//			auto result = explorer.process3(node1, zOpt);
+//			nProcessed++;
+//
+//			if (result.success){
+//				if (result.lb > zOpt){
+//					// read lower bound.
+//					zOpt = globalLB.load(memory_order_acquire);
+//					if(result.lb > zOpt){
+//						zOpt = result.lb;
+//						globalLB.store(result.lb, memory_order_release); // check this in case of multiple threads.
+//						const auto now = std::chrono::system_clock::now();
+//						const auto t_c = std::chrono::system_clock::to_time_t(now);
+//						cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
+//								<< " set at " << std::ctime(&t_c) << endl;
+//					}
+//				}
+//				if (!result.nodes.empty()){
+//					if (result.ub > zOpt){
+//						localQueue.pushNodes(result.nodes);
+//					}
+//				}
+//			}
+//		}
+//	}
+//	cout << "Processed " << nProcessed << " nodes. " << endl;
+//	explorer.displayCutStats();
+//
+//	//
+//}
 
 void DDSolver::startPThreadSolver() {
 	// fill up work queue, make thread lock queue before accessing.
 //	std::mutex queueLock;
 
-	{
-		DDNode root{0};
-		root.globalLayer = 0;
-		DD restrictedDD{networkPtr, RESTRICTED};
-		auto cutset = restrictedDD.build(root);
+	pair<CutContainer, CutContainer> cuts{CutContainer{FEASIBILITY}, CutContainer{OPTIMALITY}};
 
-		// insert to cutset.
-		if (cutset)
-			nodeQueue.pushNodes(cutset.value());
+	NodeQueue tempQ1, tempQ2;
+
+	{
+
+		// single iteration of node explorer.
+		Node_t node {{},{}, numeric_limits<double>::lowest(), numeric_limits<double>::max(),0};
+		NodeExplorer explorer {networkPtr};
+		auto result = explorer.process3(node, numeric_limits<double>::lowest());
+
+		if (result.lb > globalLB.load(memory_order_acquire))
+			globalLB.store(result.lb, memory_order_release);
+//		nodeQueue.pushNodes(result.nodes);
+		int size = result.nodes.size();
+		for (int i = 0; i < size; i++){
+			if (i < size/2) tempQ1.pushNode(result.nodes[i]);
+			else tempQ2.pushNode(result.nodes[i]);
+		}
+		cuts = explorer.getCuts();
+
+//		DDNode root{0};
+//		root.globalLayer = 0;
+//		DD restrictedDD{networkPtr, RESTRICTED};
+//		auto cutset = restrictedDD.build(root);
+//
+//		// insert to cutset.
+//		if (cutset)
+//			nodeQueue.pushNodes(cutset.value());
 
 		cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
 
 		// start thread
 	}
 
-	std::thread worker{&DDSolver::processWork, this};
+	std::thread worker{&DDSolver::processWork, this, tempQ1, cuts};
+	std::thread worker2{&DDSolver::processWork, this, tempQ2, cuts};
 
 	if (worker.joinable()) {
 		//cout << "Worker thread is joinable" << endl;
 		worker.join();
 	}
+	if (worker2.joinable()) worker2.join();
 	//else {cout << "worker thread is not joinable" << endl;}
 
-	assert(nodeQueue.empty());
+	//assert(nodeQueue.empty());
 	//cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
 
 	cout << "Optimal Solution : " << globalLB.load() << endl;
 
+}
+
+
+void DDSolver::processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts) {
+
+	NodeExplorer explorer{networkPtr, cuts}; // get initial cuts later.
+	NodeQueue localQueue = q; // initialize localQueue later.
+	double zOpt = globalLB.load(memory_order_acquire);
+	size_t nProcessed  = 0;
+
+	while (!localQueue.empty()){
+		Node_t node = localQueue.getNode();
+
+		auto result = explorer.process3(node, zOpt);
+		nProcessed++;
+
+		if (result.success) {
+			if (result.lb > zOpt){
+				zOpt = globalLB.load(memory_order_acquire);
+				if (result.lb > zOpt){
+					globalLB.store(result.lb, memory_order_release);
+					zOpt = result.lb;
+					const auto now = std::chrono::system_clock::now();
+					const auto t_c = std::chrono::system_clock::to_time_t(now);
+					cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
+							<< " set at " << std::ctime(&t_c) << endl;
+				}
+			}
+
+			if (result.ub > zOpt && !result.nodes.empty()){
+				// add nodes to queue
+				localQueue.pushNodes(result.nodes);
+			}
+		}
+	}
+
+	// display stats.
+	cout << "thread: " << this_thread::get_id() << " processed " << nProcessed << " nodes." << endl;
+	explorer.displayCutStats();
 }

@@ -249,7 +249,7 @@ int old_main() {
 
 int main() {
 
-	string fileName ="/home/nandgate/CLionProjects/SGUFP_Solver/42_85_20.txt";
+	string fileName ="/home/nandgate/CLionProjects/SGUFP_Solver/40_93_20_2.txt";
 	Network network{fileName};
 
 

@@ -65,7 +65,7 @@ class DDSolver {
     #endif
 
     void process(NodeExplorer explorer);
-	void processWork();
+	void processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts);
 
 	std::mutex queueLock;
 	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
