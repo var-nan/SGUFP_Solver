@@ -77,8 +77,10 @@ public:
     void initialize();
     void start();
     void startSolve(optional<pair<CutContainer, CutContainer>> initialCuts);
+    void startSolveParallel(optional<pair<CutContainer,CutContainer>> initialCuts);
     pair<CutContainer, CutContainer> initializeCuts();
     pair<CutContainer, CutContainer> initializeCuts2(size_t n = 50);
+    pair<CutContainer, CutContainer> initializeCutsParallel(size_t n = 60);
 };
 
 

@@ -5,7 +5,8 @@
 #include "DDSolver.h"
 #include <random>
 #include <chrono>
-
+#include <omp.h>
+#define OMP_NUM_THREADS 4
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     // push bunch of nodes.
     // q.insert(q.end(), nodes.begin(), nodes.end());
@@ -134,11 +135,19 @@ void DDSolver::start() {
 }
 
 double DDSolver::getOptimalLB() const{
-    return optimalLB;
+    double lb = 0;
+    #pragma omp atomic read
+	lb = optimalLB;
+
+    return lb;
 }
 
 void DDSolver::setLB(double lb) {
-    optimalLB = lb;
+    #pragma omp critical
+	{
+		optimalLB = (lb > optimalLB)? lb : optimalLB;
+		#pragma omp flush(optimalLB)
+    }
 }
 
 DDNode node2DDdfsNode(Node_t node) {
@@ -276,5 +285,199 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
 
     // cout << "Current max width is : " << MAX_WIDTH  << endl;
     return make_pair(fCuts, oCuts);
+
+}
+
+pair<CutContainer, CutContainer> DDSolver::initializeCutsParallel(size_t n) {
+
+    vector<vi> solutions;
+    int temp_n = n;
+
+    // vector<GRBEnv> environments; for (size_t i = 0; i < 4; i++) environments.emplace_back(GRBEnv());
+
+    CutContainer fCuts{FEASIBILITY};
+    CutContainer oCuts{OPTIMALITY};
+
+    {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dist(0, std::numeric_limits<int>::max());
+
+        DDNode root{0};
+        DD dd{networkPtr, EXACT};
+        dd.build(root);
+
+        while (n) {
+            vi solution;
+            ulint currentId = 0;
+
+            for (size_t i = 0; i < dd.tree.size() -2; i++) {
+                const auto& node = dd.nodes.at(currentId);
+                const auto& nArcs = node.outgoingArcs.size();
+                auto selection = node.outgoingArcs[ dist(gen)%nArcs];
+                const auto& arc = dd.arcs.at(selection);
+                solution.push_back(arc.decision);
+                currentId = arc.head;
+            }
+            // check if solution exists.
+            bool isExist = false;
+            for (const auto& sol : solutions) {
+                if (sol == solution) {isExist = true; break;}
+            }
+            if (isExist) continue;
+            solutions.push_back(solution);
+            n--;
+        }
+    }
+    n = temp_n;
+    // generate cuts in parallel
+    #pragma omp parallel num_threads(OMP_NUM_THREADS) shared(fCuts, oCuts, solutions, n)
+    {
+        // cout << "Number of threads in parallel: " << omp_get_num_threads() << endl;
+        // divide work between threads.
+        int n_threads = omp_get_num_threads();
+        int thread_id = omp_get_thread_num();
+        int chunk = n/n_threads;
+        int start = chunk*thread_id;
+        int end = min(start + chunk, static_cast<int>(n));
+
+        CutContainer localFCuts{FEASIBILITY};
+        CutContainer localOCuts{OPTIMALITY};
+
+        GRBEnv env = GRBEnv();
+        env.set(GRB_IntParam_OutputFlag, 0);
+
+        for (int i = start; i < end; i++) {
+            const auto& solution = solutions[i];
+            auto y_bar = w2y(solution, networkPtr);
+            GuroSolver solver{networkPtr, env};
+
+            auto cut = solver.solveSubProblemInstance(y_bar, 0);
+
+            if (cut.cutType == FEASIBILITY) {
+                localFCuts.insertCut(cut);
+            }
+            else localOCuts.insertCut(cut);
+        }
+
+        #pragma omp critical
+        {
+            for (auto& cut : localFCuts.cuts) fCuts.insertCut(cut);
+            for (auto& cut : localOCuts.cuts) oCuts.insertCut(cut);
+        }
+    }
+    return {fCuts, oCuts};
+}
+
+
+void DDSolver::startSolveParallel(optional<pair<CutContainer, CutContainer>> initialCuts) {
+
+
+    // create restricted tree and get cutset
+    {
+        DDNode root{0};
+        DD dd{networkPtr, RESTRICTED};
+        auto cutset = dd.build(root);
+        // cutset should be valid.
+        assert(cutset);
+        nodeQueue.pushNodes(cutset.value());
+    }
+
+    vector<tuple<int,int,int>> thread_stats;
+
+    int NUM_THREADS = 4;
+
+    // distribute work by master.
+    vector<NodeQueue> queues(OMP_NUM_THREADS);
+    for (int i = 0; i < nodeQueue.size() ;i++) {
+        queues[i%OMP_NUM_THREADS].pushNode(nodeQueue.getNode());
+    }
+
+    #pragma omp parallel num_threads(OMP_NUM_THREADS) default(none) shared(queues, cout) firstprivate(initialCuts)
+    {
+
+        #pragma omp single
+        {
+            cout << "# threads: " << omp_get_num_threads() << endl;
+        }
+
+        int thread_id = omp_get_thread_num();
+       // create local queue
+        NodeQueue localQ; // assign comparing strategy later.
+        while (!queues[thread_id].empty()) localQ.pushNode(queues[thread_id].getNode());
+        int n_threads = omp_get_num_threads();
+
+        #pragma omp barrier
+
+        uint n_processed =0;
+        uint n_pruned_by_bound = 0;
+
+        NodeExplorer explorer{networkPtr};
+        // until work queue is empty.
+
+        while (true) {
+//			double optLB = 0;
+            {
+                Node_t node;
+                bool isEmpty = false;
+                #pragma omp critical
+                {
+                    if (nodeQueue.empty()) isEmpty = true;
+                    else node = nodeQueue.getNode();
+					#pragma omp flush (nodeQueue)
+					// call getOptimalLB here.
+                }
+                if (localQ.empty() && isEmpty) break;
+                localQ.pushNode(node);
+            }
+
+			double optLB = getOptimalLB(); // get latest value if processed a node.
+
+            while (!localQ.empty()) {
+                Node_t node = localQ.getNode();
+//                double optLB = getOptimalLB();
+                if (node.ub < optLB) {n_pruned_by_bound++; continue;}
+
+                auto result = explorer.process3(node, optLB);
+                n_processed++;
+
+                if (result.success) {
+                    optLB = getOptimalLB();
+                    if (result.lb > optLB) {
+                        // update opt
+                        setLB(result.lb);
+                        const auto now = std::chrono::system_clock::now();
+                        const auto t_c = std::chrono::system_clock::to_time_t(now);
+                        cout << "Thread : " << thread_id << ", Optimal LB: " << getOptimalLB() << " set at "
+                            << std::ctime(&t_c)<< endl;
+                    }
+                    if(!result.nodes.empty()) {
+//                        optLB = getOptimalLB();
+                        if (result.ub > optLB) {
+                            const int LOCAL_QUEUE_LIMIT = 10000;
+                            auto result_nodes = result.nodes;
+                            while ((localQ.size() < LOCAL_QUEUE_LIMIT) && !result_nodes.empty()) {
+                                localQ.pushNode(result_nodes.back());
+                                result_nodes.pop_back();
+                            }
+                            if (!result_nodes.empty()) {
+								#pragma omp critical
+	                            {
+									nodeQueue.pushNodes(result_nodes);
+									#pragma omp flush(nodeQueue)
+								}
+							}
+                        }
+                    }
+                }
+            }
+        }
+
+        // thread stats
+        cout << "Thread " << thread_id << " , processed " << n_processed << " nodes." << endl;
+        explorer.displayCutStats();
+    }
+
+    cout << "Optimal solution: " << getOptimalLB() << endl;
 
 }

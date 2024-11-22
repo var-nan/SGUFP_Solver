@@ -44,9 +44,9 @@ if (UNIX)
     add_library(gurobi110 SHARED IMPORTED)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
-    add_compile_definitions(DEBUG)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -O0 -pg -g) # add -O3 flag in final phase. -Wunused
-    target_link_options(SGUFP_Solver PRIVATE -pg -g)
+    target_compile_definitions(SGUFP_Solver PRIVATE SOLVER_STATS)
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -fopenmp) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -fopenmp)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
@@ -60,24 +60,31 @@ if (UNIX)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame-pointer")
+    message(STATUS "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
     # test targets
-    add_executable(tests2 tests/tests.cpp ${SOURCES}
-            tests/test_utils.h)
-    target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
-    target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
+    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_executable(tests2 tests/tests.cpp ${SOURCES}
+                tests/test_utils.h)
+        target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
+        target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
 
-    add_executable(testmain testmain.cpp ${SOURCES})
-    target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
-    target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
+        add_executable(testmain testmain.cpp ${SOURCES})
+        target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
+        target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
 
 
-#    if (CMAKE_BUILD_TYPE STREQUAL "Release")
-#        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
-#        set_target_properties(tests2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
-#    endif()
-    include(GoogleTest)
-    gtest_discover_tests(testmain)
-    gtest_discover_tests(tests2)
+    #    if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    #        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    #        set_target_properties(tests2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    #    endif()
+        include(GoogleTest)
+        gtest_discover_tests(testmain)
+        gtest_discover_tests(tests2)
+    endif()
+
 
 elseif(WIN32)
     # windows system
@@ -100,14 +107,18 @@ elseif(WIN32)
     message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
     message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
+
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp /openmp:llvm")
+
     if (MSVC AND MT)
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /openmp")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /openmp")
+        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT /openmp")
+        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd /openmp")
     endif()
     # flag specific for Dr Memory
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd /openmp /openmp:llvm")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /openmp /openmp:llvm")
 #    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
     find_package(GUROBI REQUIRED)
 
