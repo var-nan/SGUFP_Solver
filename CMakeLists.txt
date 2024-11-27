@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
 project(SGUFP_Solver)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
@@ -33,6 +33,11 @@ if (UNIX)
     message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
     message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
+    # set build specific compiler flags
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -funroll-loops -fno-rtti -fno-exceptions")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame-pointer -fno-rtti")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
+
     # gurobi libraries
     set(GUROBI_HOME "/opt/gurobi1102/linux64/")
     set(GUROBI_LIB "${GUROBI_HOME}lib/")
@@ -60,25 +65,31 @@ if (UNIX)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
+#    message(STATUS "General FLAGS: ${CMAKE_CXX_FLAGS}")
+    message(STATUS "RELEASE FLAGS: ${CMAKE_CXX_FLAGS_RELEASE}")
+    message(STATUS "DEBUG FLAGS: ${CMAKE_CXX_FLAGS_DEBUG}")
+    message(STATUS "RELWITHDEBINFO FLAGS: ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+
+
     # test targets
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_executable(tests2 tests/tests.cpp ${SOURCES}
-            tests/test_utils.h)
-    target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
-    target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
+        add_executable(tests2 tests/tests.cpp ${SOURCES}
+                tests/test_utils.h)
+        target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
+        target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
 
-    add_executable(testmain testmain.cpp ${SOURCES})
-    target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
-    target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
+        add_executable(testmain testmain.cpp ${SOURCES})
+        target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
+        target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
 
 
-#    if (CMAKE_BUILD_TYPE STREQUAL "Release")
-#        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
-#        set_target_properties(tests2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
-#    endif()
-    include(GoogleTest)
-    gtest_discover_tests(testmain)
-    gtest_discover_tests(tests2)
+    #    if (CMAKE_BUILD_TYPE STREQUAL "Release")
+    #        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    #        set_target_properties(tests2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
+    #    endif()
+        include(GoogleTest)
+        gtest_discover_tests(testmain)
+        gtest_discover_tests(tests2)
     endif()
 
 elseif(WIN32)

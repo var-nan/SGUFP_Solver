@@ -6,6 +6,7 @@
 #define DDSOLVER_H
 
 #include <thread>
+#include <condition_variable>
 #include <mutex>
 #include <atomic>
 #include "DD.h"
@@ -15,11 +16,19 @@
 #include <stack>
 
 class Payload {
-private:
+    enum STATUS {
+        WORKER_NEEDS_NODES = 0x1,
+        MASTER_NEEDS_NODES = 0x2,
+        WORKER_WORKING = 0x4,
+        MASTER_ASSIGNED_NODES = 0x8,
+        WORKER_SHARED_NODES = 0x100,
+        NOT_ENOUGH_NODES_TO_SHARE = 0x10,
+    };
+
     std::condition_variable cv;
     std::mutex lock;
     vector<Node_t> nodes_;
-    std::atomic<uint8_t> status;
+    std::atomic<uint8_t> status{};
     /*
      *  0   : worker working in progress.
      *  1   : worker needs nodes.
@@ -106,7 +115,7 @@ class DDSolver {
                 std::unique_lock<std::mutex> ul{lock};
                 nodes_ = move(work);
             }
-            status.store(4, memory_order::release);
+            status.store(4, memory_order_release);
             cv.notify_one();
         }
 

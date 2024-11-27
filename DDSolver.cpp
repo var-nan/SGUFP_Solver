@@ -470,7 +470,7 @@ void Payload::addNodes(vector<Node_t> nodes) {
 		scoped_lock l{lock};
 		nodes_ = move(nodes);
 	}
-	status.store(0x100, memory_order_release);
+	status.store(WORKER_WORKING, memory_order_release);
 	cv.notify_one();
 }
 
@@ -487,18 +487,18 @@ vector<Node_t> Payload::getNodes() {
 			}
 	 }
 	// indicate master and wait.
-	status.store(1,memory_order_release);
+	status.store(WORKER_NEEDS_NODES,memory_order_release);
 	while (true) {
 		std::unique_lock ul{lock};
 		cv.wait(ul, [&]{return !nodes_.empty();});
 		vector<Node_t> work = std::move(nodes_);
-		status.store(0b100, memory_order_release);
+		status.store(WORKER_WORKING, memory_order_release);
 		// nodes_.clear();
 		return work;
 	}
 }
 
 bool Payload::masterRequireNodes() const noexcept {
-	return status.load(memory_order_relaxed) & 0x2;
+	return status.load(memory_order_relaxed) & MASTER_NEEDS_NODES;
 }
 
