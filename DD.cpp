@@ -87,7 +87,7 @@ optional<vector<Node_t>> DD::build(DDNode &node) {
 	// return (exactLayer == index+1) ? generateExactCutSet() : std::nullopt;
 }
 
-inline void DD::updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states){
+inline void DD::updateState(const vector<ulint> &currentLayer, const set<int> &states){
 
 	for (auto id: currentLayer){
 		auto& node = nodes[id];
@@ -126,7 +126,9 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 				DDNode &parentNode = nodes[id];
 				const auto parentStates = parentNode.states;
 				// INFO; states should contain -1.
-				for (const auto decision: parentNode.states) {
+				for (auto start = parentNode.states.rbegin(); start != parentNode.states.rend(); ++start){
+					auto decision = *start; // iterate reverse order.
+				// for (const auto decision: parentNode.states) {
 					if (count >= MAX_WIDTH) {isExact = false; break; } // jump with goto, instead of this.
 					auto lastInserted = number.getNext();
 					DDNode node{lastInserted};
@@ -304,7 +306,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 			 }
 			 else {
 				 vector<DDNode> nodesVector;
-				 unordered_set<tuple<unordered_set<int>, int, int>, tuple_hash, tuple_equal> allStates;
+				 unordered_set<tuple<set<int>, int, int>, tuple_hash, tuple_equal> allStates;
 				 int j = 0;
 
 				 for (const auto id: currentLayer) {
@@ -471,7 +473,11 @@ void DD::buildNextLayer6(vector<ulint> &currentLayer, vector<ulint> &nextLayer) 
 		for (const auto id: currentLayer) {
 			auto& node = nodes[id];
 			int decision = -1;
-			for (auto state: node.states){ if (state > decision) decision = state;}
+			for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
+				auto state = *start;
+				if (state > decision) decision = state;
+			}
+			// for (auto state: node.states){ if (state > decision) decision = state;}
 			auto childId = createChild(node, decision);
 			nextLayer.push_back(childId);
 		}
@@ -483,7 +489,7 @@ void DD::buildNextLayer6(vector<ulint> &currentLayer, vector<ulint> &nextLayer) 
 		auto& node = nodes[id];
 		vi states{node.states.begin(), node.states.end()};
 		auto s = rand()%states.size();
-		auto decision = states[s];
+		auto decision = states.back();
 		auto childId = createChild(node, decision);
 		nextLayer.push_back(childId);
 
@@ -522,7 +528,7 @@ void DD::reduceLayer(vector<ulint> &currentLayer) {
 	 */
 
 	queue<ulint> q;
-	unordered_set<tuple<unordered_set<int>,int,int>,tuple_hash,tuple_equal> allStates;
+	unordered_set<tuple<set<int>,int,int>,tuple_hash,tuple_equal> allStates;
 	uint j = 0;
 
 	for (auto i: currentLayer){

@@ -12,6 +12,7 @@
 #include <iostream>
 #include <algorithm>
 #include <limits>
+#include <set>
 
 using namespace std;
 
@@ -76,7 +77,7 @@ public:
 	// arc processing order
 	vector<pair<int, int>> processingOrder; // should contain list of arcs in some order.
 	// each element in the processing order corresponds to a layer in the DD.
-	unordered_map<int, unordered_set<int>> stateUpdateMap; // (processingorder.id, vector of states)/
+	unordered_map<int, set<int>> stateUpdateMap; // (processingorder.id, vector of states)/
 	// if key is not present in the stateUpdateMap, then no need to change the state at the respective arc.
 
 	// different sets of nodes based on node's incoming and outgoing neighbors.
@@ -91,7 +92,7 @@ public:
 
 	vector<uint> getTroubleNodes() const noexcept;
 
-	[[nodiscard]] int getBestArc(const unordered_set<int>& states) const noexcept{
+	[[nodiscard]] int getBestArc(const set<int>& states) const noexcept{
 
 		int max = std::numeric_limits<int>::min();
 		int i = -1;

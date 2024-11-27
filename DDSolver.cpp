@@ -143,7 +143,7 @@ void DDSolver::setLB(double lb) {
 
 DDNode node2DDdfsNode(Node_t node) {
     DDNode newNode;
-    newNode.states = unordered_set<int>(node.states.begin(), node.states.end());
+    newNode.states = set<int>(node.states.begin(), node.states.end());
     newNode.solutionVector = node.solutionVector;
     newNode.globalLayer = node.globalLayer;
     newNode.nodeLayer = 0;
@@ -354,7 +354,7 @@ void DDSolver::startPThreadSolver() {
 	pair<CutContainer, CutContainer> cuts{CutContainer{FEASIBILITY}, CutContainer{OPTIMALITY}};
 
 	NodeQueue tempQ1, tempQ2;
-    vector<Node_t> t1, t2;
+    // vector<Node_t> t1, t2;
 
 	{
 
@@ -368,8 +368,8 @@ void DDSolver::startPThreadSolver() {
 //		nodeQueue.pushNodes(result.nodes);
 		int size = result.nodes.size();
 		for (int i = 0; i < size; i++) {
-		    if (i < size/2) {tempQ1.pushNode(result.nodes[i]); t1.push_back(result.nodes[i]);}
-		    else {tempQ2.pushNode(result.nodes[i]); t2.push_back(result.nodes[i]);}
+		    if (i < size/2) {tempQ1.pushNode(result.nodes[i]); }//t1.push_back(result.nodes[i]);}
+		    else {tempQ2.pushNode(result.nodes[i]);} //t2.push_back(result.nodes[i]);}
 		}
 		cuts = explorer.getCuts();
 
@@ -382,7 +382,7 @@ void DDSolver::startPThreadSolver() {
 //		if (cutset)
 //			nodeQueue.pushNodes(cutset.value());
 
-		cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
+		// cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
 
 		// start thread
 	}
@@ -390,8 +390,7 @@ void DDSolver::startPThreadSolver() {
     const unsigned nWorkers = 2;
 
     // vector<WorkerElement> workers(2);
-    workers[0].addWork(t1); workers[1].addWork(t2);
-
+    // workers[0].addNodes(t1); workers[1].addNodes(t2);
 	std::thread worker{&DDSolver::processWork, this, tempQ1, cuts};
 	std::thread worker2{&DDSolver::processWork, this, tempQ2, cuts};
 
@@ -410,25 +409,27 @@ void DDSolver::startPThreadSolver() {
 }
 
 
-void DDSolver::processWork(int id, pair<CutContainer, CutContainer> cuts) {
+void DDSolver::processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts) {
+	cout << "thread: "<< this_thread::get_id << " starting" << endl;
 
 	NodeExplorer explorer{networkPtr, cuts}; // get initial cuts later.
     //
-	auto& payload = workers[id];
-	auto nodeVec  = payload.getNodes();
-	NodeQueue localQueue{nodeVec}; // initialize localQueue later.
+	// int id = 0;
+	// auto& payload = workers[id];
+	// auto nodeVec  = payload.getNodes();
+	NodeQueue localQueue = q; // initialize localQueue later.
 
 	double zOpt = globalLB.load(memory_order_acquire);
 	size_t nProcessed  = 0;
 
-	while (!isCompleted.load(memory_order_acquire)) {
-		if (localQueue.empty()) {
-			auto nodes = payload.getNodes();
-			localQueue.pushNodes(nodes);
-		}
+	// while (!isCompleted.load(memory_order_acquire)) {
+		// if (localQueue.empty()) {
+		// 	auto nodes = payload.getNodes();
+		// 	localQueue.pushNodes(nodes);
+		// }
 		while (!localQueue.empty()){
 			Node_t node = localQueue.getNode();
-
+			// cout << "thread: " << this_thread::get_id <<"processing node: " << node.globalLayer << endl;
 			auto result = explorer.process3(node, zOpt);
 			nProcessed++;
 
@@ -451,14 +452,14 @@ void DDSolver::processWork(int id, pair<CutContainer, CutContainer> cuts) {
 				}
 			}
 
-			//if master wants some work?
-			if (payload.masterRequireNodes()) {
-				// share half of nodes with master.
-
-			}
+			// //if master wants some work?
+			// if (payload.masterRequireNodes()) {
+			// 	// share half of nodes with master.
+			//
+			// }
 
 		}
-	}
+	// }
 
 	// display stats.
 	cout << "thread: " << this_thread::get_id() << " processed " << nProcessed << " nodes." << endl;

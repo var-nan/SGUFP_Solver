@@ -249,6 +249,8 @@ int old_main() {
 
 int main() {
 
+	cout << "C++ version: " << __cplusplus << endl;
+
 	string fileName ="/home/nandgate/CLionProjects/SGUFP_Solver/40_93_20_2.txt";
 	Network network{fileName};
 

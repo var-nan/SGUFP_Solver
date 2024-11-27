@@ -52,6 +52,7 @@
 #include <ctime>
 #include <utility>
 #include <optional>
+#include <set>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
@@ -99,7 +100,7 @@ public:
 	uint globalLayer = 0;
 	vector<ulint> incomingArcs;
 	vector<ulint> outgoingArcs;
-	unordered_set<int> states;
+	set<int> states;
 	double state2;
 	vector<int> solutionVector;
 	int objVal = INT32_MAX;
@@ -189,7 +190,7 @@ public:
 	void reduceLayer(vector<ulint> &currentLayer);
 	void mergeNodes(DDNode& node1, DDNode& node2);
 	void duplicateNode(ulint id);
-	inline void updateState(const vector<ulint> &currentLayer, const unordered_set<int> &states);
+	inline void updateState(const vector<ulint> &currentLayer, const set<int> &states);
 	inline DDNode duplicate(const DDNode& node);
 
 	/// refinement functions ///
@@ -276,7 +277,7 @@ public:
 inline DDNode node2DDNode(const Node_t& node) {
 	DDNode ddnode{0};
 	ddnode.solutionVector = node.solutionVector;
-	ddnode.states = unordered_set(node.states.begin(), node.states.end());
+	ddnode.states = set(node.states.begin(), node.states.end());
 	ddnode.globalLayer = node.globalLayer;
 	return ddnode;
 }
@@ -287,7 +288,7 @@ struct set_hash{
 	/*
 	 * Hash of the entire set is Bitwise XOR of hash of individual elements.
 	 */
-	size_t operator()(const unordered_set<int>& s) const {
+	size_t operator()(const set<int>& s) const {
 		size_t h = 0;
 		for (auto i: s)
 			h ^= hash<int>{}(i);
@@ -299,7 +300,7 @@ struct tuple_hash{
 	/*
 	 * Hash of tuple is computed with only the first two elements of the tuple.
 	 */
-	size_t operator()(const tuple<unordered_set<int>,int,int>& t) const {
+	size_t operator()(const tuple<set<int>,int,int>& t) const {
 		size_t h1 = set_hash{}(get<0>(t));
 		size_t h2 = hash<int>{}(get<1>(t));
 		return h1 ^ (h2 << 2);
@@ -310,8 +311,8 @@ struct tuple_equal {
 	/*
 	 * Two tuples are equal if first two elements of the tuple are equal.
 	 */
-	bool operator()(const tuple<unordered_set<int>,int,int>& t1,
-	                const tuple<unordered_set<int>,int,int>& t2) const {
+	bool operator()(const tuple<set<int>,int,int>& t1,
+	                const tuple<set<int>,int,int>& t2) const {
 		auto& first = get<0>(t1);
 		auto& second = get<0>(t2);
 		return first == second && get<1>(t1) == get<1>(t2);
