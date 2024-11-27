@@ -14,24 +14,126 @@
 #include <queue>
 #include <stack>
 
+class Payload {
+private:
+    std::condition_variable cv;
+    std::mutex lock;
+    vector<Node_t> nodes_;
+    std::atomic<uint8_t> status;
+    /*
+     *  0   : worker working in progress.
+     *  1   : worker needs nodes.
+     *  2   : master needs nodes.
+     *  4   : worker working in progress.
+     *  8   : master assigned nodes to worker.
+     *  16  : worker shared nodes to master (load balance).
+     *  32  : not enough nodes to share to master.
+     */
 
+public:
+    Payload() = default;
+
+    vector<Node_t> getNodes();
+    void addNodes(vector<Node_t> nodes);
+    bool masterRequireNodes() const noexcept;
+
+
+};
 
 class DDSolver {
 
-    struct comparator {
-        bool operator() (const Node_t& node1, const Node_t& node2) const {
-            // return (node1.ub + node2.lb) < (node2.ub + node2.lb); // need to optimize this with ints
-            return node1.globalLayer > node2.globalLayer;
+    friend class Worker;
+    friend class Master;
+
+    enum STATUS_FLAGS {
+        ASSIGNED,
+        REQUESTED = 8,
+        REQUEST_MASTER = 1,
+        REQUEST_WORKER = 2,
+        PROCESSING = 0
+    };
+
+    class WorkerElement {
+        std::condition_variable cv;
+        std::mutex lock;
+        vector<Node_t> nodes_;
+        std::atomic<uint8_t> status{};
+        /*
+         *  0   : worker working in progress.
+         *  1   : worker needs nodes.
+         *  2   : master needs nodes.
+         *  4   : master assigned nodes to worker.
+         *  8   : worker assigned nodes to master.
+         *  16  : not enough nodes to return to master.
+         */
+
+    public:
+        WorkerElement() = default;
+
+        /**
+        * Worker calls this function to collect the nodes from master.
+        */
+        vector<Node_t> getWork() {
+
+            {
+                std::scoped_lock l{lock};
+                if (!nodes_.empty()) {
+                    /* either master placed some nodes initially, or worker placed some nodes previously
+                       for master on master's request. Status flag should be zero. */
+                    auto nodes = move(nodes_);
+                    // status.store(0, memory_order_release); // really necessary?
+                    return nodes;
+                }
+            }
+            // indicate master and wait.
+            status.store(1,memory_order_release);
+            while (true) {
+                std::unique_lock ul{lock};
+                cv.wait(ul, [&]{return !nodes_.empty();});
+                vector<Node_t> work = std::move(nodes_);
+                status.store(0b0, memory_order_release);
+                // nodes_.clear();
+                return work;
+            }
         }
+
+        /**
+        * Master adds the nodes to the element.
+        */
+        void addWork(vector<Node_t> work) {
+            // should be done by the master.
+            {
+                std::unique_lock<std::mutex> ul{lock};
+                nodes_ = move(work);
+            }
+            status.store(4, memory_order::release);
+            cv.notify_one();
+        }
+
+        bool submitWorkRequest() { // called by master.
+            // if worker itself require work?
+            auto val = status.load(memory_order_acquire);
+            if (val & 0b1000) return false;
+            status.store(2, memory_order_release);
+            return true;
+        }
+
     };
 
     class NodeQueue {
+        struct comparator {
+            bool operator() (const Node_t& node1, const Node_t& node2) const {
+                // return (node1.ub + node2.lb) < (node2.ub + node2.lb); // need to optimize this with ints
+                return node1.globalLayer > node2.globalLayer;
+            }
+        };
         // use either queue or vector or priority queue.
         // use mutex
         priority_queue<Node_t, vector<Node_t>, comparator> q;
         // stack<Node_t> q;
     public:
         NodeQueue() = default;
+        explicit NodeQueue(vector<Node_t> nodes): q{nodes.begin(), nodes.end()}{}
 
         void pushNodes(vector<Node_t> nodes);
         void pushNode(Node_t node);
@@ -43,7 +145,7 @@ class DDSolver {
 
     };
 
-    NodeQueue nodeQueue;
+    NodeQueue nodeQueue; // global queue.
     double optimalLB;
 
     const shared_ptr<Network> networkPtr;
@@ -65,10 +167,13 @@ class DDSolver {
     #endif
 
     void process(NodeExplorer explorer);
-	void processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts);
+	void processWork(int id, pair<CutContainer, CutContainer> cuts);
 
 	std::mutex queueLock;
 	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
+    std::atomic_bool isCompleted{false};
+    vector<Payload> workers{2};
+
 
 public:
 

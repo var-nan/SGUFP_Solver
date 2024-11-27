@@ -354,6 +354,7 @@ void DDSolver::startPThreadSolver() {
 	pair<CutContainer, CutContainer> cuts{CutContainer{FEASIBILITY}, CutContainer{OPTIMALITY}};
 
 	NodeQueue tempQ1, tempQ2;
+    vector<Node_t> t1, t2;
 
 	{
 
@@ -366,9 +367,9 @@ void DDSolver::startPThreadSolver() {
 			globalLB.store(result.lb, memory_order_release);
 //		nodeQueue.pushNodes(result.nodes);
 		int size = result.nodes.size();
-		for (int i = 0; i < size; i++){
-			if (i < size/2) tempQ1.pushNode(result.nodes[i]);
-			else tempQ2.pushNode(result.nodes[i]);
+		for (int i = 0; i < size; i++) {
+		    if (i < size/2) {tempQ1.pushNode(result.nodes[i]); t1.push_back(result.nodes[i]);}
+		    else {tempQ2.pushNode(result.nodes[i]); t2.push_back(result.nodes[i]);}
 		}
 		cuts = explorer.getCuts();
 
@@ -385,6 +386,11 @@ void DDSolver::startPThreadSolver() {
 
 		// start thread
 	}
+
+    const unsigned nWorkers = 2;
+
+    // vector<WorkerElement> workers(2);
+    workers[0].addWork(t1); workers[1].addWork(t2);
 
 	std::thread worker{&DDSolver::processWork, this, tempQ1, cuts};
 	std::thread worker2{&DDSolver::processWork, this, tempQ2, cuts};
@@ -404,36 +410,53 @@ void DDSolver::startPThreadSolver() {
 }
 
 
-void DDSolver::processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts) {
+void DDSolver::processWork(int id, pair<CutContainer, CutContainer> cuts) {
 
 	NodeExplorer explorer{networkPtr, cuts}; // get initial cuts later.
-	NodeQueue localQueue = q; // initialize localQueue later.
+    //
+	auto& payload = workers[id];
+	auto nodeVec  = payload.getNodes();
+	NodeQueue localQueue{nodeVec}; // initialize localQueue later.
+
 	double zOpt = globalLB.load(memory_order_acquire);
 	size_t nProcessed  = 0;
 
-	while (!localQueue.empty()){
-		Node_t node = localQueue.getNode();
+	while (!isCompleted.load(memory_order_acquire)) {
+		if (localQueue.empty()) {
+			auto nodes = payload.getNodes();
+			localQueue.pushNodes(nodes);
+		}
+		while (!localQueue.empty()){
+			Node_t node = localQueue.getNode();
 
-		auto result = explorer.process3(node, zOpt);
-		nProcessed++;
+			auto result = explorer.process3(node, zOpt);
+			nProcessed++;
 
-		if (result.success) {
-			if (result.lb > zOpt){
-				zOpt = globalLB.load(memory_order_acquire);
+			if (result.success) {
 				if (result.lb > zOpt){
-					globalLB.store(result.lb, memory_order_release);
-					zOpt = result.lb;
-					const auto now = std::chrono::system_clock::now();
-					const auto t_c = std::chrono::system_clock::to_time_t(now);
-					cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
-							<< " set at " << std::ctime(&t_c) << endl;
+					zOpt = globalLB.load(memory_order_acquire);
+					if (result.lb > zOpt){
+						globalLB.store(result.lb, memory_order_release);
+						zOpt = result.lb;
+						const auto now = std::chrono::system_clock::now();
+						const auto t_c = std::chrono::system_clock::to_time_t(now);
+						cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
+								<< " set at " << std::ctime(&t_c) << endl;
+					}
+				}
+
+				if (result.ub > zOpt && !result.nodes.empty()){
+					// add nodes to queue
+					localQueue.pushNodes(result.nodes);
 				}
 			}
 
-			if (result.ub > zOpt && !result.nodes.empty()){
-				// add nodes to queue
-				localQueue.pushNodes(result.nodes);
+			//if master wants some work?
+			if (payload.masterRequireNodes()) {
+				// share half of nodes with master.
+
 			}
+
 		}
 	}
 
@@ -441,3 +464,41 @@ void DDSolver::processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts) {
 	cout << "thread: " << this_thread::get_id() << " processed " << nProcessed << " nodes." << endl;
 	explorer.displayCutStats();
 }
+
+void Payload::addNodes(vector<Node_t> nodes) {
+	{
+		scoped_lock l{lock};
+		nodes_ = move(nodes);
+	}
+	status.store(0x100, memory_order_release);
+	cv.notify_one();
+}
+
+vector<Node_t> Payload::getNodes() {
+	// return nodes from the master nodes
+	 {
+			std::scoped_lock l{lock};
+			if (!nodes_.empty()) {
+				/* either master placed some nodes initially, or worker placed some nodes previously
+				   for master on master's request. Status flag should be zero. */
+				auto nodes = move(nodes_);
+				// status.store(0, memory_order_release); // really necessary?
+				return nodes;
+			}
+	 }
+	// indicate master and wait.
+	status.store(1,memory_order_release);
+	while (true) {
+		std::unique_lock ul{lock};
+		cv.wait(ul, [&]{return !nodes_.empty();});
+		vector<Node_t> work = std::move(nodes_);
+		status.store(0b100, memory_order_release);
+		// nodes_.clear();
+		return work;
+	}
+}
+
+bool Payload::masterRequireNodes() const noexcept {
+	return status.load(memory_order_relaxed) & 0x2;
+}
+
