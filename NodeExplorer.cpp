@@ -20,7 +20,7 @@ OutObject NodeExplorer::process(const Node_t node, double optimalLB) {
     {
         DDNode root1 {0, node.globalLayer, node.states, node.solutionVector};
         DD relaxedDD1{networkPtr,EXACT};
-        auto _ = relaxedDD1.build(root1);
+        auto _ = relaxedDD1.build(root1,1);
         // refine tree with feasibility cuts
 #ifdef DEBUG
         cout << "Applying Feasibility cuts heuristically on the relaxed tree." << endl;
@@ -40,7 +40,7 @@ OutObject NodeExplorer::process(const Node_t node, double optimalLB) {
         // apply optimality cuts to the relaxed tree.
         DD relaxedDD2{networkPtr, EXACT};
         DDNode root2 {0, node.globalLayer, node.states, node.solutionVector};
-        relaxedDD2.build(root2);
+        relaxedDD2.build(root2,1);
         for(auto start = optimalityCuts.cuts.rbegin(); start != optimalityCuts.cuts.rend(); ++start) {
 
             upperBound = relaxedDD1.applyOptimalityCutHeuristic(*start);
@@ -61,7 +61,7 @@ OutObject NodeExplorer::process(const Node_t node, double optimalLB) {
     DDNode root2 {0, node.globalLayer, node.states, node.solutionVector};
     // build restricted DD
     DD restrictedDD{networkPtr,RESTRICTED};
-    auto cutset = restrictedDD.build(root2);
+    auto cutset = restrictedDD.build(root2,1);
     // goto STEP_2C;
     // if(!cutset) goto STEP_2C;
 
@@ -182,7 +182,7 @@ OutObject NodeExplorer::process(const Node_t node, double optimalLB) {
     {
         DDNode root3 {0, node.globalLayer, node.states, node.solutionVector};
         DD relaxedDD2{networkPtr, EXACT};
-        relaxedDD2.build(root3);
+        relaxedDD2.build(root3,1);
         //double upperBound = node.ub;
 #ifdef DEBUG
         cout << "Applying optimality cuts on the relaxed tree heuristically." << endl;
@@ -229,7 +229,7 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 
         DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
         DD relaxedDD1{networkPtr, EXACT};
-        relaxedDD1.build(root1);
+        relaxedDD1.build(root1,1);
 
         // apply cuts heuristically.
         auto start = feasibilityCuts.cuts.rbegin();
@@ -251,13 +251,13 @@ OutObject NodeExplorer::process2(const Node_t node, const double optimalLB) {
 
     DD restrictedDD{networkPtr, RESTRICTED};
     DDNode root2{0, node.globalLayer, node.states, node.solutionVector};
-    auto cutset = restrictedDD.build(root2);
+    auto cutset = restrictedDD.build(root2,1);
 
     if (cutset) {
         // build relaxed DD 2
         DDNode root3{0, node.globalLayer, node.states, node.solutionVector};
         DD relaxedDD2{networkPtr, EXACT};
-        relaxedDD2.build(root3);
+        relaxedDD2.build(root3,1);
 
         // apply optimality cuts heuristically
         auto start = optimalityCuts.cuts.rbegin();
@@ -366,13 +366,13 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
 
     DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
     DD restrictedDD {networkPtr, RESTRICTED};
-    auto cutset = restrictedDD.build(root1);
+    auto cutset = restrictedDD.build(root1,1);
 
     DD relaxedDD{networkPtr, EXACT};
 
     if (cutset) {
         DDNode root2{0, node.globalLayer, node.states, node.solutionVector};
-        relaxedDD.build(root2);
+        relaxedDD.build(root2,1);
 
         // apply cuts on the relaxed DD. if any cut make DD infeasible, process new node.
         auto start = feasibilityCuts.cuts.rbegin();

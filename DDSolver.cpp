@@ -154,7 +154,7 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts2(size_t n) {
 
     DD dd{networkPtr, EXACT};
     DDNode root{0};
-    dd.build(root);
+    dd.build(root,1);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -225,9 +225,9 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
     root.globalLayer = 0;
     DD relaxed{networkPtr, EXACT};
     DDNode newRoot{0};
-    relaxed.build(newRoot);
+    relaxed.build(newRoot,1);
     DD restricted {networkPtr,RESTRICTED};
-    auto cutset = restricted.build(root);
+    auto cutset = restricted.build(root,1);
     cout << "Cutset size " << cutset.value().size() << endl;
 
     CutContainer fCuts{FEASIBILITY};
@@ -240,7 +240,7 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
         for (const auto& node: cutset.value()) {
             DDNode ddNode = node2DDNode(node);
             DD subTree{networkPtr,RESTRICTED};
-            auto _ = subTree.build(ddNode);
+            auto _ = subTree.build(ddNode,1);
 
             // get solution
             auto sol = subTree.solution();

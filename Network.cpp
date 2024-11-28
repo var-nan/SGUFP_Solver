@@ -69,7 +69,70 @@ Network::Network(const std::string& p_fileName){
 			netNodes[index].isVbar = true;
 			//isNodeInVbar[index] = true;
 		}
+		cout << "got here 1 "<< endl;
+		// auto troubleMakerNodes = getTroubleNodes();
+		vui arcsToRemove={};
+		// for(auto item : troubleMakerNodes){}
+		for (auto inArcId : netNodes[nNodes-1].incomingArcs) {
+			cout << "zart" << endl;
+			const auto& incomingNode = netNodes[netArcs[inArcId].tailId];
+			cout << "zart" << endl;
+			if (!incomingNode.isVbar) continue;
+			// find max demand and compare with capacities of incoming arcs.
+			int maxDemandOut = netArcs[inArcId].upperCapacities[0];
+			for (auto qInArcId : incomingNode.incomingArcs) {
+				if (netArcs[qInArcId].upperCapacities[0] < maxDemandOut) arcsToRemove.push_back(qInArcId);
+			}
+		}
+		cout << "got here 2 "<< endl;
+		for (auto node : netNodes) {
+			// remove arcs corresponding to nodes that doesn't have path from source to sink.
+			if ((node.outgoingArcs.empty()) &&
+				!(node.nodeId == 0 || node.nodeId == nNodes-1)){
+				// what to do?
+				if (!node.incomingArcs.empty())
+					arcsToRemove.insert(arcsToRemove.end(), node.incomingArcs.begin(), node.incomingArcs.end());
+				if (!node.outgoingArcs.empty())
+					arcsToRemove.insert(arcsToRemove.end(), node.outgoingArcs.begin(), node.outgoingArcs.end());
+				}
+		}
+		cout << "Number of arcs to be removed: " << arcsToRemove.size() << endl;
+		// for each removing arc, update head and tail nodes.
+		for (auto id: arcsToRemove) {
+			const auto& inArc = netArcs[id];
+			auto& inNode = netNodes[ inArc.tailId];
+			auto& outNode = netNodes[inArc.headId];
+			auto pos = find(inNode.outgoingArcs.begin(), inNode.outgoingArcs.end(), id);
+			if (pos != inNode.outgoingArcs.end()) inNode.outgoingArcs.erase(pos);
+			auto pos2 = find(outNode.incomingArcs.begin(), outNode.incomingArcs.end(), id);
+			if (pos2 != outNode.incomingArcs.end()) outNode.incomingArcs.erase(pos2);
+		}
 
+		// auto troubleMakerNodes = getTroubleNodes();
+		bool mysw =1;
+		while (mysw == 1) {
+			mysw =0;
+			for (auto item : networkNodes) {
+				if (item.incomingArcs.size() == 0 || item.outgoingArcs.size() == 0) {
+					if (item.nodeId != 0 || item.nodeId != nNodes-1) {
+						mysw = 1;
+						for (auto arc : item.outgoingArcs) {
+							auto pos = std::find(networkNodes[item.nodeId].outgoingArcs.begin(), networkNodes[item.nodeId].outgoingArcs.end(), arc);
+							networkNodes[item.nodeId].outgoingArcs.erase(pos);
+							pos = std::find(networkNodes[networkArcs[arc].headId].incomingArcs.begin(), networkNodes[networkArcs[arc].headId].incomingArcs.end(), arc);
+							networkNodes[networkArcs[arc].headId].incomingArcs.erase(pos);
+						}
+						for (auto arc : item.incomingArcs) {
+							auto pos = std::find(networkNodes[item.nodeId].incomingArcs.begin(), networkNodes[item.nodeId].incomingArcs.end(), arc);
+							networkNodes[item.nodeId].incomingArcs.erase(pos);
+							pos = std::find(networkNodes[networkArcs[arc].headId].outgoingArcs.begin(), networkNodes[networkArcs[arc].headId].outgoingArcs.end(), arc);
+							networkNodes[networkArcs[arc].tailId].outgoingArcs.erase(pos);
+						}
+					}
+				}
+			}
+		}
+		cout << "zart" <<endl;
 		// populate a1,a2,a3,a4 for subproblem formulation.
 		vui a1 = {}, a2 = {}, a3 = {}, a4 = {};
 
@@ -85,7 +148,7 @@ Network::Network(const std::string& p_fileName){
 				else a3.push_back(arc.arcId);
 			}
 		}
-		// a4 = {};
+		a4 = {};
 		// { // remove arcs that cannot be matched with outgoing arcs of Vbar node.
 		// 	cout << "Printing whole network" << endl;
 		// 	for (auto node: networkNodes) {
@@ -143,7 +206,7 @@ Network::Network(const std::string& p_fileName){
 		this->A4 = std::move(a4);
 		//this->isNodeInVbar = nodeInVbar;
 
-		auto troubleMakerNodes = getTroubleNodes();
+
 
 		shuffleVBarNodes();
 		// reduce the size of vBar. just for testing.
@@ -172,15 +235,15 @@ Network::Network(const std::string& p_fileName){
 				layerRewards.push_back(networkArcs[inId].rewards[0]);
 				troubleMaker.push_back(0);
 			}
-			if (find(troubleMakerNodes.begin(), troubleMakerNodes.end(), id) != troubleMakerNodes.end())
-				troubleMaker.back() = 1; // set last element to 1.
+			// if (find(troubleMakerNodes.begin(), troubleMakerNodes.end(), id) != troubleMakerNodes.end())
+			// 	troubleMaker.back() = 1; // set last element to 1.
 
 		}
 		hasStateChanged.push_back(false); // extra element for buildNextLayer in DD class.
 		// troubleMaker.insert(troubleMaker.begin(), 0);
 		cout <<"Trouble Maker structure: "; for (auto s: troubleMaker) cout << to_string(s) <<" "; cout << endl;
 		cout <<"Incoming Nodes: "; for (auto id: Vbar) cout << networkNodes[id].incomingArcs.size() << " "; cout << endl;
-
+		cout <<"outgoing Nodes: "; for (auto id: Vbar) cout << networkNodes[id].outgoingArcs.size() << " "; cout << endl;
 //		// build stateUpdate map.
 //		int lastId = -1;
 //		for (const auto [id,aId]: processingOrder){

@@ -251,7 +251,7 @@ int main() {
 
 	cout << "C++ version: " << __cplusplus << endl;
 
-	string fileName ="/home/nandgate/CLionProjects/SGUFP_Solver/40_93_20_2.txt";
+	string fileName ="C:/Users/erfank/CLionProjects/SGUFP_Solver/newversion/40_93_20_2.txt";
 	Network network{fileName};
 
 
@@ -298,8 +298,8 @@ int main() {
 //		" , Feasibility: " << cuts.first.cuts.size() << endl;
 	cout << "**********************************************************************************************************\n\n\n" << endl;
 
-//	solver.startSolve(cuts);
-	solver.startPThreadSolver();
+	solver.startSolve({});
+	// solver.startPThreadSolver();
 	auto t2 = high_resolution_clock::now();
 	// cout << "Node queue strategy: LIFO" << endl;
 	auto ms_int = duration_cast<seconds>(t2-t1);

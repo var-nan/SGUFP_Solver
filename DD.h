@@ -166,7 +166,7 @@ private:
 	[[nodiscard]] vi computePathForExactNode(ulint nodeId) const;
 	[[nodiscard]] vector<Node_t> generateExactCutSet() const;
 
-	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
+	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext,int type_param);
 	ulint createChild(DDNode& parent, int decision);
 	void buildNextLayer2(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 	void buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
@@ -183,7 +183,7 @@ public:
 	explicit DD(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_}, type{RESTRICTED}{}
 	explicit DD(const shared_ptr<Network>& networkPtr_, const Type type_): networkPtr{networkPtr_}, type{type_}{}
 
-	optional<vector<Node_t>> build(DDNode &node);
+	optional<vector<Node_t>> build(DDNode &node,int type_param);
 
 	/// refinement helper functions ///
 

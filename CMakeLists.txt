@@ -9,7 +9,7 @@ set(SOURCES Network.cpp DD.cpp grb.cpp DDSolver.cpp NodeExplorer.cpp OriginalPro
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=120)
+add_compile_definitions(MAX_WIDTH=100)
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
