@@ -27,6 +27,14 @@ Node_t DDSolver::NodeQueue::getNode() {
 
 vector<Node_t> DDSolver::NodeQueue::getNodes(size_t n = 8) {
     vector<Node_t> nodes;
+
+	while (!q.empty()) {
+		//
+		if (n--) {
+			nodes.push_back(q.top()); q.pop();
+		}
+		else break;
+	}
     //
     // for (size_t i = 0; i < n; i++) {
     //     nodes.push_back(q.back());
@@ -354,7 +362,7 @@ void DDSolver::startPThreadSolver() {
 	pair<CutContainer, CutContainer> cuts{CutContainer{FEASIBILITY}, CutContainer{OPTIMALITY}};
 
 	NodeQueue tempQ1, tempQ2;
-    // vector<Node_t> t1, t2;
+    vector<Node_t> t1, t2;
 
 	{
 
@@ -368,8 +376,8 @@ void DDSolver::startPThreadSolver() {
 //		nodeQueue.pushNodes(result.nodes);
 		int size = result.nodes.size();
 		for (int i = 0; i < size; i++) {
-		    if (i < size/2) {tempQ1.pushNode(result.nodes[i]); }//t1.push_back(result.nodes[i]);}
-		    else {tempQ2.pushNode(result.nodes[i]);} //t2.push_back(result.nodes[i]);}
+		    if (i < size/2) {tempQ1.pushNode(result.nodes[i]); t1.push_back(result.nodes[i]);}
+		    else {tempQ2.pushNode(result.nodes[i]); t2.push_back(result.nodes[i]);}
 		}
 		cuts = explorer.getCuts();
 
@@ -390,9 +398,11 @@ void DDSolver::startPThreadSolver() {
     const unsigned nWorkers = 2;
 
     // vector<WorkerElement> workers(2);
+	workers[0].addNodes(t1);
+	workers[1].addNodes(t2);
     // workers[0].addNodes(t1); workers[1].addNodes(t2);
-	std::thread worker{&DDSolver::processWork, this, tempQ1, cuts};
-	std::thread worker2{&DDSolver::processWork, this, tempQ2, cuts};
+	std::thread worker{&DDSolver::processWork, this, 0, cuts};
+	std::thread worker2{&DDSolver::processWork, this, 1, cuts};
 
 	if (worker.joinable()) {
 		//cout << "Worker thread is joinable" << endl;
@@ -409,24 +419,26 @@ void DDSolver::startPThreadSolver() {
 }
 
 
-void DDSolver::processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts) {
-	cout << "thread: "<< this_thread::get_id << " starting" << endl;
+void DDSolver::processWork(unsigned int id, pair<CutContainer, CutContainer> cuts) {
+	// cout << "thread: "<< this_thread::get_id << " starting" << endl;
 
 	NodeExplorer explorer{networkPtr, cuts}; // get initial cuts later.
     //
 	// int id = 0;
-	// auto& payload = workers[id];
-	// auto nodeVec  = payload.getNodes();
-	NodeQueue localQueue = q; // initialize localQueue later.
+	auto& payload = workers[id];
+	auto nodeVec  = payload.getNodes();
+	NodeQueue localQueue{nodeVec}; // initialize localQueue later.
 
 	double zOpt = globalLB.load(memory_order_acquire);
 	size_t nProcessed  = 0;
 
-	// while (!isCompleted.load(memory_order_acquire)) {
-		// if (localQueue.empty()) {
-		// 	auto nodes = payload.getNodes();
-		// 	localQueue.pushNodes(nodes);
-		// }
+	while (!isCompleted.load(memory_order_seq_cst)) {
+		if (localQueue.empty()) {
+			cout << "thread: " << this_thread::get_id() << " local queue is empty. indicating master." << endl;
+			auto nodes = payload.getNodes();
+			if (nodes.empty()) {cout << "Master returned empty nodes" << endl;  break;} // master returned no nodes. check completed flag?
+			localQueue.pushNodes(nodes);
+		}
 		while (!localQueue.empty()){
 			Node_t node = localQueue.getNode();
 			// cout << "thread: " << this_thread::get_id <<"processing node: " << node.globalLayer << endl;
@@ -452,31 +464,122 @@ void DDSolver::processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts) {
 				}
 			}
 
-			// //if master wants some work?
-			// if (payload.masterRequireNodes()) {
-			// 	// share half of nodes with master.
-			//
-			// }
+			//if master wants some work?
+			if (payload.masterRequireNodes()) {
+				cout << "thread : " << this_thread::get_id() << " , master required nodes" << endl;
+				// share half of nodes with master.
+				auto n = localQueue.size();
+				auto nodes = localQueue.getNodes(n/2);
+				// push to master
+				payload.addNodesToMaster(nodes);
+				cout << "Thread: " << this_thread::get_id() << " sent nodes to master" << endl;
+			}
 
 		}
-	// }
+	}
 
 	// display stats.
 	cout << "thread: " << this_thread::get_id() << " processed " << nProcessed << " nodes." << endl;
 	explorer.displayCutStats();
 }
 
-void Payload::addNodes(vector<Node_t> nodes) {
+void DDSolver::startMaster() {
+	// master thread.
+	const unsigned nWorkers = NUM_WORKERS;
+
+	// constantly iterate
+	while (true) {
+
+		// look for idle workers and assign work.
+		unsigned idleCount = 0;
+		unsigned working = 0;
+
+		for (unsigned i = 0; i < nWorkers; i++) {
+			auto& worker = workers[i];
+			auto status = worker.getStatus();
+
+			if (status & STATUS::WORKER_NEEDS_NODES) {
+				idleCount++;
+			}
+			else if (status & STATUS::WORKER_SHARED_NODES) {
+				// take work from worker.
+				auto nodes = worker.getNodesFromWorker();
+				cout << "master received nodes from thread: " << i << endl;
+				if (!nodes.empty())nodeQueue.pushNodes(nodes);
+				working++;
+				worker.setStatus(STATUS::MASTER_RECEIVED_NODES);
+			}
+			else if (status & STATUS::WORKER_WORKING) {
+				// if
+				working++;
+			}
+			else if (status & STATUS::NOT_ENOUGH_NODES_TO_SHARE) {
+				// change the stauts
+
+			}
+		}
+
+		if (idleCount == nWorkers &&  nodeQueue.empty()) {
+			isCompleted.store(true, memory_order_seq_cst);
+			// wake up all the workers.
+			for (unsigned i = 0; i < nWorkers; i++) {
+				auto& worker = workers[i];
+				worker.setStatus(SOLVER_FINISHED);
+				worker.cv.notify_one();
+			}
+			cout <<"Master: Solver is finished. Notified all workers" << endl;
+			break;
+		}
+
+		if (idleCount > 0) {
+			if (!nodeQueue.empty()) {
+				// assign nodes to idle workers.
+				int chunk = (nodeQueue.size()+idleCount)/idleCount;
+				for (unsigned i = 0; i < nWorkers && !nodeQueue.empty() && idleCount; i++) {
+					auto nodes = nodeQueue.getNodes(chunk);
+					auto& worker = workers[i];
+					// scoped_lock mut{worker.lock};
+					if (worker.getStatus() & STATUS::WORKER_NEEDS_NODES) {
+						worker.addNodes(nodes);
+						idleCount--;
+					}
+					else {
+						worker.askWorker();
+					}
+				}
+
+				if (idleCount > 0) {
+					// ask nodes sequentially.
+					for (unsigned i = 0; i < nWorkers; i++) {
+						auto& worker = workers[i];
+						if (worker.getStatus() & STATUS::WORKER_WORKING) {
+							worker.askWorker();
+
+						}
+					}
+
+				}
+			}
+		}
+	}
+
+}
+
+uint8_t Payload::getStatus() const noexcept{
+	return status.load(memory_order_seq_cst);
+}
+
+void Payload::addNodes(vector<Node_t> nodes) { // called by master to insert nodes
 	{
 		scoped_lock l{lock};
-		nodes_ = move(nodes);
+		nodes_ = nodes;
 	}
-	status.store(WORKER_WORKING, memory_order_release);
+	status.store(MASTER_ASSIGNED_NODES, memory_order_seq_cst);
 	cv.notify_one();
 }
 
 vector<Node_t> Payload::getNodes() {
-	// return nodes from the master nodes
+	//
 	 {
 			std::scoped_lock l{lock};
 			if (!nodes_.empty()) {
@@ -488,18 +591,109 @@ vector<Node_t> Payload::getNodes() {
 			}
 	 }
 	// indicate master and wait.
-	status.store(WORKER_NEEDS_NODES,memory_order_release);
+	status.store(WORKER_NEEDS_NODES,memory_order_seq_cst);
 	while (true) {
+		auto st = status.load(memory_order_seq_cst);
 		std::unique_lock ul{lock};
-		cv.wait(ul, [&]{return !nodes_.empty();});
+		cv.wait(ul, [&]{return !nodes_.empty() || (st == SOLVER_FINISHED);}); // add isCompleted flag check to break out.
+		if (nodes_.empty()) return{}; // master doesn't have any work to share. quit.
 		vector<Node_t> work = std::move(nodes_);
-		status.store(WORKER_WORKING, memory_order_release);
+		status.store(WORKER_WORKING, memory_order_seq_cst);
 		// nodes_.clear();
 		return work;
 	}
 }
 
 bool Payload::masterRequireNodes() const noexcept {
+	// status.store(MASTER_NEEDS_NODES, memory_order_release);
 	return status.load(memory_order_relaxed) & MASTER_NEEDS_NODES;
 }
 
+void Payload::askWorker() { // ask worker for more nodes.
+	status.store(MASTER_NEEDS_NODES, memory_order_seq_cst);
+}
+
+
+void Payload::addNodesToMaster(vector<Node_t> nodes) {
+	{
+		scoped_lock l{lock};
+		nodes_ = move(nodes);
+	}
+	status.store(WORKER_SHARED_NODES, memory_order_seq_cst);
+}
+
+vector<Node_t> Payload::getNodesFromWorker() {
+	// return nodes from worker.
+	vector<Node_t> nodes;
+
+	{
+		scoped_lock l{lock};
+		nodes = move(nodes_);
+	}
+	// set update flag
+	status.store(MASTER_RECEIVED_NODES, memory_order_seq_cst);
+	return nodes;
+}
+
+void Payload::setStatus(uint8_t status_) {
+	status.store(status_, memory_order_seq_cst);
+}
+
+void DDSolver::startMaster2() {
+
+	NodeQueue globalQueue;
+
+	while (true) {
+		//
+		unsigned idle = 0, processing = 0;
+
+		// iterate through every node and
+		for (unsigned i = 0; i < NUM_WORKERS; i++) {
+			auto& worker = workers[i];
+
+			// get status
+			auto st = worker.getStatus();
+			if (st == WORKER_WORKING) {
+				processing++;
+			}
+			else if (st  == WORKER_NEEDS_NODES) idle++;
+		}
+
+		if (idle == NUM_WORKERS && globalQueue.empty()) {
+			// solver is finished.
+			isCompleted.store(true, memory_order_seq_cst);
+			cout << "Master: Solver is finished. " << endl;
+			for (int i = 0; i < NUM_WORKERS; i++) {
+				workers[i].setStatus(SOLVER_FINISHED);
+				workers[i].cv.notify_one();
+			}
+
+			cout << "Master: Notified all workers" << endl;
+			break; // exit from loop.
+		}
+
+		if (idle > 0){
+			// ask for work.
+			for (unsigned i = 0; i < NUM_WORKERS; i++) {
+				auto& worker = workers[i];
+				if (worker.getStatus() == STATUS::WORKER_WORKING) {
+					worker.askWorker(); // notify the working workers.
+				}
+				else if (worker.getStatus() == STATUS::WORKER_SHARED_NODES) {
+					// share nodes
+					if (!globalQueue.empty()) {
+						// node queue is not empty.
+						auto s = globalQueue.size();
+						auto nodes = globalQueue.getNodes(s/2);
+						worker.addNodes(nodes);
+					}
+				}
+			}
+		}
+
+
+
+
+		//
+	}
+}

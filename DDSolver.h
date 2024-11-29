@@ -15,20 +15,25 @@
 #include <queue>
 #include <stack>
 
-class Payload {
-    enum STATUS {
+const unsigned int NUM_WORKERS = 2;
+
+enum STATUS {
         WORKER_NEEDS_NODES = 0x1,
         MASTER_NEEDS_NODES = 0x2,
         WORKER_WORKING = 0x4,
         MASTER_ASSIGNED_NODES = 0x8,
-        WORKER_SHARED_NODES = 0x100,
+        WORKER_SHARED_NODES = 0x40,
         NOT_ENOUGH_NODES_TO_SHARE = 0x10,
+        SOLVER_FINISHED = 0x20,
+        MASTER_RECEIVED_NODES = 0x40
     };
 
-    std::condition_variable cv;
-    std::mutex lock;
+class Payload {
+
+    // std::condition_variable cv;
+    // std::mutex lock;
     vector<Node_t> nodes_;
-    std::atomic<uint8_t> status{};
+    std::atomic<uint8_t> status{}; // worker's current status.
     /*
      *  0   : worker working in progress.
      *  1   : worker needs nodes.
@@ -41,10 +46,18 @@ class Payload {
 
 public:
     Payload() = default;
+    std::mutex lock; // around nodes vector.
+    std::condition_variable cv; // to wake up the worker waiting for nodes.
+    uint8_t payloadStatus = 0;
 
-    vector<Node_t> getNodes();
-    void addNodes(vector<Node_t> nodes);
-    bool masterRequireNodes() const noexcept;
+    vector<Node_t> getNodes(); // called by worker.
+    void addNodes(vector<Node_t> nodes); // called by master.
+    bool masterRequireNodes() const noexcept; // called by master.
+    void askWorker(); // called by master.
+    uint8_t getStatus() const noexcept;
+    vector<Node_t> getNodesFromWorker();
+    void addNodesToMaster(vector<Node_t> nodes);
+    void setStatus(uint8_t status_);
 
 
 };
@@ -176,12 +189,15 @@ class DDSolver {
     #endif
 
     void process(NodeExplorer explorer);
-	void processWork(NodeQueue q, pair<CutContainer, CutContainer> cuts);
+	void processWork(unsigned int id, pair<CutContainer, CutContainer> cuts);
+    void processWork2(unsigned int id, pair<CutContainer, CutContainer> cuts);
+    void startMaster2();
+    void startMaster();
 
 	std::mutex queueLock;
 	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
     std::atomic_bool isCompleted{false};
-    vector<Payload> workers{2};
+    vector<Payload> workers{NUM_WORKERS};
 
 
 public:
