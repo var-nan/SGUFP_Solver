@@ -32,8 +32,7 @@ class Payload {
 
     // std::condition_variable cv;
     // std::mutex lock;
-    vector<Node_t> nodes_;
-    std::atomic<uint8_t> status{}; // worker's current status.
+
     /*
      *  0   : worker working in progress.
      *  1   : worker needs nodes.
@@ -46,14 +45,17 @@ class Payload {
 
 public:
     Payload() = default;
+    vector<Node_t> nodes_;
+    // std::atomic<uint8_t> status{}; // worker's current status.
+    volatile uint8_t status = 0;
     std::mutex lock; // around nodes vector.
     std::condition_variable cv; // to wake up the worker waiting for nodes.
-    uint8_t payloadStatus = 0;
+    // uint8_t payloadStatus = 0;
 
-    vector<Node_t> getNodes(); // called by worker.
-    void addNodes(vector<Node_t> nodes); // called by master.
+    vector<Node_t> getNodes(bool &done); // called by worker.
+    void addNodesToWorker(vector<Node_t> nodes); // called by master.
     bool masterRequireNodes() const noexcept; // called by master.
-    void askWorker(); // called by master.
+    void askWorkerForNodes(); // called by master.
     uint8_t getStatus() const noexcept;
     vector<Node_t> getNodesFromWorker();
     void addNodesToMaster(vector<Node_t> nodes);
@@ -193,6 +195,8 @@ class DDSolver {
     void processWork2(unsigned int id, pair<CutContainer, CutContainer> cuts);
     void startMaster2();
     void startMaster();
+    void startMaster3();
+    void processWork3(unsigned int id, pair<CutContainer, CutContainer> cuts);
 
 	std::mutex queueLock;
 	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
