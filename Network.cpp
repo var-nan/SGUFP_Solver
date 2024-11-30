@@ -18,10 +18,10 @@ Network::Network(const std::string& p_fileName){
 		uint nNodes,m; // nNodes = number of nodes, m = number of arcs // LATER change the way n,m,scenarios reads.
 		uint scenarios; // number of scenarios
 
-		//file >> nNodes >> m >> scenarios;
-		nNodes = 43;
-		m = 90; //
-		scenarios = 50;
+		file >> nNodes >> m >> scenarios;
+		// nNodes = 43;
+		// m = 90; //
+		// scenarios = 50;
 		std::vector<NetworkNode> netNodes(nNodes);
 		std::vector<NetworkArc> netArcs(m);
 

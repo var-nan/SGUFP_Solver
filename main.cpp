@@ -247,9 +247,13 @@ int old_main() {
 
 #include "DDSolver.h"
 
-void main() {
+void main(int argc, char** argv) {
 
 	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_50_1.txt";
+	if (argc == 2) {
+		fileName = argv[1];
+		cout << "Reading file: " << fileName << endl;
+	}
 	Network network{fileName};
 
 
@@ -291,12 +295,12 @@ void main() {
 	DDSolver solver{networkPtr};
 	solver.initialize();
 	int n_initial_cuts = 25;
-	auto cuts = solver.initializeCuts2(n_initial_cuts);
-	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
-		" , Feasibility: " << cuts.first.cuts.size() << endl;
+	// auto cuts = solver.initializeCuts2(n_initial_cuts);
+	// cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
+	// 	" , Feasibility: " << cuts.first.cuts.size() << endl;
 	cout << "**********************************************************************************************************\n\n\n" << endl;
 
-	solver.startSolve(cuts);
+	solver.startSolve({});
 	auto t2 = high_resolution_clock::now();
 	// cout << "Node queue strategy: LIFO" << endl;
 	auto ms_int = duration_cast<seconds>(t2-t1);
