@@ -15,17 +15,17 @@
 #include <queue>
 #include <stack>
 
-const unsigned int NUM_WORKERS = 2;
+const unsigned int NUM_WORKERS = 3;
 
 enum STATUS {
         WORKER_NEEDS_NODES = 0x1,
         MASTER_NEEDS_NODES = 0x2,
         WORKER_WORKING = 0x4,
         MASTER_ASSIGNED_NODES = 0x8,
-        WORKER_SHARED_NODES = 0x40,
-        NOT_ENOUGH_NODES_TO_SHARE = 0x10,
-        SOLVER_FINISHED = 0x20,
-        MASTER_RECEIVED_NODES = 0x40
+        WORKER_SHARED_NODES = 0x10,
+        NOT_ENOUGH_NODES_TO_SHARE = 0x20,
+        SOLVER_FINISHED = 0x40,
+        MASTER_RECEIVED_NODES = 0x80
     };
 
 class Payload {
