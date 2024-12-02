@@ -364,6 +364,9 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
     double lowerBound = node.lb;
     double upperBound = node.ub;
 
+
+    // do not store cuts in the containers.
+
     DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
     DD restrictedDD {networkPtr, RESTRICTED};
     auto cutset = restrictedDD.build(root1);
@@ -375,51 +378,52 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
         relaxedDD.build(root2);
 
         // apply cuts on the relaxed DD. if any cut make DD infeasible, process new node.
-        auto start = feasibilityCuts.cuts.rbegin();
-        auto end = feasibilityCuts.cuts.rend();
-
-        for (; start != end; ++start) {
-            if (!relaxedDD.applyFeasibilityCutHeuristic(*start)) return {0,0,{}, false};
-        }
-
-        auto start2 = optimalityCuts.cuts.rbegin();
-        auto end2 = optimalityCuts.cuts.rend();
-
-        for (; start2 != end2; ++start2) {
-            upperBound = relaxedDD.applyOptimalityCutHeuristic(*start2);
-            // this node cannot do better.
-            if (upperBound <= optimalLB) { return {0,0,{}, false};}
-        }
+        // auto start = feasibilityCuts.cuts.rbegin();
+        // auto end = feasibilityCuts.cuts.rend();
+        //
+        // for (; start != end; ++start) {
+        //     if (!relaxedDD.applyFeasibilityCutHeuristic(*start)) return {0,0,{}, false};
+        // }
+        //
+        // auto start2 = optimalityCuts.cuts.rbegin();
+        // auto end2 = optimalityCuts.cuts.rend();
+        //
+        // for (; start2 != end2; ++start2) {
+        //     upperBound = relaxedDD.applyOptimalityCutHeuristic(*start2);
+        //     // this node cannot do better.
+        //     if (upperBound <= optimalLB) { return {0,0,{}, false};}
+        // }
     }
 
     // apply cuts to restricted tree.
-    auto start = feasibilityCuts.cuts.rbegin();
-    auto end = feasibilityCuts.cuts.rend();
-
-    for (; start != end; ++start) {
-        if (!restrictedDD.applyFeasibilityCutRestrictedLatest(*start)) {
-            if (cutset) {
-                for (auto& c_node: cutset.value()) {
-                    c_node.ub = upperBound;
-                    // c_node.ub = node.ub;
-                    c_node.lb = node.lb;
-                }
-                return {node.lb, upperBound, cutset.value(), true};
-            }
-            return{node.lb, upperBound, {}, true};
-        }
-    }
-
-    auto start2 = optimalityCuts.cuts.rbegin();
-    auto end2 = optimalityCuts.cuts.rend();
-
-    for (; start2 != end2; ++start2) {
-        lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(*start2);
-    }
+    // auto start = feasibilityCuts.cuts.rbegin();
+    // auto end = feasibilityCuts.cuts.rend();
+    //
+    // for (; start != end; ++start) {
+    //     if (!restrictedDD.applyFeasibilityCutRestrictedLatest(*start)) {
+    //         if (cutset) {
+    //             for (auto& c_node: cutset.value()) {
+    //                 c_node.ub = upperBound;
+    //                 // c_node.ub = node.ub;
+    //                 c_node.lb = node.lb;
+    //             }
+    //             return {node.lb, upperBound, cutset.value(), true};
+    //         }
+    //         return{node.lb, upperBound, {}, true};
+    //     }
+    // }
+    //
+    // auto start2 = optimalityCuts.cuts.rbegin();
+    // auto end2 = optimalityCuts.cuts.rend();
+    //
+    // for (; start2 != end2; ++start2) {
+    //     lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(*start2);
+    // }
 
     /// actual refinement ///
 
     vi previousSolution;
+    double prevState;
 
     while (true) {
         vi solution = restrictedDD.solution();
@@ -431,7 +435,7 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
         auto cut = solver.solveSubProblemInstance(y_bar, 0);
 
         if (cut.cutType == FEASIBILITY) {
-            feasibilityCuts.insertCut(cut);
+            // feasibilityCuts.insertCut(cut);
             if (cutset){if (!relaxedDD.applyFeasibilityCutHeuristic(cut)) return {0,0,{}, false};}
             if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
                 // copy lower bound from parent, upper bound achieved so far.
@@ -447,8 +451,8 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
 
         }
         else {
-            optimalityCuts.insertCut(cut);
-            if (cutset) upperBound = relaxedDD.applyOptimalityCutHeuristic(cut);
+            // optimalityCuts.insertCut(cut);
+            if (cutset) {upperBound = relaxedDD.applyOptimalityCutHeuristic(cut); prevState = upperBound;}
             if (upperBound <= optimalLB) {
                 return {0,0,{}, false};
             }
