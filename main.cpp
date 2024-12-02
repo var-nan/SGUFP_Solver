@@ -292,6 +292,7 @@ int main() {
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver{networkPtr};
 	solver.initialize();
+
 //	int n_initial_cuts = 25;
 //	auto cuts = solver.initializeCuts2(n_initial_cuts);
 //	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
@@ -300,6 +301,7 @@ int main() {
 
 //	solver.startSolve(cuts);
 	solver.startPThreadSolver();
+
 	auto t2 = high_resolution_clock::now();
 	// cout << "Node queue strategy: LIFO" << endl;
 	auto ms_int = duration_cast<seconds>(t2-t1);
@@ -309,3 +311,4 @@ int main() {
 	cout << "Solver finished" << endl;
 	return 0;
 }
+

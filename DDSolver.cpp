@@ -5,7 +5,8 @@
 #include "DDSolver.h"
 #include <random>
 #include <chrono>
-
+#include <omp.h>
+#define OMP_NUM_THREADS 4
 void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
     // push bunch of nodes.
     // q.insert(q.end(), nodes.begin(), nodes.end());
@@ -142,11 +143,19 @@ void DDSolver::start() {
 }
 
 double DDSolver::getOptimalLB() const{
-    return optimalLB;
+    double lb = 0;
+    #pragma omp atomic read
+	lb = optimalLB;
+
+    return lb;
 }
 
 void DDSolver::setLB(double lb) {
-    optimalLB = lb;
+    #pragma omp critical
+	{
+		optimalLB = (lb > optimalLB)? lb : optimalLB;
+		#pragma omp flush(optimalLB)
+    }
 }
 
 DDNode node2DDdfsNode(Node_t node) {
