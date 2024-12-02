@@ -49,6 +49,8 @@ public:
         env.set(GRB_IntParam_Threads,1);
     }
 
+	pair<CutContainer, CutContainer> getCuts() noexcept { return {feasibilityCuts, optimalityCuts};}
+
 
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);

@@ -19,9 +19,9 @@ Network::Network(const std::string& p_fileName){
 		uint scenarios; // number of scenarios
 
 		file >> nNodes >> m >> scenarios;
-		//nNodes = 43;
-		//m = 90; //
-		//scenarios = 50;
+//		nNodes = 43;
+//		m = 90; //
+//		scenarios = 50;
 		std::vector<NetworkNode> netNodes(nNodes);
 		std::vector<NetworkArc> netArcs(m);
 
@@ -154,7 +154,7 @@ Network::Network(const std::string& p_fileName){
 		for (const auto& id: Vbar){
 			// another way of doing state update map.
 			auto& node = networkNodes[id];
-			unordered_set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
+			set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
 			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1) && (node.outgoingArcs.size() < node.incomingArcs.size())) states.insert(-1); // add -1 to states.
 			// if (id == 37)states.erase(-1);
 			stateUpdateMap.insert({i, states});

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.27)
 project(SGUFP_Solver)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
@@ -33,6 +33,11 @@ if (UNIX)
     message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
     message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
+    # set build specific compiler flags
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -funroll-loops -fno-rtti -fno-exceptions")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame-pointer -fno-rtti")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
+
     # gurobi libraries
     set(GUROBI_HOME "/opt/gurobi1102/linux64/")
     set(GUROBI_LIB "${GUROBI_HOME}lib/")
@@ -44,9 +49,11 @@ if (UNIX)
     add_library(gurobi110 SHARED IMPORTED)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
-    target_compile_definitions(SGUFP_Solver PRIVATE SOLVER_STATS)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -fopenmp) # add -O3 flag in final phase. -Wunused
-    target_link_options(SGUFP_Solver PRIVATE -pg -fopenmp)
+
+    add_compile_definitions(SOLVER_STATS)
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g -pthread) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -g -pthread)
+
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
@@ -59,6 +66,7 @@ if (UNIX)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi_c++)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
+
 
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame-pointer")
@@ -84,7 +92,6 @@ if (UNIX)
         gtest_discover_tests(testmain)
         gtest_discover_tests(tests2)
     endif()
-
 
 elseif(WIN32)
     # windows system
