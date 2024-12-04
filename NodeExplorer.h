@@ -30,13 +30,16 @@ class NodeExplorer {
 
     //shared_ptr<Network> networkPtr;
 
-    CutContainer feasibilityCuts;
-    CutContainer optimalityCuts;
+    //CutContainer feasibilityCuts;
+    //CutContainer optimalityCuts;
     GRBEnv env = GRBEnv();
 
     const shared_ptr<Network> networkPtr;
 
 public:
+
+    CutContainer feasibilityCuts;
+    CutContainer optimalityCuts;
 
     explicit NodeExplorer(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}, feasibilityCuts{FEASIBILITY}, optimalityCuts{OPTIMALITY} {
         // env = GRBEnv();
@@ -55,6 +58,7 @@ public:
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);
     OutObject process3(Node_t node, double optimalLB);
+    OutObject process4(Node_t node, double optimalLB, const pair<vector<CutContainer *>, vector<CutContainer *>> globalCuts);
 
     void clearCuts();
 

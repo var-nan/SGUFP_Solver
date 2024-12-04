@@ -14,21 +14,26 @@
 #include "NodeExplorer.h"
 #include <queue>
 #include <stack>
+#include "optimized.h"
+#include <bit>
+
+#ifndef POLL_FREQUENCY
+#define POLL_FREQUENCY 512
+#endif
+
+#ifndef CUTS_LIMIT
+#define CUTS_LIMIT 1024
+#endif
 
 const unsigned int NUM_WORKERS = 3;
+//const uint8_t SHIFT = 5;
+// const uint16_t POLL_FREQUENC;
 
-enum STATUS {
-        WORKER_NEEDS_NODES = 0x1,
-        MASTER_NEEDS_NODES = 0x2,
-        WORKER_WORKING = 0x4,
-        MASTER_ASSIGNED_NODES = 0x8,
-        WORKER_SHARED_NODES = 0x10,
-        NOT_ENOUGH_NODES_TO_SHARE = 0x20,
-        SOLVER_FINISHED = 0x40,
-        MASTER_RECEIVED_NODES = 0x80
-    };
+
 
 class Payload {
+
+
 
     // std::condition_variable cv;
     // std::mutex lock;
@@ -50,7 +55,9 @@ public:
     volatile uint8_t status = 0;
     std::mutex lock; // around nodes vector.
     std::condition_variable cv; // to wake up the worker waiting for nodes.
-    // uint8_t payloadStatus = 0;
+    std::atomic<uint> payloadStatus = 0;
+    CutContainer feasibilityCuts_{FEASIBILITY};
+    CutContainer optimalityCuts_{OPTIMALITY};
 
     vector<Node_t> getNodes(bool &done); // called by worker.
     void addNodesToWorker(vector<Node_t> nodes); // called by master.
@@ -62,20 +69,21 @@ public:
     void setStatus(uint8_t status_);
 
 
+     enum STATUS {
+        WORKER_NEEDS_NODES = 0x1,
+        MASTER_NEEDS_NODES = 0x2,
+        WORKER_WORKING = 0x4,
+        MASTER_ASSIGNED_NODES = 0x8,
+        WORKER_SHARED_NODES = 0x10,
+        NOT_ENOUGH_NODES_TO_SHARE = 0x20,
+        SOLVER_FINISHED = 0x40,
+        MASTER_RECEIVED_NODES = 0x80
+    };
+
+
 };
 
 class DDSolver {
-
-    friend class Worker;
-    friend class Master;
-
-    enum STATUS_FLAGS {
-        ASSIGNED,
-        REQUESTED = 8,
-        REQUEST_MASTER = 1,
-        REQUEST_WORKER = 2,
-        PROCESSING = 0
-    };
 
     class WorkerElement {
         std::condition_variable cv;
@@ -169,6 +177,33 @@ class DDSolver {
 
     };
 
+    class Worker {
+        // some performance coutners
+        uint id;
+        vector<CutContainer *> oCuts;
+        vector<CutContainer *> fCuts;
+
+        constexpr auto is_poll_time = [](const size_t processed) {
+            auto lsbs = processed >> std::bit_width(static_cast<uint8_t>(POLL_FREQUENCY));
+            auto res = lsbs ^ POLL_FREQUENCY;
+            return !res;
+        };
+
+    public:
+        explicit Worker(uint id_):id{id_}{};
+        void operator()(DDSolver& solver);
+    };
+
+    class Master {
+
+        NodeQueue nodeQueue;
+        vector<CutContainer *> oCuts;
+        vector<CutContainer *> fCuts;
+
+    public:
+        Master() = default;
+        void operator()(DDSolver& solver);
+    };
     NodeQueue nodeQueue; // global queue.
     double optimalLB;
 
@@ -202,11 +237,12 @@ class DDSolver {
 	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
     std::atomic_bool isCompleted{false};
     vector<Payload> workers{NUM_WORKERS};
+    Inavap::CutResource cutResources; //
+
 
 
 public:
-
-
+    explicit DDSolver(const shared_ptr<Network>& networkPtr_, const uint nWorkers):networkPtr{networkPtr_}, optimalLB{std::numeric_limits<double>::lowest()}{}
     explicit DDSolver(const shared_ptr<Network>& networkPtr_):networkPtr{networkPtr_}, optimalLB{std::numeric_limits<double>::lowest()} { }
     // DDSolver() : optimalLB{std::numeric_limits<double>::lowest()}{}
 
@@ -224,6 +260,8 @@ public:
 	  
     void startPThreadSolver();
 };
+
+
 
 
 

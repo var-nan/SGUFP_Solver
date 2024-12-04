@@ -152,11 +152,9 @@ public:
 public:
 
 	 // begin(){ return cuts.begin();};
-	 void doSomething() {
-		auto it = cuts.begin();
-	}
 	explicit CutContainer(CutType type_): cutType(type_){}
 
+	bool empty() const noexcept {return cuts.empty();}
 	bool isCutExists(const Cut& cut) {
 	 	for (const auto& c : cuts) {
 	 		if (c == cut) return true;
