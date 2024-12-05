@@ -24,15 +24,19 @@ namespace Inavap {
         std::atomic<uint> count = 0; // add padding to different cache line. // sum of opt and feas containers.
         shared_mutex m;
         // add padding to put in different cacheline.
-        vector<CutContainer *> fCutContainers;
-        vector<CutContainer *> oCutContainers;
+        vector<Inavap::CutContainer *> fCutContainers;
+        vector<Inavap::CutContainer *> oCutContainers;
 
     public:
         CutResource() = default;
 
+        /** Returns the sum of sizes of feasibility cut containers and optimality cut containers. The memory order
+         * of the load is set to relaxed.
+         * <b>The caller should not derive any ordering with this function call.</b>
+         */
         [[nodiscard]] uint getCount() const noexcept {return count.load(memory_order::relaxed);}
-        void add(pair<vector<CutContainer *>, vector<CutContainer *>> cuts);
-        [[nodiscard]] pair<vector<CutContainer *>, vector<CutContainer *>> get(uint nF, uint nO);
+        void add(pair<vector<Inavap::CutContainer *>, vector<Inavap::CutContainer *>> cuts);
+        [[nodiscard]] pair<vector<Inavap::CutContainer *>, vector<Inavap::CutContainer *>> get(uint nF, uint nO);
 
         CutResource(const CutResource &other) = delete;
         CutResource(CutResource &&other) = delete;

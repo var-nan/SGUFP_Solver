@@ -21,14 +21,15 @@
 #define POLL_FREQUENCY 512
 #endif
 
-#ifndef CUTS_LIMIT
-#define CUTS_LIMIT 1024
+#ifndef LOCAL_CUTS_LIMIT
+#define LOCAL_CUTS_LIMIT 1024
 #endif
 
 const unsigned int NUM_WORKERS = 3;
 //const uint8_t SHIFT = 5;
 // const uint16_t POLL_FREQUENC;
 
+#define CUT_CONTAINER_CAPACITY 128
 
 
 class Payload {
@@ -56,8 +57,8 @@ public:
     std::mutex lock; // around nodes vector.
     std::condition_variable cv; // to wake up the worker waiting for nodes.
     std::atomic<uint> payloadStatus = 0;
-    CutContainer feasibilityCuts_{FEASIBILITY};
-    CutContainer optimalityCuts_{OPTIMALITY};
+    CutContainer* feasibilityCuts_;
+    CutContainer* optimalityCuts_;
 
     vector<Node_t> getNodes(bool &done); // called by worker.
     void addNodesToWorker(vector<Node_t> nodes); // called by master.
@@ -180,14 +181,16 @@ class DDSolver {
     class Worker {
         // some performance coutners
         uint id;
-        vector<CutContainer *> oCuts;
-        vector<CutContainer *> fCuts;
+        vector<CutContainer *> oCutsGlobal;
+        vector<CutContainer *> fCutsGlobal;
 
         constexpr auto is_poll_time = [](const size_t processed) {
             auto lsbs = processed >> std::bit_width(static_cast<uint8_t>(POLL_FREQUENCY));
             auto res = lsbs ^ POLL_FREQUENCY;
             return !res;
         };
+
+        void shareCutsWithMaster(NodeExplorer& explorer, Payload& payload);
 
     public:
         explicit Worker(uint id_):id{id_}{};
@@ -197,8 +200,11 @@ class DDSolver {
     class Master {
 
         NodeQueue nodeQueue;
-        vector<CutContainer *> oCuts;
-        vector<CutContainer *> fCuts;
+        vector<CutContainer *> oCutsGlobal;
+        vector<CutContainer *> fCutsGlobal;
+
+
+        void addCutsToGlobal(DDSolver &solver);
 
     public:
         Master() = default;

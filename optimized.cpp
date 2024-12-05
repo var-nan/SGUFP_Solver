@@ -11,22 +11,22 @@ void Inavap::CutResource::add(pair<vector<CutContainer *>, vector<CutContainer *
       if (!cuts.first.empty()) fCutContainers.insert(fCutContainers.end(), cuts.first.begin(), cuts.first.end());
       if (!cuts.second.empty()) oCutContainers.insert(oCutContainers.end(), cuts.second.begin(), cuts.second.end());
    }
+   count.store(fCutContainers.size() + oCutContainers.size(), memory_order::release);
 }
 
-
-pair<vector<CutContainer *>, vector<CutContainer *>> Inavap::CutResource::get(uint nF, uint nO){
-   vector<CutContainer *> feas, opti;
+/**
+ * Returns the pair of feasibility cut containers and optimality cut containers from the global space.
+ * The calling worker should maintain the invariant (nF+nO) <= count.
+ * @param nF - number of feasibility cut containers the calling worker aware of.
+ * @param nO - number of optimality cut containers the calling worker aware of.
+ */
+pair<vector<Inavap::CutContainer *>, vector<Inavap::CutContainer *>> Inavap::CutResource::get(uint nF, uint nO){
+   vector<Inavap::CutContainer *> feas, opti;
    // reserve later.
    {
       ReaderLock l{m};
-      if ( nF < fCutContainers.size()) {
-         // copy
-         for(; nF < fCutContainers.size(); nF++) feas.push_back(fCutContainers[nF]);
-      }
-      if (nO < oCutContainers.size()) {
-         // copy pointers
-         for (; nO < oCutContainers.size(); nO++) opti.push_back(oCutContainers[nO]);
-      }
+      while (nF < fCutContainers.size()) feas.push_back(fCutContainers[nF++]);
+      while (nO < oCutContainers.size()) opti.push_back(oCutContainers[nO++]);
    }
    return {feas, opti};
 }

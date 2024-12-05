@@ -10,6 +10,7 @@
 #include <map>
 #include <tuple>
 #include <memory>
+#include <utility>
 
 using namespace std;
 
@@ -178,5 +179,37 @@ public:
 		cuts.clear();
 	}
 };
+
+
+namespace Inavap {
+
+	class Cut {
+		size_t hash;
+		double RHS;
+		map<tuple<int,int,int>, double> coeff;
+	public:
+		Cut(double RHS_, map<tuple<int,int,int>, double> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
+			// TODO compute hash.
+		}
+
+		bool operator==(const Cut& cut2) const {return cut2.hash == hash && cut2.RHS == RHS;}
+		[[nodiscard]]size_t getHash() const noexcept {return hash;}
+		[[nodiscard]] double get(uint a, uint b, uint c) const {return coeff.at(make_tuple(a,b,c));}
+
+	};
+
+	class CutContainer {
+		vector<Cut> cuts;
+	public:
+		CutContainer(size_t N = 128) {
+			cuts.reserve(N);
+		}
+		// TODO: define 'new' operator (efficient, without copying).
+		void insertCut(Cut cut) {cuts.push_back(cut);}
+		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
+		[[nodiscard]] size_t size() const noexcept {return cuts.size();}
+		void clearContainer() noexcept { cuts.clear();}
+	};
+}
 
 //#endif //SGUFP_SOLVER_CUT_H
