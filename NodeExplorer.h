@@ -55,7 +55,8 @@ public:
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);
     OutObject process3(Node_t node, double optimalLB);
-
+    OutObject process4(Node_t node, double optimalLB);
+    OutObject process5(Node_t node, double optimalLB);
     void clearCuts();
 
     #ifdef SOLVER_STATS

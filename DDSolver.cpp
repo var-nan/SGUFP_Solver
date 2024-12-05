@@ -90,8 +90,9 @@ void DDSolver::process(NodeExplorer explorer) {
         }
 
         // start node processor
-        auto result = explorer.process3(node, getOptimalLB()); // use co-routines to update globalLB in between.
-
+    	// cout << "process 4 started"<< endl;
+        auto result = explorer.process5(node, getOptimalLB()); // use co-routines to update globalLB in between.
+    	// cout << "process 4 finished"<< endl;
         #ifdef SOLVER_STATS
         numNodesExplored++;
         numNodesUnnecessary += !result.success;
@@ -361,8 +362,9 @@ void DDSolver::startPThreadSolver() {
 		// single iteration of node explorer.
 		Node_t node {{},{}, numeric_limits<double>::lowest(), numeric_limits<double>::max(),0};
 		NodeExplorer explorer {networkPtr};
-		auto result = explorer.process3(node, numeric_limits<double>::lowest());
-
+		cout << "process 4 start"<< endl;
+		auto result = explorer.process4(node, numeric_limits<double>::lowest());
+		cout << "process 4 finished"<< endl;
 		if (result.lb > globalLB.load(memory_order_acquire))
 			globalLB.store(result.lb, memory_order_release);
 //		nodeQueue.pushNodes(result.nodes);

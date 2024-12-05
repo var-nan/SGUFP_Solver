@@ -5,6 +5,7 @@
 #include <chrono>
 #include "OriginalProblem.h"
 
+#define NODEEXPLORERPARAMETER 0
 #include "newCGO.h"
 
 using namespace std;
@@ -251,7 +252,7 @@ int main() {
 
 	cout << "C++ version: " << __cplusplus << endl;
 
-	string fileName ="C:/Users/erfank/CLionProjects/SGUFP_Solver/newversion/40_93_20_2.txt";
+	string fileName ="C:/Users/erfank/CLionProjects/SGUFP_Solver/newversion/40_87_20_3.txt";
 	Network network{fileName};
 
 
