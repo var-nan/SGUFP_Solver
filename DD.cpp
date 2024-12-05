@@ -320,8 +320,8 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 						 auto nextId = number.getNext();
 
 						 // if newStates already in allStates, update exising node in nodesVector.
-						 auto [it, isInserted] = allStates.insert({newStates, 0, j});
-						 if (isInserted) { // create new Node
+						 // auto [it, isInserted] = allStates.insert({newStates, 0, j});
+						 // if (isInserted) { // create new Node
 							 DDNode newNode{nextId};
 							 DDArc newArc{nextId, id, nextId, decision};
 							 newNode.nodeLayer = node.nodeLayer+1;
@@ -332,14 +332,14 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 							 arcs.insert(make_pair(nextId, newArc));
 							 nodesVector.push_back(newNode);
 							 j++;
-						 } else { // state already exists, update existing node in nodesVector.
-							 auto [tempState, state2, pos] = *(it);
-							 auto &prevNode = nodesVector[pos];
-							 DDArc newArc{nextId, id, prevNode.id, decision};
-							 prevNode.incomingArcs.push_back(nextId);
-							 node.outgoingArcs.push_back(nextId);
-							 arcs.insert(make_pair(nextId, newArc));
-						 }
+						 // } else { // state already exists, update existing node in nodesVector.
+							//  auto [tempState, state2, pos] = *(it);
+							//  auto &prevNode = nodesVector[pos];
+							//  DDArc newArc{nextId, id, prevNode.id, decision};
+							//  prevNode.incomingArcs.push_back(nextId);
+							//  node.outgoingArcs.push_back(nextId);
+							//  arcs.insert(make_pair(nextId, newArc));
+						 // }
 					 }
 				 }
 
