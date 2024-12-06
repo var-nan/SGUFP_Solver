@@ -35,6 +35,7 @@ class NodeExplorer {
     GRBEnv env = GRBEnv();
 
     const shared_ptr<Network> networkPtr;
+    bool saveCuts = true;
 
 public:
 
@@ -44,7 +45,14 @@ public:
         env.set(GRB_IntParam_Threads,1);
     }
 
-    NodeExplorer(const shared_ptr<Network>& networkPtr_, pair<CutContainer, CutContainer> cuts): networkPtr{networkPtr_}, feasibilityCuts{cuts.first}, optimalityCuts{cuts.second} {
+    NodeExplorer(const shared_ptr<Network>& networkPtr_, pair<CutContainer, CutContainer> cuts, bool sc = true): networkPtr{networkPtr_}, feasibilityCuts{cuts.first}, optimalityCuts{cuts.second} {
+        env.set(GRB_IntParam_OutputFlag,0);
+        env.set(GRB_IntParam_Threads,1);
+        saveCuts = sc;
+    }
+
+    NodeExplorer(const shared_ptr<Network>& networkPtr_, bool s): networkPtr{networkPtr_}, feasibilityCuts{FEASIBILITY}, optimalityCuts{OPTIMALITY} {
+        saveCuts = s;
         env.set(GRB_IntParam_OutputFlag,0);
         env.set(GRB_IntParam_Threads,1);
     }
@@ -55,6 +63,8 @@ public:
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);
     OutObject process3(Node_t node, double optimalLB);
+    OutObject process4(Node_t node, double optimalLB);
+    OutObject process5(Node_t node, double optimalLB);
 
     void clearCuts();
 

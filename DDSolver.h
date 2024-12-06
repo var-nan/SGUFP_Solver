@@ -15,7 +15,7 @@
 #include <queue>
 #include <stack>
 
-const unsigned int NUM_WORKERS = 3;
+static unsigned int NUM_WORKERS = 3;
 
 enum STATUS {
         WORKER_NEEDS_NODES = 0x1,
@@ -198,16 +198,23 @@ class DDSolver {
     void startMaster3();
     void processWork3(unsigned int id, pair<CutContainer, CutContainer> cuts);
 
+    OutObject callProcess(NodeExplorer& explorer, Node_t& node, double opt, int process = 4);
+
 	std::mutex queueLock;
 	std::atomic<double> globalLB{numeric_limits<double>::lowest()};
     std::atomic_bool isCompleted{false};
-    vector<Payload> workers{NUM_WORKERS};
+    vector<Payload> workers;
+    int process_number = 4;
+    bool saveCuts = true;
 
 
 public:
 
 
-    explicit DDSolver(const shared_ptr<Network>& networkPtr_):networkPtr{networkPtr_}, optimalLB{std::numeric_limits<double>::lowest()} { }
+    explicit DDSolver(const shared_ptr<Network>& networkPtr_, int process_ = 4)
+            :networkPtr{networkPtr_}, optimalLB{std::numeric_limits<double>::lowest()}, process_number(process_) { }
+    explicit DDSolver(const shared_ptr<Network>& networkPtr_, int process_ = 4, bool saveCuts_ = true)
+            :networkPtr{networkPtr_}, optimalLB{std::numeric_limits<double>::lowest()}, process_number(process_) , saveCuts{saveCuts_} {}
     // DDSolver() : optimalLB{std::numeric_limits<double>::lowest()}{}
 
     [[nodiscard]] Node_t getNode();
@@ -221,7 +228,7 @@ public:
     pair<CutContainer, CutContainer> initializeCuts();
     pair<CutContainer, CutContainer> initializeCuts2(size_t n = 50);
 
-	void startPThreadSolver();
+	void startPThreadSolver(size_t nthreads = 4);
 };
 
 

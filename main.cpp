@@ -247,11 +247,29 @@ int old_main() {
 
 #include "DDSolver.h"
 
-int main() {
+void testing(const string&, vector<int> threads ={4,8});
+void testOneInstance();
+
+int main(int argc, char* argv[]) {
+
+	testOneInstance();
+	return 0;
+
+	string fileName = "C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_2.txt";
+	if (argc == 2) {
+		fileName = argv[1];
+	}
+
+	{
+		// string fileName = "C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_87_20_3.txt";
+		testing(fileName);
+		return 0;
+	}
 
 	cout << "C++ version: " << __cplusplus << endl;
 
-	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_2.txt";
+	// fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_87_20_3.txt";
+	cout << "Solving file: " << fileName << endl;
 	Network network{fileName};
 
 
@@ -273,39 +291,158 @@ int main() {
 
 	SolveOriginalProblem(network);
 
-	cout << "Solved Original problem " <<endl;
-	cout << endl;
-	cout << endl;
-
-	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
-	cout << "Vbar order: "; for (auto id : networkPtr->Vbar) cout << id << " "; cout << endl;
-	cout << "Max Width : " << MAX_WIDTH << endl;
-	cout << "DEBUG enabled, solving for a subset of V Bar nodes. Single scenario." << endl;
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration_cast;
-	using std::chrono::duration;
-	using std::chrono::milliseconds;
-	using std::chrono::seconds;
-	auto t1 = high_resolution_clock::now();
-	const auto now = std::chrono::system_clock::now();
-	const auto t_c = std::chrono::system_clock::to_time_t(now);
-	cout << endl << "Starting solver at " << std::ctime(&t_c);
-	DDSolver solver{networkPtr};
-	solver.initialize();
-//	int n_initial_cuts = 25;
-//	auto cuts = solver.initializeCuts2(n_initial_cuts);
-//	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
-//		" , Feasibility: " << cuts.first.cuts.size() << endl;
-	cout << "**********************************************************************************************************\n\n\n" << endl;
-
-//	solver.startSolve(cuts);
-	solver.startPThreadSolver();
-	auto t2 = high_resolution_clock::now();
-	// cout << "Node queue strategy: LIFO" << endl;
-	auto ms_int = duration_cast<seconds>(t2-t1);
-	duration<double> ms_double = t2-t1;
-	std::cout <<"program took " << ms_int.count() << " seconds" << endl;
-
-	cout << "Solver finished" << endl;
+// 	cout << "Solved Original problem " <<endl;
+// 	cout << endl;
+// 	cout << endl;
+//
+// 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
+// 	cout << "Vbar order: "; for (auto id : networkPtr->Vbar) cout << id << " "; cout << endl;
+// 	cout << "Max Width : " << MAX_WIDTH << endl;
+// 	// cout << "DEBUG enabled, solving for a subset of V Bar nodes. Single scenario." << endl;
+// 	using std::chrono::high_resolution_clock;
+// 	using std::chrono::duration_cast;
+// 	using std::chrono::duration;
+// 	using std::chrono::milliseconds;
+// 	using std::chrono::seconds;
+// 	auto t1 = high_resolution_clock::now();
+// 	const auto now = std::chrono::system_clock::now();
+// 	const auto t_c = std::chrono::system_clock::to_time_t(now);
+// 	cout << endl << "Starting solver at " << std::ctime(&t_c);
+// 	DDSolver solver{networkPtr};
+// 	solver.initialize();
+// //	int n_initial_cuts = 25;
+// //	auto cuts = solver.initializeCuts2(n_initial_cuts);
+// //	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
+// //		" , Feasibility: " << cuts.first.cuts.size() << endl;
+// 	cout << "**********************************************************************************************************\n\n\n" << endl;
+//
+// 	// solver.startSolve({});
+// 	solver.startPThreadSolver();
+// 	auto t2 = high_resolution_clock::now();
+// 	// cout << "Node queue strategy: LIFO" << endl;
+// 	auto ms_int = duration_cast<seconds>(t2-t1);
+// 	duration<double> ms_double = t2-t1;
+// 	std::cout <<"program took " << ms_int.count() << " seconds" << endl;
+//
+// 	cout << "Solver finished" << endl;
 	return 0;
+}
+
+void testing(const string& fileName, vector<int> threads) {
+
+	cout << "Testing file: " << fileName << endl;
+	const auto networkPtr = make_shared<Network>(Network{fileName});
+
+	cout << "Solving original problem." << endl;
+	SolveOriginalProblem(*networkPtr);
+	cout << "\n\n\n" << endl;
+
+	for (auto sa: {true, false}) {
+		for (auto pr: {4,5})
+		{
+			cout << "*********************************************" << endl;
+			cout << "Solving problem with single threaded. Node explorer: " << pr <<" and saving cuts: " << sa << endl;
+			using std::chrono::high_resolution_clock;
+			using std::chrono::duration_cast;
+			using std::chrono::duration;
+			using std::chrono::milliseconds;
+			using std::chrono::seconds;
+			auto t1 = high_resolution_clock::now();
+			const auto now = std::chrono::system_clock::now();
+			const auto t_c = std::chrono::system_clock::to_time_t(now);
+			cout << endl << "Starting solver at " << std::ctime(&t_c);
+			DDSolver solver{networkPtr, pr, sa};
+			solver.initialize();
+			solver.startSolve({});
+			// solver.startPThreadSolver();
+			auto t2 = high_resolution_clock::now();
+			// cout << "Node queue strategy: LIFO" << endl;
+			auto ms_int = duration_cast<seconds>(t2-t1);
+			duration<double> ms_double = t2-t1;
+			std::cout <<"program took " << ms_int.count() << " seconds" << endl;
+			cout << "************************* Solver finished *************************************" << endl;
+		}
+	}
+
+	// return;
+
+	for (auto thr : threads)
+	{
+		for (auto sa : {true, false}) {
+			for (auto pr : {4,5}) {
+				cout << "*********************************************" << endl;
+				cout << "Solving problem with " << thr << " threads. Node Explorer: " << pr << " . saving cuts: " << sa << endl;
+
+				using std::chrono::high_resolution_clock;
+				using std::chrono::duration_cast;
+				using std::chrono::duration;
+				using std::chrono::milliseconds;
+				using std::chrono::seconds;
+				auto t1 = high_resolution_clock::now();
+				const auto now = std::chrono::system_clock::now();
+				const auto t_c = std::chrono::system_clock::to_time_t(now);
+				cout << endl << "Starting solver at " << std::ctime(&t_c);
+				// NUM_WORKERS = 4;
+				DDSolver solver{networkPtr, pr, sa};
+				solver.initialize();
+				// solver.startSolve({});
+				solver.startPThreadSolver(thr);
+				auto t2 = high_resolution_clock::now();
+				// cout << "Node queue strategy: LIFO" << endl;
+				auto ms_int = duration_cast<seconds>(t2-t1);
+				duration<double> ms_double = t2-t1;
+				std::cout <<"program took " << ms_int.count() << " seconds" << endl;
+				cout << "Solver finished" << endl;
+			}
+		}
+	}
+
+	cout << "Experiment finished for file: " << fileName << endl;
+}
+
+
+void testOneInstance() {
+
+	vector<string> files = {
+				"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_91_20_1.txt",
+				// "C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_2.txt",
+				"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_87_20_3.txt",
+				"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_4.txt",
+					"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_95_20_5.txt",
+					"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_96_20_6.txt",
+				"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_94_20_7.txt",
+					"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_9.txt",
+					"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_10.txt",
+	};
+
+	for (const auto& file: files) {
+
+		cout << "Solving file: " << file << endl;
+
+		const auto networkPtr = make_shared<Network>(Network{file});
+		cout << "Solving original Problem" << endl;
+		SolveOriginalProblem(*networkPtr);
+		cout << "**********************************************" << endl;
+
+		int pr = 5; bool sa = false;
+		using std::chrono::high_resolution_clock;
+		using std::chrono::duration_cast;
+		using std::chrono::duration;
+		using std::chrono::milliseconds;
+		using std::chrono::seconds;
+		auto t1 = high_resolution_clock::now();
+		const auto now = std::chrono::system_clock::now();
+		const auto t_c = std::chrono::system_clock::to_time_t(now);
+		cout << endl << "Starting solver at " << std::ctime(&t_c);
+		DDSolver solver{networkPtr, pr, sa};
+		solver.initialize();
+		solver.startSolve({});
+		// solver.startPThreadSolver();
+		auto t2 = high_resolution_clock::now();
+		// cout << "Node queue strategy: LIFO" << endl;
+		auto ms_int = duration_cast<seconds>(t2-t1);
+		duration<double> ms_double = t2-t1;
+		std::cout <<"program took " << ms_int.count() << " seconds" << endl;
+		cout << "************************* Solver finished *************************************" << endl;
+	}
 }

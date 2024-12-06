@@ -60,11 +60,11 @@ void DDSolver::initialize() {
 
 void DDSolver::startSolve(optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
     if (initialCuts) {
-        NodeExplorer explorer{networkPtr, initialCuts.value()};
+        NodeExplorer explorer{networkPtr, initialCuts.value(), saveCuts};
         process(explorer);
     }
     else {
-        NodeExplorer explorer{networkPtr};
+        NodeExplorer explorer{networkPtr, saveCuts};
         process(explorer);
     }
 }
@@ -98,8 +98,8 @@ void DDSolver::process(NodeExplorer explorer) {
         }
 
         // start node processor
-        auto result = explorer.process3(node, getOptimalLB()); // use co-routines to update globalLB in between.
-
+        // auto result = explorer.process5(node, getOptimalLB()); // use co-routines to update globalLB in between.
+		auto result = callProcess(explorer, node, getOptimalLB(), process_number);
         #ifdef SOLVER_STATS
         numNodesExplored++;
         numNodesUnnecessary += !result.success;
@@ -355,7 +355,14 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
 //	//
 //}
 
-void DDSolver::startPThreadSolver() {
+OutObject DDSolver::callProcess(NodeExplorer &explorer, Node_t& node, double opt, int process) {
+
+	if (process == 4) return explorer.process4(node, opt);
+	return explorer.process5(node, opt);
+}
+
+void DDSolver::startPThreadSolver(size_t nthreads) {
+	NUM_WORKERS = nthreads;
 	// fill up work queue, make thread lock queue before accessing.
 //	std::mutex queueLock;
 
@@ -364,14 +371,15 @@ void DDSolver::startPThreadSolver() {
 	NodeQueue tempQ1, tempQ2;
     vector<Node_t> t1, t2;
 	vector<vector<Node_t>> vecvec{NUM_WORKERS};
+	workers = vector<Payload>(NUM_WORKERS);
 
 	{
 
 		// single iteration of node explorer.
 		Node_t node {{},{}, numeric_limits<double>::lowest(), numeric_limits<double>::max(),0};
 		NodeExplorer explorer {networkPtr};
-		auto result = explorer.process3(node, numeric_limits<double>::lowest());
-
+		// auto result = explorer.process5(node, numeric_limits<double>::lowest());
+		auto result = callProcess(explorer, node, numeric_limits<double>::lowest(),process_number);
 		if (result.lb > globalLB.load(memory_order_acquire))
 			globalLB.store(result.lb, memory_order_release);
 //		nodeQueue.pushNodes(result.nodes);
@@ -399,7 +407,7 @@ void DDSolver::startPThreadSolver() {
 		// start thread
 	}
 
-    const unsigned nWorkers = 2;
+    // const unsigned nWorkers = 2;
 	vector<thread> workerThreads{NUM_WORKERS};
 
     // vector<WorkerElement> workers(2);
@@ -459,6 +467,7 @@ void DDSolver::processWork(unsigned int id, pair<CutContainer, CutContainer> cut
 		while (!localQueue.empty()){
 			Node_t node = localQueue.getNode();
 			auto result = explorer.process3(node, zOpt);
+			callProcess(explorer, node, zOpt, 4);
 			nProcessed++;
 			if (result.success) {
 				if (result.lb > zOpt){
@@ -746,7 +755,7 @@ void DDSolver::startMaster2() {
 
 void DDSolver::processWork3(unsigned int id, pair<CutContainer, CutContainer> cuts) {
 
-	NodeExplorer explorer{networkPtr, cuts};
+	NodeExplorer explorer{networkPtr, cuts, saveCuts};
 	auto& payload = workers[id];
 	bool done = false;
 	auto nodeVec = payload.getNodes(done);
@@ -768,7 +777,8 @@ void DDSolver::processWork3(unsigned int id, pair<CutContainer, CutContainer> cu
 
 		while (!localQueue.empty()) {
 			Node_t node = localQueue.getNode();
-			auto result = explorer.process3(node, zOpt);
+			// auto result = explorer.process3(node, zOpt);
+			auto result = callProcess(explorer, node, zOpt, process_number);
 			nProcessed++;
 			if (result.success) {
 				if (result.lb > zOpt) {

@@ -71,6 +71,52 @@ Network::Network(const std::string& p_fileName){
 		}
 
 		// populate a1,a2,a3,a4 for subproblem formulation.
+
+		// a4 = {};
+		// { // remove arcs that cannot be matched with outgoing arcs of Vbar node.
+		// 	cout << "Printing whole network" << endl;
+		// 	for (auto node: networkNodes) {
+		// 		cout << node.nodeId << " : incoming= " << node.incomingArcs.size()
+		// 		<< " , outgoing= " << node.outgoingArcs.size() << endl;
+		// 	} cout << "end of network" << endl;
+		//
+		{ // remove arcs that cannot be matched with outgoing arcs of Vbar node.
+			vui arcsToRemove;
+
+			for (auto inArcId : netNodes[nNodes-1].incomingArcs) {
+				const auto& incomingNode = netNodes[netArcs[inArcId].tailId];
+				if (!incomingNode.isVbar) continue;
+				// find max demand and compare with capacities of incoming arcs.
+				int maxDemandOut = netArcs[inArcId].upperCapacities[0];
+				for (auto qInArcId : incomingNode.incomingArcs) {
+					if (netArcs[qInArcId].upperCapacities[0] < maxDemandOut) arcsToRemove.push_back(qInArcId);
+				}
+			}
+
+			for (auto node : netNodes) {
+				// remove arcs corresponding to nodes that doesn't have path from source to sink.
+				if ((node.outgoingArcs.empty()) &&
+					!(node.nodeId == 0 || node.nodeId == nNodes-1)){
+					// what to do?
+					if (!node.incomingArcs.empty())
+						arcsToRemove.insert(arcsToRemove.end(), node.incomingArcs.begin(), node.incomingArcs.end());
+					if (!node.outgoingArcs.empty())
+						arcsToRemove.insert(arcsToRemove.end(), node.outgoingArcs.begin(), node.outgoingArcs.end());
+				}
+			}
+			cout << "Number of arcs to be removed: " << arcsToRemove.size() << endl;
+			// for each removing arc, update head and tail nodes.
+			for (auto id: arcsToRemove) {
+				const auto& inArc = netArcs[id];
+				auto& inNode = netNodes[ inArc.tailId];
+				auto& outNode = netNodes[inArc.headId];
+				auto pos = find(inNode.outgoingArcs.begin(), inNode.outgoingArcs.end(), id);
+				if (pos != inNode.outgoingArcs.end()) inNode.outgoingArcs.erase(pos);
+				auto pos2 = find(outNode.incomingArcs.begin(), outNode.incomingArcs.end(), id);
+				if (pos2 != outNode.incomingArcs.end()) outNode.incomingArcs.erase(pos2);
+			}
+		}
+
 		vui a1 = {}, a2 = {}, a3 = {}, a4 = {};
 
 		for (const auto& arc: netArcs){
@@ -85,49 +131,6 @@ Network::Network(const std::string& p_fileName){
 				else a3.push_back(arc.arcId);
 			}
 		}
-		// a4 = {};
-		// { // remove arcs that cannot be matched with outgoing arcs of Vbar node.
-		// 	cout << "Printing whole network" << endl;
-		// 	for (auto node: networkNodes) {
-		// 		cout << node.nodeId << " : incoming= " << node.incomingArcs.size()
-		// 		<< " , outgoing= " << node.outgoingArcs.size() << endl;
-		// 	} cout << "end of network" << endl;
-		//
-		// 	vui arcsToRemove;
-		//
-		// 	for (auto inArcId : netNodes[nNodes-1].incomingArcs) {
-		// 		const auto& incomingNode = netNodes[netArcs[inArcId].tailId];
-		// 		if (!incomingNode.isVbar) continue;
-		// 		// find max demand and compare with capacities of incoming arcs.
-		// 		int maxDemandOut = netArcs[inArcId].upperCapacities[0];
-		// 		for (auto qInArcId : incomingNode.incomingArcs) {
-		// 			if (netArcs[qInArcId].upperCapacities[0] < maxDemandOut) arcsToRemove.push_back(qInArcId);
-		// 		}
-		// 	}
-		//
-		// 	for (auto node : netNodes) {
-		// 		// remove arcs corresponding to nodes that doesn't have path from source to sink.
-		// 		if ((node.outgoingArcs.empty()) &&
-		// 			!(node.nodeId == 0 || node.nodeId == nNodes-1)){
-		// 			// what to do?
-		// 			if (!node.incomingArcs.empty())
-		// 				arcsToRemove.insert(arcsToRemove.end(), node.incomingArcs.begin(), node.incomingArcs.end());
-		// 			if (!node.outgoingArcs.empty())
-		// 				arcsToRemove.insert(arcsToRemove.end(), node.outgoingArcs.begin(), node.outgoingArcs.end());
-		// 		}
-		// 	}
-		// 	cout << "Number of arcs to be removed: " << arcsToRemove.size() << endl;
-		// 	// for each removing arc, update head and tail nodes.
-		// 	for (auto id: arcsToRemove) {
-		// 		const auto& inArc = netArcs[id];
-		// 		auto& inNode = netNodes[ inArc.tailId];
-		// 		auto& outNode = netNodes[inArc.headId];
-		// 		auto pos = find(inNode.outgoingArcs.begin(), inNode.outgoingArcs.end(), id);
-		// 		if (pos != inNode.outgoingArcs.end()) inNode.outgoingArcs.erase(pos);
-		// 		auto pos2 = find(outNode.incomingArcs.begin(), outNode.incomingArcs.end(), id);
-		// 		if (pos2 != outNode.incomingArcs.end()) outNode.incomingArcs.erase(pos2);
-		// 	}
-		// }
 
 		//reorder vBar nodes, and do not add -1 to it.
 
