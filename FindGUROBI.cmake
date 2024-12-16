@@ -9,7 +9,7 @@ find_library(GUROBI_LIBRARY
     PATH_SUFFIXES lib)
 
 if(CXX)
-    if(MSVC)
+#    if(MSVC)
         set(MSVC_YEAR "2017")
         
         if(MT)
@@ -26,13 +26,13 @@ if(CXX)
             NAMES gurobi_c++${M_FLAG}d${MSVC_YEAR}
             HINTS ${GUROBI_DIR} $ENV{GUROBI_HOME}
             PATH_SUFFIXES lib)
-    else()
-        find_library(GUROBI_CXX_LIBRARY
-            NAMES gurobi_c++
-            HINTS ${GUROBI_DIR} $ENV{GUROBI_HOME}
-            PATH_SUFFIXES lib)
-        set(GUROBI_CXX_DEBUG_LIBRARY ${GUROBI_CXX_LIBRARY})
-    endif()
+#    else()
+#        find_library(GUROBI_CXX_LIBRARY
+#            NAMES gurobi_c++
+#            HINTS ${GUROBI_DIR} $ENV{GUROBI_HOME}
+#            PATH_SUFFIXES lib)
+#        set(GUROBI_CXX_DEBUG_LIBRARY ${GUROBI_CXX_LIBRARY})
+#    endif()
 endif()
 
 include(FindPackageHandleStandardArgs)
