@@ -115,18 +115,18 @@ elseif(WIN32)
     message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp /openmp:llvm")
-
-    if (MSVC AND MT)
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /openmp")
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /openmp")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT /openmp")
-        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd /openmp")
-    endif()
-    # flag specific for Dr Memory
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd /openmp /openmp:llvm")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /openmp /openmp:llvm")
-#    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
+#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp /openmp:llvm")
+#
+#    if (MSVC AND MT)
+#        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /openmp")
+#        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /openmp")
+#        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT /openmp")
+#        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd /openmp")
+#    endif()
+#    # flag specific for Dr Memory
+#    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd /openmp /openmp:llvm")
+#    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /openmp /openmp:llvm")
+##    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
     find_package(GUROBI REQUIRED)
 
     include_directories(${GUROBI_INCLUDE_DIRS})
