@@ -466,6 +466,115 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
     return {lowerBound, upperBound, {}, true};
 
 }
+
+OutObject NodeExplorer::process4(Node_t node, double optimalLB,
+        const pair<vector<CutContainer *>, vector<CutContainer *>>& globalCuts) {
+    // apply node explroer
+
+    const auto& feasibilityCutContainer = globalCuts.first;
+    const auto& optimalityCutContainer = globalCuts.second;
+
+    // auto& feasibilityCutContainerStart = feasibilityCutContainer.begin();
+
+    double lowerBound = node.lb;
+    double upperBound = node.ub;
+
+    DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
+    DD restrictedDD{networkPtr, RESTRICTED};
+    auto cutset = restrictedDD.build(root1);
+
+    if (cutset) { // tree is not exact.
+        DD relaxedDD {networkPtr, EXACT};
+        DDNode root2{0, node.globalLayer, node.states, node.solutionVector};
+        relaxedDD.build(root2);
+        // apply global cuts first
+        for (const auto& fStart : feasibilityCutContainer) {
+            for (const auto& cut: fStart->cuts) {
+                if (!relaxedDD.applyFeasibilityCutHeuristic(cut)) return {0,0,{}, false};
+                if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+
+        // apply optimality cuts
+        for (const auto& oStart : optimalityCutContainer) {
+            for (const auto& cut: oStart->cuts) {
+                upperBound = min(relaxedDD.applyOptimalityCutHeuristic(cut), upperBound);
+                if (upperBound <= optimalLB) return {0,0,{}, false};
+                lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+                if (lowerBound <= optimalLB) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+
+        // actual refinement
+        double previousLowerBound;
+        vi previousSolution;
+
+        while (true) {
+            vi solution = restrictedDD.solution();
+            if (previousSolution == solution) {
+                if (previousLowerBound == lowerBound) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = lowerBound; // changed here.
+                    });
+                    return {lowerBound, upperBound, cutset.value(), true};
+                }
+                else previousLowerBound = lowerBound;
+            }
+            else {
+                previousSolution = solution;
+                previousLowerBound = lowerBound;
+            }
+
+            auto y_bar = w2y(solution , networkPtr);
+            GuroSolver solver{networkPtr, env};
+            auto cut = solver.solveSubProblemInstance(y_bar, 0);
+            if (cut.cutType == FEASIBILITY) {
+                feasibilityCuts.insertCut(cut);
+                if (!relaxedDD.applyFeasibilityCutHeuristic(cut)) return {0,0,{}, false};
+                if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+            else {
+                // optimality cut.
+                optimalityCuts.insertCut(cut);
+                upperBound = min(relaxedDD.applyOptimalityCutHeuristic(cut), upperBound);
+                if (upperBound <= optimalLB) return {0,0,{}, false};
+                lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+                if (lowerBound <= optimalLB) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+    }
+    else {
+        // tree is exact.
+        // apply global cuts.
+    }
+
+}
+
 void NodeExplorer::clearCuts() {
     feasibilityCuts.clearContainer();
     optimalityCuts.clearContainer();

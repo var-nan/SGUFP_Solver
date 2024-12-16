@@ -457,15 +457,15 @@ void DDSolver::Worker::operator()(DDSolver &solver) {
 
 void DDSolver::Worker::shareCutsWithMaster(NodeExplorer &explorer, Payload &payload) {
 	// acquire lock
-	CutContainer* fcuts = new CutContainer(explorer.feasibilityCuts);
-	CutContainer* ocuts = new CutContainer(explorer.optimalityCuts);
+	// CutContainer* fcuts = new CutContainer(explorer.feasibilityCuts);
+	// CutContainer* ocuts = new CutContainer(explorer.optimalityCuts);
 	// clear clear cut containers.
-	explorer.feasibilityCuts.clearContainer();
-	explorer.optimalityCuts.clearContainer();
+	// explorer.feasibilityCuts.clearContainer();
+	// explorer.optimalityCuts.clearContainer();
 	{
 		scoped_lock l{payload.lock};
-		payload.feasibilityCuts_ = fcuts;
-		payload.optimalityCuts_ = ocuts;
+		payload.feasibilityCuts_ = std::move(explorer.feasibilityCuts);
+		payload.optimalityCuts_ = std::move(explorer.optimalityCuts);
 		// atomic status update (with release order).
 	}
 }

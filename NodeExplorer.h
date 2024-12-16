@@ -58,7 +58,7 @@ public:
     OutObject process(Node_t node, double optimalLB);
     OutObject process2(Node_t node, double optimalLB);
     OutObject process3(Node_t node, double optimalLB);
-    OutObject process4(Node_t node, double optimalLB, const pair<vector<CutContainer *>, vector<CutContainer *>> globalCuts);
+    OutObject process4(Node_t node, double optimalLB, const pair<vector<CutContainer *>, vector<CutContainer *>>& globalCuts);
 
     void clearCuts();
 

@@ -34,21 +34,6 @@ const unsigned int NUM_WORKERS = 3;
 
 class Payload {
 
-
-
-    // std::condition_variable cv;
-    // std::mutex lock;
-
-    /*
-     *  0   : worker working in progress.
-     *  1   : worker needs nodes.
-     *  2   : master needs nodes.
-     *  4   : worker working in progress.
-     *  8   : master assigned nodes to worker.
-     *  16  : worker shared nodes to master (load balance).
-     *  32  : not enough nodes to share to master.
-     */
-
 public:
     Payload() = default;
     vector<Node_t> nodes_;
@@ -57,8 +42,8 @@ public:
     std::mutex lock; // around nodes vector.
     std::condition_variable cv; // to wake up the worker waiting for nodes.
     std::atomic<uint> payloadStatus = 0;
-    CutContainer* feasibilityCuts_;
-    CutContainer* optimalityCuts_;
+    CutContainer feasibilityCuts_;
+    CutContainer optimalityCuts_;
 
     vector<Node_t> getNodes(bool &done); // called by worker.
     void addNodesToWorker(vector<Node_t> nodes); // called by master.
@@ -68,7 +53,6 @@ public:
     vector<Node_t> getNodesFromWorker();
     void addNodesToMaster(vector<Node_t> nodes);
     void setStatus(uint8_t status_);
-
 
      enum STATUS {
         WORKER_NEEDS_NODES = 0x1,
@@ -80,7 +64,6 @@ public:
         SOLVER_FINISHED = 0x40,
         MASTER_RECEIVED_NODES = 0x80
     };
-
 
 };
 

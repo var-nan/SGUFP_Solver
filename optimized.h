@@ -42,6 +42,8 @@ namespace Inavap {
         CutResource(CutResource &&other) = delete;
         CutResource& operator=(const CutResource &other) = delete;
         CutResource& operator=(CutResource &&other) = delete;
+
+        /* TODO: create destructor that frees all the cut containers */
     };
 }
 
