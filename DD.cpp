@@ -1937,3 +1937,202 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 //
 // 	return true;
 // }
+
+//
+// optional<vector<Node_t> > Inavap::RestrictedDD::buildTree(Node_t root, uint WIDTH) {
+//
+// 	// node parameter should be initialized before calling this function. node should contain states.
+// 	// the given node parameter will be inserted as the root of the tree.
+//
+// 	const auto& arcOrder = networkPtr->processingOrder;
+// 	const auto& stateUpdateMap = networkPtr->stateUpdateMap;
+//
+// 	// set the node to the root.
+// 	vector<uint> currentLayer; // should be root layer.
+// 	startTree = root.globalLayer;
+//
+// 	RDDNode node{root};
+//
+// 	nodes.insert(std::make_pair(node.id, node));
+// 	currentLayer.push_back(node.id);
+// 	// insert root layer to tree.
+// 	tree.push_back(currentLayer);
+//
+// 	auto start = arcOrder.begin() + startTree;
+// 	auto end = arcOrder.end();
+// 	uint index = 0; // for node layer.
+//
+// 	for (; start != end; ++start){
+//
+// 		auto[a,b] = *start;
+// 		if (stateUpdateMap.count(a)) { // update state of each node in the layer.
+// 			const auto& newStates = stateUpdateMap.at(a);
+// 			updateState(currentLayer, newStates);
+// 		}
+// 		//const unordered_set<int> temp = stateUpdateMap.at(a);
+// 		vector<ulint> nextLayer;
+// 		//nextLayer.reserve(MAX_WIDTH);
+// 		isExact = buildNextLayer(currentLayer, nextLayer, networkPtr->hasStateChanged[a+1]);
+// 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
+// 		//reduceLayer(nextLayer); // INFO not doing reduction.
+// 		++index;
+// 		tree.push_back(nextLayer);
+// 		currentLayer = std::move(nextLayer);
+// 	}
+// 	// terminal node layer.
+// 	vector<ulint> terminalLayer;
+// 	DDNode terminalNode {number.getNext()};
+// 	terminalNode.nodeLayer = ++index;
+// 	// current layer points to last layer of tree.
+// 	for (const auto& id: currentLayer){
+// 		// only add single arc for each node in the last layer.
+// 		ulint arcId = number.getNext();
+// 		auto& parentNode = nodes[id];
+// 		// create arc add to incoming of terminal node.
+// 		DDArc arc{arcId, id, terminalNode.id, 1};
+// 		arc.weight = std::numeric_limits<double>::max();
+// 		terminalNode.incomingArcs.push_back(arcId);
+// 		parentNode.outgoingArcs.push_back(arcId);
+// 		arcs.insert(make_pair(arcId, arc));
+// 	}
+//
+// 	nodes.insert(make_pair(terminalNode.id, terminalNode));
+// 	terminalLayer.push_back(terminalNode.id);
+// 	tree.push_back(terminalLayer);
+//
+// 	// generate cutset.
+// 	//cutSet = generateExactCutSet(); TODO uncomment this.
+//
+//
+// 	#ifdef DEBUG
+// 	// displayArcLabels();
+// 		displayStats();
+// 	#endif
+// 	if (exactLayer == index-1) return {};
+// 	return generateExactCutSet();
+// }
+
+
+vector<uint> Inavap::RestrictedDD::buildNextLayer(const vector<uint> &currentLayer,
+		uint& nextLayerSize, bool stateChangesNext, bool& isExact) {
+
+	isExact = true;
+	vector<uint> nextLayer;
+	nextLayer.reserve(nextLayerSize);
+	nextLayerSize = 0;
+
+#if RESTRICTED_STRATEGY == 1
+
+	if (currentLayer.size() >= WIDTH) {
+		// tree is non-exact.
+	}
+
+	uint count = 0;
+
+	for (auto id : currentLayer) {
+		RDDNode &parentNode = nodes[id];
+		const auto parentStates = parentNode.states;
+
+		// states contain -1, do not prioritize it unless needed.
+		for (auto start = parentNode.states.rbegin(); start != parentNode.states.rend(); ++start) {
+			auto decision = *start;
+			if (count >= WIDTH) { isExact = false; return nextLayer;}
+			auto index = ++lastInserted;
+			RDDNode node{index};
+			DDArc arc{index, parentNode.id, node.id, decision};
+			node.states = parentStates;
+			if (decision != -1) node.states.erase(find(node.states.begin(), node.states.end(), -1));
+			node.incomingArc = parentNode.id;
+			node.nodeLayer = parentNode.nodeLayer+1;
+			node.globalLayer = parentNode.globalLayer + 1;
+			nextLayerSize += node.states.size();
+			// insert node and arc to containers.
+			nodes.insert(make_pair(index, node));
+			arcs.insert(make_pair(index, arc));
+			count++;
+			nextLayer.push_back(index);
+
+		}
+	}
+#endif
+}
+
+
+double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
+
+	//
+	const auto& processingOrder = networkPtr->processingOrder;
+	const auto& netArcs = networkPtr->networkArcs;
+
+	auto& rootNode = nodes[0];
+	size_t i = 0;
+	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
+			[&processingOrder, &netArcs, &i, &cut](double val , int decision) { // pass reference to val?
+				if (decision == -1) return val;
+				auto netArcId = processingOrder[i++].second;
+				auto iNetId = netArcs[netArcId].tailId;
+				auto qNetId = netArcs[netArcId].headId;
+				auto jNetId = netArcs[decision].headId;
+				return val + cut.get(iNetId, qNetId, jNetId);
+			}
+	);
+
+	// apply function to each layer. use for_each
+	size_t offset = tree.size()-1;
+	size_t index = 0; // TODO set correct index.
+
+	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index](const auto& layer) {
+		const auto netArcId = processingOrder[index].second;
+		const auto iNetId = netArcs[netArcId].tailId;
+		const auto qNetId = netArcs[netArcId].headId;
+
+		auto processNode =  [&cut, iNetId, qNetId, &netArcs, this](auto nodeId) {
+			auto& node = nodes[nodeId];
+			auto& inArc = arcs[node.incomingArc];
+			const auto& parentNode = nodes[inArc.tail];
+			auto jNetId = (inArc.decision != -1) ? netArcs[inArc.decision].headId : 0;
+			inArc.weight = (inArc.decision != -1) ? cut.get(iNetId, qNetId, jNetId) : 0;
+			node.state2 = inArc.weight + parentNode.state2;
+		};
+		for_each(layer.begin(), layer.end(), processNode);
+	};
+	for_each(tree.begin()+1, tree.begin()+offset, processLayer);
+
+	// terminal layer.
+	auto& terminalNode = nodes[tree[offset][0]];
+	double terminalState = INT32_MIN;
+
+	for_each(terminalInArcs.begin(), terminalInArcs.end(),[this, &terminalState](auto arcId) {
+		auto& arc = arcs[arcId];
+		const auto& parentNode = nodes[arc.tail];
+		arc.weight = std::min(arc.weight, parentNode.state2);
+		terminalState = std::max(terminalState, arc.weight);
+	});
+	terminalNode.state2 = terminalState;
+	return terminalState;
+}
+
+
+uint8_t Inavap::RestrictedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
+	const auto& processingOrder = networkPtr->processingOrder;
+	const auto& netArcs = networkPtr->networkArcs;
+
+	auto& rootNode = nodes[0];
+	size_t i = 0;
+	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
+			[&processingOrder, &netArcs, &i, &cut](double val , int decision) {
+				if (decision == -1) return val;
+				auto netArcId = processingOrder[i++].second;
+				auto iNetId = netArcs[netArcId].tailId;
+				auto qNetId = netArcs[netArcId].headId;
+				auto jNetId = netArcs[decision].headId;
+				return val + cut.get(iNetId, qNetId, jNetId);
+			}
+	);
+
+	// nodes to remove.
+
+	auto processLayer = [this, &cut, &processingOrder, &netArcs] (const auto& layer) {
+
+	};
+}

@@ -195,6 +195,7 @@ namespace Inavap {
 		bool operator==(const Cut& cut2) const {return cut2.hash == hash && cut2.RHS == RHS;}
 		[[nodiscard]]size_t getHash() const noexcept {return hash;}
 		[[nodiscard]] double get(uint a, uint b, uint c) const {return coeff.at(make_tuple(a,b,c));}
+		[[nodiscard]] double getRHS() const noexcept {return RHS;}
 
 	};
 
