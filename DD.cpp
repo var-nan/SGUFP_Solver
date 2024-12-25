@@ -2057,10 +2057,13 @@ vector<uint> Inavap::RestrictedDD::buildNextLayer(const vector<uint> &currentLay
 #endif
 }
 
-
+/**
+ * Applies given optimality cut to the tree and returns the lower bound for the tree.
+ * @param cut - Optimality cut to apply.
+ * @return - lower bound for the tree.
+ */
 double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 
-	//
 	const auto& processingOrder = networkPtr->processingOrder;
 	const auto& netArcs = networkPtr->networkArcs;
 
@@ -2079,10 +2082,10 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 
 	// apply function to each layer. use for_each
 	size_t offset = tree.size()-1;
-	size_t index = 0; // TODO set correct index.
+	size_t index = startTree; // TODO set correct index.
 
 	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index](const auto& layer) {
-		const auto netArcId = processingOrder[index].second;
+		const auto netArcId = processingOrder[index++].second;
 		const auto iNetId = netArcs[netArcId].tailId;
 		const auto qNetId = netArcs[netArcId].headId;
 
@@ -2114,13 +2117,15 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 
 
 uint8_t Inavap::RestrictedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
+
 	const auto& processingOrder = networkPtr->processingOrder;
 	const auto& netArcs = networkPtr->networkArcs;
 
 	auto& rootNode = nodes[0];
 	size_t i = 0;
+	// compute justified RHS for the root node.
 	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
-			[&processingOrder, &netArcs, &i, &cut](double val , int decision) {
+			[&processingOrder, &netArcs, &i, &cut](double val , const int decision) {
 				if (decision == -1) return val;
 				auto netArcId = processingOrder[i++].second;
 				auto iNetId = netArcs[netArcId].tailId;
@@ -2131,8 +2136,101 @@ uint8_t Inavap::RestrictedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 	);
 
 	// nodes to remove.
+	vui nodesToRemove;
+	size_t offset = tree.size()-1;
+	size_t index = startTree; // index of element in processing order vector. TODO verify this.
 
-	auto processLayer = [this, &cut, &processingOrder, &netArcs] (const auto& layer) {
+	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index, &nodesToRemove](const auto& layer) {
+		const auto netArcId = processingOrder[index++].second;
+		const auto iNetId = netArcs[netArcId].tailId;
+		const auto qNetId = netArcs[netArcId].headId;
 
+		nodesToRemove.clear();
+
+		auto processNode =  [&cut, iNetId, qNetId, &netArcs, &nodesToRemove, this](auto nodeId) {
+			auto& node = nodes[nodeId];
+			auto& inArc = arcs[node.incomingArc];
+			const auto& parentNode = nodes[inArc.tail];
+			auto jNetId = (inArc.decision != -1) ? netArcs[inArc.decision].headId : 0;
+			inArc.weight = (inArc.decision != -1) ? cut.get(iNetId, qNetId, jNetId) : 0;
+			node.state2 = inArc.weight + parentNode.state2;
+			if (node.state2 < -0.5) nodesToRemove.push_back(nodeId);
+		};
+		for_each(layer.begin(), layer.end(), processNode);
+
+		// if (!nodesToRemove.empty()) batchRemoveNodes(nodesToRemove); // can use this to exit early.
 	};
+
+	for_each(tree.begin()+1, tree.begin()+offset, processLayer);
+	if (nodesToRemove.size() == tree[tree.size()-2].size()) return false;
+	if (!nodesToRemove.empty()) batchRemoveNodes(nodesToRemove);
+	return true;
+}
+
+
+/**
+ * Applies given optimality cut to the tree.
+ * @param cut : optimality cut to apply on the tree
+ * @return : upperbound of the relaxed DD.
+ */
+double Inavap::RelaxedDD::applyOptimalityCut(const Inavap::Cut &cut) {
+
+	const auto& processingOrder = networkPtr->processingOrder;
+	const auto& netArcs = networkPtr->networkArcs;
+
+	auto& rootNode = nodes[0];
+	size_t i = 0;
+	// compute justified RHS for root node.
+	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
+			[&processingOrder, &netArcs, &i, &cut](double val , int decision) { // pass reference to val?
+				if (decision == -1) return val;
+				auto netArcId = processingOrder[i++].second;
+				auto iNetId = netArcs[netArcId].tailId;
+				auto qNetId = netArcs[netArcId].headId;
+				auto jNetId = netArcs[decision].headId;
+				return val + cut.get(iNetId, qNetId, jNetId);
+			}
+	);
+
+	size_t offset = tree.size()-1;
+	size_t index = startTree; // TODO set correct index.
+
+	/* Nested lambda functions to apply cut on each layer and each node in the selected layer respectively. The cut
+	 * will be applied sequentially on each layer from the root to the terminal layer (both excluding). The functions
+	 * will modify the node and its corresponding arcs while processing. */
+	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index](const auto& layer) {
+		const auto netArcId = processingOrder[index++].second;
+		const auto iNetId = netArcs[netArcId].tailId;
+		const auto qNetId = netArcs[netArcId].headId;
+
+		/* process each node sequentially from left to right, can use different execution policy (still sequential) */
+		auto processNode =  [&cut, iNetId, qNetId, &netArcs, this](auto nodeId) {
+			auto& node = nodes[nodeId];
+			double newState = std::numeric_limits<double>::lowest();
+			for (auto inArcId : node.incomingArcs) { // change to lambda function later.
+				auto& inArc = arcs[inArcId];
+				const auto& parentNode = nodes[inArc.tail];
+				auto jNetId = (inArc.decision != -1) ? netArcs[inArc.decision].headId : 0;
+				inArc.weight = (inArc.decision != -1) ? cut.get(iNetId, qNetId, jNetId) : 0;
+				if (newState <= (inArc.weight + parentNode.state2)) newState = inArc.weight + parentNode.state2;
+			}
+			node.state2 = newState;
+		};
+		for_each(layer.begin(), layer.end(), processNode); // call inner lambda function to process each node.
+	};
+	for_each(tree.begin()+1, tree.begin()+offset, processLayer); // call outer lambda function to process layer.
+
+	// terminal layer.
+	auto& terminalNode = nodes[terminalId];
+	double terminalState = INT32_MIN;
+
+	/* From the incoming arcs of terminal node, update the arc with new state. Find the arc with maximum state. */
+	for_each(terminalNode.incomingArcs.begin(), terminalNode.incomingArcs.end(),[this, &terminalState](auto arcId) {
+		auto& arc = arcs[arcId];
+		const auto& parentNode = nodes[arc.tail];
+		arc.weight = std::min(arc.weight, parentNode.state2);
+		terminalState = std::max(terminalState, arc.weight);
+	});
+	terminalNode.state2 = terminalState;
+	return terminalState;
 }

@@ -441,53 +441,75 @@ namespace Inavap {
 		// setter for weight, and head and tail.
 
 	};
-	class RDDNode {
-	public:
-		uint id;
-		uint16_t nodeLayer;
-		uint16_t globalLayer;
-		vector<uint> outgoingArcs;
-		vector<int16_t> states;
-		double state2;
-		uint incomingArc;
+	// class RDDNode {
+	// public:
+	// 	uint id;
+	// 	uint16_t nodeLayer;
+	// 	uint16_t globalLayer;
+	// 	vector<uint> outgoingArcs;
+	// 	vector<int16_t> states;
+	// 	double state2;
+	// 	uint incomingArc;
+	//
+	// 	RDDNode(): id{0}, incomingArc{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
+	// 	explicit RDDNode(uint id_) :id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}, incomingArc{0} {}
+	// 	// initialize Restricted DD Node from Node_t.
+	// 	explicit RDDNode(Node_t node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
+	// 					nodeLayer{0}, state2{0}, incomingArc{0}{}
+	//
+	// 	// uint getNodeLayer() const noexcept {return nodeLayer;}
+	// 	// uint getGlobalLayer() const noexcept {return globalLayer;}
+	// 	// const vector<int16_t>& getStates() const noexcept{ return states;}
+	// 	// uint getParent() const noexcept {return incomingArc;}
+	// };
 
-		RDDNode(): id{0}, incomingArc{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
-		explicit RDDNode(uint id_) :id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}, incomingArc{0} {}
-		// initialize Restricted DD Node from Node_t.
-		explicit RDDNode(Node_t node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
-						nodeLayer{0}, state2{0}, incomingArc{0}{}
-
-		// uint getNodeLayer() const noexcept {return nodeLayer;}
-		// uint getGlobalLayer() const noexcept {return globalLayer;}
-		// const vector<int16_t>& getStates() const noexcept{ return states;}
-		// uint getParent() const noexcept {return incomingArc;}
-	};
-
-	class LDDNode {
-	public:
-		uint id;
-		uint16_t nodeLayer;
-		uint16_t globalLayer;
-		vector<uint> outgoingArcs;
-		vector<uint> incomingArcs;
-		vector<int16_t> states;
-		double state2;
-
-		LDDNode() : id{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
-		explicit LDDNode(uint id_): id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}{}
-		explicit LDDNode(Node_t node_): id{0},
-					globalLayer{static_cast<uint16_t>(node_.globalLayer)}, nodeLayer{0}, state2{0}{}
-
-		// uint getNodeLayer() const noexcept {return nodeLayer;}
-		// uint getGlobalLayer() const noexcept {return globalLayer;}
-		// const vector<uint>& getOutgoingArcs() const noexcept { return outgoingArcs;}
-		// const vector<uint>& getIncomingArcs() const noexcept { return incomingArcs;}
-		// const vector<int16_t>& getStates() const noexcept { return states;}
-
-	};
+	// class LDDNode {
+	// public:
+	// 	uint id;
+	// 	uint16_t nodeLayer;
+	// 	uint16_t globalLayer;
+	// 	vector<uint> outgoingArcs;
+	// 	vector<uint> incomingArcs;
+	// 	vector<int16_t> states;
+	// 	double state2;
+	//
+	// 	LDDNode() : id{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
+	// 	explicit LDDNode(uint id_): id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}{}
+	// 	explicit LDDNode(Node_t node_): id{0},
+	// 				globalLayer{static_cast<uint16_t>(node_.globalLayer)}, nodeLayer{0}, state2{0}{}
+	//
+	// 	// uint getNodeLayer() const noexcept {return nodeLayer;}
+	// 	// uint getGlobalLayer() const noexcept {return globalLayer;}
+	// 	// const vector<uint>& getOutgoingArcs() const noexcept { return outgoingArcs;}
+	// 	// const vector<uint>& getIncomingArcs() const noexcept { return incomingArcs;}
+	// 	// const vector<int16_t>& getStates() const noexcept { return states;}
+	//
+	// };
 
 	class RestrictedDD {
 	private:
+        class RDDNode {
+            public:
+                uint id;
+                uint16_t nodeLayer;
+                uint16_t globalLayer;
+                vector<uint> outgoingArcs;
+                vector<int16_t> states;
+                double state2;
+                uint incomingArc;
+
+                RDDNode(): id{0}, incomingArc{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
+                explicit RDDNode(uint id_) :id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}, incomingArc{0} {}
+                // initialize Restricted DD Node from Node_t.
+                explicit RDDNode(Node_t node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
+                                nodeLayer{0}, state2{0}, incomingArc{0}{}
+
+                // uint getNodeLayer() const noexcept {return nodeLayer;}
+                // uint getGlobalLayer() const noexcept {return globalLayer;}
+                // const vector<int16_t>& getStates() const noexcept{ return states;}
+                // uint getParent() const noexcept {return incomingArc;}
+        };
+
 		const shared_ptr<const Network> networkPtr;
 		unordered_map<uint, RDDNode> nodes;
 		unordered_map<uint, DDArc> arcs;
@@ -499,11 +521,17 @@ namespace Inavap {
 		uint WIDTH = 0;
 		uint lastInserted = 0;
 
+		// bookkeeping variables.
+		uint terminalId;
+
 
 		vector<uint> buildNextLayer(const vector<uint>& currentLayer, uint& nextLayerSize, bool stateChangesNext, bool& isExact);
 
+		void batchRemoveNodes(vector<uint> nodeIds);
 	public:
 		explicit RestrictedDD(const shared_ptr<const Network>& network): networkPtr{network}, startTree{0} {}
+
+		vi getSolution() const noexcept;
 
 		// tree compilation functions.
 		optional<vector<Node_t>> buildTree(Node_t root, uint WIDTH_);
@@ -514,5 +542,43 @@ namespace Inavap {
 
 		// deletion functions.
 
+	};
+
+	class RelaxedDD {
+	private:
+		class RelaxedNode {
+		public:
+            uint id;
+            uint16_t nodeLayer;
+            uint16_t globalLayer;
+            vector<uint> outgoingArcs;
+            vector<uint> incomingArcs;
+            vector<int16_t> states;
+            double state2;
+
+            RelaxedNode() : id{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
+            explicit RelaxedNode(uint id_): id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}{}
+            explicit RelaxedNode(Node_t node_): id{0},
+                        globalLayer{static_cast<uint16_t>(node_.globalLayer)}, nodeLayer{0}, state2{0}{}
+
+		};
+
+		const shared_ptr<const Network> networkPtr;
+		unordered_map<uint, RelaxedNode> nodes;
+		unordered_map<uint, DDArc> arcs;
+		vector<vector<uint>> tree;
+		uint16_t startTree;
+		vector<int> rootSolution;
+		uint WIDTH = 0;
+		uint lastInserted = 0;
+		uint terminalId = 0;
+
+	public:
+		void buildTree(Node_t root, uint WIDTH_);
+
+		double applyOptimalityCut(const Inavap::Cut &cut);
+		uint8_t applyFeasibilityCut(const Inavap::Cut &cut);
+
+		vi getSolution() const; // not required?
 	};
 }
