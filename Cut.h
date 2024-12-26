@@ -183,18 +183,51 @@ public:
 
 namespace Inavap {
 
+	struct q_word {
+		uint16_t offset;
+		uint16_t j;
+		uint16_t i;
+		uint16_t q;
+	};
+
+	constexpr uint16_t Q_MASK = 0XFFFF;
+	constexpr uint16_t REAL_MASK = 0XFFFFFFFFFFFFFFFF;
+
 	class Cut {
 		size_t hash;
 		double RHS;
-		map<tuple<int,int,int>, double> coeff;
+		// map<tuple<int,int,int>, double> coeff;
+		vector<pair<uint64_t, double>> coeff;
+		vector<uint32_t> q_offsets; // offsets store the instance
+
+		uint16_t getStart(uint32_t q) const noexcept {
+			// iterate through all the elements.
+			auto result = std::find_if(q_offsets.begin(), q_offsets.end(),
+				[&q](const auto p) { return (p&Q_MASK) ^ (q&Q_MASK);});
+			if (result != q_offsets.end()) return (*result)>>16; // return 16-MSB of the match.
+			return 0XFFFF;
+		}
+
 	public:
-		Cut(double RHS_, map<tuple<int,int,int>, double> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
+		Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
 			// TODO compute hash.
 		}
 
 		bool operator==(const Cut& cut2) const {return cut2.hash == hash && cut2.RHS == RHS;}
+
 		[[nodiscard]]size_t getHash() const noexcept {return hash;}
-		[[nodiscard]] double get(uint a, uint b, uint c) const {return coeff.at(make_tuple(a,b,c));}
+
+		[[nodiscard]] double get(uint64_t key) const noexcept {
+			// iterate through only q coefficients.
+			uint16_t current = getStart(key);
+			if (current == Q_MASK) return 0;
+			// for every element from start, extract q and compare with key.
+			for (; !((coeff[current].first & Q_MASK) ^ (key & Q_MASK)); ++current) {
+				if (!((coeff[current].first & REAL_MASK)^(key & REAL_MASK))) return coeff[current].second;
+			}
+			return 0;
+		}
+
 		[[nodiscard]] double getRHS() const noexcept {return RHS;}
 
 	};
