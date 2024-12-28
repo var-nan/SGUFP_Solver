@@ -190,40 +190,59 @@ namespace Inavap {
 		uint16_t q;
 	};
 
-	constexpr uint16_t Q_MASK = 0XFFFF;
-	constexpr uint16_t REAL_MASK = 0XFFFFFFFFFFFFFFFF;
+	static constexpr uint64_t Q_MASK = 0XFFFF;
+	static constexpr uint64_t IQJ_MASK = 0XFFFFFFFFFFFF;
+	static constexpr uint64_t IQ_MASK = 0XFFFFFFFF;
 
 	class Cut {
 		size_t hash;
 		double RHS;
 		// map<tuple<int,int,int>, double> coeff;
 		vector<pair<uint64_t, double>> coeff;
-		vector<uint32_t> q_offsets; // offsets store the instance
+		vector<uint32_t> q_offsets; // The 16 MSB contains the offset and the 16 LSB is the 'q' element.
 
-		uint16_t getStart(uint32_t q) const noexcept {
+		/**
+		 * Returns the offset corresponding to 'q' in the cut. The function scans all the elements in the offsets vector
+		 * and returns the offset if match exists, else returns 0.
+		 */
+		[[nodiscard]] uint16_t getStart(uint16_t q) const noexcept {
 			// iterate through all the elements.
 			auto result = std::find_if(q_offsets.begin(), q_offsets.end(),
-				[&q](const auto p) { return (p&Q_MASK) ^ (q&Q_MASK);});
+				[&q](const auto p) { return !((p&Q_MASK) ^ q);});
 			if (result != q_offsets.end()) return (*result)>>16; // return 16-MSB of the match.
-			return 0XFFFF;
+			return 0;
 		}
 
 	public:
-		Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
+		explicit Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
 			// TODO compute hash.
+			hash = 0;
 		}
 
 		bool operator==(const Cut& cut2) const {return cut2.hash == hash && cut2.RHS == RHS;}
 
 		[[nodiscard]]size_t getHash() const noexcept {return hash;}
 
-		[[nodiscard]] double get(uint64_t key) const noexcept {
-			// iterate through only q coefficients.
-			uint16_t current = getStart(key);
-			if (current == Q_MASK) return 0;
-			// for every element from start, extract q and compare with key.
+		/**
+		 * Returns the cut coefficient for the given key if exists, returns 0 otherwise.
+		 * The key is divided into 4 words (offset, j, i, q).
+		 */
+		[[nodiscard]] double get(uint64_t& key) const noexcept {
+
+			/* The 16 MSB of the key might contain offset of the q (from previous calls). If exists use it,
+			 * else populate 16 MSB of key with the offset */
+			uint64_t current = (key>>48);
+			if (!current) {
+				current = getStart((key & Q_MASK));
+				key |= (current<<48); // set offset in 16 MSB of key.
+			}
+
+			/* The reason for getStart() to return 0 if key didn't exist is, the conditional check in the below for loop
+			 * will definitely fail in first iteration if the 'q' in the key doesn't match with 'q' in the element of cut. */
+
 			for (; !((coeff[current].first & Q_MASK) ^ (key & Q_MASK)); ++current) {
-				if (!((coeff[current].first & REAL_MASK)^(key & REAL_MASK))) return coeff[current].second;
+				// extract q and compare with key.
+				if (!((coeff[current].first & IQJ_MASK)^(key & IQJ_MASK))) return coeff[current].second;
 			}
 			return 0;
 		}
@@ -232,10 +251,17 @@ namespace Inavap {
 
 	};
 
+	/**
+	 * Returns the 64-bit value of bitwise 'or' of q,i,j at the respective bit positions.
+	 */
+	[[gnu::always_inline]] static uint64_t getKey(uint64_t q, uint64_t i, uint64_t j) {
+		return (q | (i<<16) | (j<<32));
+	}
+
 	class CutContainer {
 		vector<Cut> cuts;
 	public:
-		CutContainer(size_t N = 128) {
+		explicit CutContainer(size_t N = 128) {
 			cuts.reserve(N);
 		}
 		// TODO: define 'new' operator (efficient, without copying).
