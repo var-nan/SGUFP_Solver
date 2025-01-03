@@ -214,12 +214,32 @@ namespace Inavap {
 		}
 
 	public:
+
 		explicit Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
 			// TODO compute hash.
 			hash = 0;
 		}
 
+		explicit Cut(Cut&& c) noexcept :
+				hash{move(c.hash)}, RHS{c.RHS} ,coeff{move(c.coeff)}, q_offsets{move(c.q_offsets)}{}
+
 		bool operator==(const Cut& cut2) const {return cut2.hash == hash && cut2.RHS == RHS;}
+
+		Cut& operator=(Cut&& c) noexcept {
+			hash = c.hash;
+			RHS = c.RHS;
+			coeff = std::move(c.coeff);
+			q_offsets = move(c.q_offsets);
+			return *this;
+		}
+
+		Cut& operator=(const Cut& cut2) {
+			hash = cut2.hash;
+			RHS = cut2.RHS;
+			coeff = cut2.coeff;
+			q_offsets = cut2.q_offsets;
+			return *this;
+		}
 
 		[[nodiscard]]size_t getHash() const noexcept {return hash;}
 
@@ -264,11 +284,23 @@ namespace Inavap {
 		explicit CutContainer(size_t N = 128) {
 			cuts.reserve(N);
 		}
+
+		CutContainer(CutContainer&& c) noexcept : cuts(std::move(c.cuts)){}
+
+		CutContainer& operator=(CutContainer&& c) noexcept {
+			cuts = std::move(c.cuts);
+			return *this;
+		}
+
 		// TODO: define 'new' operator (efficient, without copying).
-		void insertCut(Cut cut) {cuts.push_back(cut);}
+		void insertCut(Cut&& cut) {cuts.push_back(move(cut));}
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
 		[[nodiscard]] size_t size() const noexcept {return cuts.size();}
+		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
 		void clearContainer() noexcept { cuts.clear();}
+
+		auto begin() noexcept {return cuts.begin();}
+		auto end() noexcept {return cuts.end();}
 	};
 }
 
