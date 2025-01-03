@@ -30,6 +30,9 @@ const unsigned int NUM_WORKERS = 3;
 // const uint16_t POLL_FREQUENC;
 
 #define CUT_CONTAINER_CAPACITY 128
+#define FEASIBILITY_CONTAINER_LIMIT 50
+#define OPTIMALITY_CONTAINER_LIMIT 100
+
 
 
 class Payload {
@@ -251,7 +254,107 @@ public:
 };
 
 
+namespace Inavap {
 
+    class DDSolver {
+
+        friend class Worker;
+        friend class Master;
+
+        class Payload {
+        public:
+            enum STATUS {
+                WORKER_WORKING = 0X1,
+                WORKER_NEEDS_NODES = 0X2,
+                WORKER_SHARED_NODES = 0X4,
+                NOT_ENOUGH_NODES_TO_SHARE = 0X8,
+                MASTER_NEEDS_NODES = 0X10,
+                MASTER_ASSIGNED_NODES = 0X20,
+                MASTER_RECEIVED_NODES = 0X40,
+                SOLVER_FINISHED = 0X80
+            };
+            vector<Node> nodes;
+            std::mutex lock;
+            std::condition_variable cv;
+            std::atomic<uint> payloadStatus;
+            CutContainer fCuts;
+            CutContainer oCuts;
+
+            Payload() = default;
+            vector<Node> getNodes(uint8_t &done);
+            void addCuts(optional<CutContainer> feasCuts, optional<CutContainer> optCuts);
+
+        };
+
+        class NodeQueue {
+            struct comparator {
+                bool operator() (const Node &node1, const Node &node2) const {
+                    return node1.globalLayer > node2.globalLayer;
+                }
+            };
+
+            priority_queue<Node, vector<Node>, comparator> pq;
+        public:
+            NodeQueue() = default;
+            explicit NodeQueue(vector<Node> nodes) : pq{nodes.begin(), nodes.end()}{}
+
+            void pushNode(Node node);
+            void pushNodes(vector<Node> nodes);
+            [[nodiscard]] Node popNode();
+            [[nodiscard]] vector<Node> popNodes(size_t n);
+
+            [[nodiscard]] bool empty() const {return pq.empty();}
+            [[nodiscard]] size_t size() const {return pq.size();}
+        };
+
+        class Worker {
+            uint id;
+            vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
+            vector<CutContainer *> feasCutsGlobal; // pointers to global feasibility cut containers.
+            shared_ptr<Network> networkPtr;
+
+            void shareCutsWithMaster(NodeExplorer& explorer, Inavap::DDSolver::Payload& payload);
+
+        public:
+            explicit Worker(uint id_, const shared_ptr<Network>& networkPtr_): id{id_}, networkPtr{networkPtr_}{}
+            void operator()(DDSolver& solver);
+        };
+
+        class Master {
+            NodeQueue nodeQueue;
+            vector<Cut> tempOptCuts;
+            vector<Cut> tempFeasCuts; // to be published global later.
+            vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
+            vector<CutContainer *> feasCutsGlobal; // pointers to global feasibility cut containers.
+            shared_ptr<Network> networkPtr;
+
+            void addCutsToGlobal(DDSolver &solver, pair<vector<CutContainer>, vector<CutContainer>> &cuts);
+            // bool isCutsShared(Payload &worker);
+            size_t processNodes(DDSolver &solver, NodeExplorer &explorer, size_t n);
+
+        public:
+            explicit Master(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}{};
+            void operator() (DDSolver &solver);
+        };
+
+        vector<Payload> payloads{NUM_WORKERS};
+        CutResource CutResources;
+        shared_ptr<Network> networkPtr;
+        std::atomic_bool isCompleted{false};
+        const uint16_t N_WORKERS;
+        vector<thread> workers;
+
+        atomic<double> optimal;
+
+
+    public:
+        explicit DDSolver(const shared_ptr<Network> &networkPtr_, uint16_t nWorkers): networkPtr{networkPtr_}, N_WORKERS{nWorkers} {}
+
+
+        void startSolver();
+
+    };
+}
 
 
 #endif //DDSOLVER_H
