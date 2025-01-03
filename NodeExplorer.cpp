@@ -580,3 +580,8 @@ void NodeExplorer::clearCuts() {
     optimalityCuts.clearContainer();
 }
 
+
+Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
+        const vector<CutContainer *>& globalFCuts, const vector<CutContainer *>& globalOCuts) {
+    // Fill this later.
+}

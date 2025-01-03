@@ -11,7 +11,7 @@
 #include "grb.h"
 // #include "DDSolver.h"
 
-extern const Network network;
+// extern const Network network;
 
 //
 
@@ -72,6 +72,40 @@ public:
 };
 
 
+namespace Inavap {
+
+    using OutObject = struct OutObj{
+        double lb;
+        double ub;
+        vector<Node> nodes;
+        uint16_t status; // status bits after processing the node.
+
+        OutObj(double lb_, double ub_, vector<Node> nodes_, uint16_t status_) :
+                lb{lb_}, ub{ub_}, nodes{nodes_}, status{status_}{}
+        //
+
+    };
+
+    class NodeExplorer {
+        GRBEnv env = GRBEnv();
+        const shared_ptr<Network> networkPtr;
+
+    public:
+        CutContainer feasibilityCuts; // local feasibility cuts.
+        CutContainer optimalityCuts; // local optimality cuts.
+        // vector<CutContainer *> globalFCuts;
+        // vector<CutContainer *> globalOCuts;
+
+        explicit NodeExplorer(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_} {
+            env.set(GRB_IntParam_OutputFlag,0);
+            env.set(GRB_IntParam_Threads,1);
+        }
+
+        OutObject process(Node node, double optimalLB,
+            const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts);
+
+    };
+}
 
 
 #endif //NODEEXPLORER_H
