@@ -10,8 +10,13 @@
 #include <mutex>
 #include <shared_mutex>
 
-const size_t FEASIBILITY_CONTAINER_CAPACITY = 100;
-const size_t OPTIMALITY_CONTAINER_CAPACITY = 100;
+#ifndef FEASIBILITY_CONTAINER_CAPACITY
+    #define FEASIBILITY_CONTAINER_CAPACITY 128
+#endif
+
+#ifndef OPTIMALITY_CONTAINER_CAPACITY
+    #define OPTIMALITY_CONTAINER_CAPACITY 128
+#endif
 
 namespace Inavap {
 
@@ -44,6 +49,12 @@ namespace Inavap {
         CutResource& operator=(CutResource &&other) = delete;
 
         /* TODO: create destructor that frees all the cut containers */
+        ~CutResource() {
+            // locking mutex not needed. Error if needed.
+            // clear all the cuts from the memory.
+            for (auto fCutContainer : fCutContainers) delete fCutContainer;
+            for (auto oCutContainer : oCutContainers) delete oCutContainer;
+        }
     };
 }
 
