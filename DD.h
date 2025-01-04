@@ -421,37 +421,40 @@ namespace Inavap {
 	class Node {
 	public:
 		vector<int16_t> states;
-		vi solutionVector;
+		vector<int16_t> solutionVector;
 		double lb;
 		double ub;
 		uint globalLayer;
 
 		Node(): lb{std::numeric_limits<double>::lowest()}, ub{std::numeric_limits<double>::max()}, globalLayer{0} {}
 
-		Node(vector<int16_t> states_, vi solutionVector_, double lb_, double ub_, uint gl_):
+		Node(vector<int16_t> states_, vector<int16_t> solutionVector_, double lb_, double ub_, uint gl_):
 			states{move(states_)}, solutionVector{move(solutionVector_)}, lb{lb_}, ub{ub_}, globalLayer{gl_}{}
 
+		Node(Node&& node_) noexcept: states{move(node_.states)}, solutionVector{move(node_.solutionVector)},
+		                             lb{node_.lb}, ub{node_.ub}, globalLayer(node_.globalLayer) {}
 	};
+
 	class DDArc {
 	public:
 		uint id;
 		uint head;
 		uint tail;
-		int decision;
+		int16_t decision;
 		double weight;
 
 	// public:
 		DDArc (): id{0}, head{0}, tail{0}, decision{0}, weight{0}{}
-		DDArc(uint id_, uint tail_, uint head_, int decision_):
+		DDArc(uint id_, uint tail_, uint head_, int16_t decision_):
 			id{id_}, tail{tail_}, head{head_}, decision{decision_}, weight{0}{}
 
 		// add getters and setters.
 
-		int getDecision() const {return decision;}
-		double getWeight() const {return weight;}
-		uint getId() const {return id;}
-		uint getHead() const {return head;}
-		uint getTail() const {return tail;}
+		// [[nodiscard]] int16_t getDecision() const {return decision;}
+		// [[nodiscard]] double getWeight() const {return weight;}
+		// [[nodiscard]] uint getId() const {return id;}
+		// [[nodiscard]] uint getHead() const {return head;}
+		// [[nodiscard]] uint getTail() const {return tail;}
 
 		// setter for weight, and head and tail.
 
@@ -462,7 +465,7 @@ namespace Inavap {
         class RDDNode {
             public:
                 uint id;
-                uint16_t nodeLayer;
+                uint16_t nodeLayer; // remove this later.
                 uint16_t globalLayer;
                 vector<uint> outgoingArcs;
                 vector<int16_t> states;
@@ -473,7 +476,7 @@ namespace Inavap {
                 explicit RDDNode(uint id_) :id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}, incomingArc{0} {}
                 // initialize Restricted DD Node from Node_t.
                 explicit RDDNode(Node node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
-                                nodeLayer{0}, state2{0}, incomingArc{0}{}
+                                nodeLayer{0}, state2{0}, incomingArc{0}, states{move(node.states)}{}
 
                 // uint getNodeLayer() const noexcept {return nodeLayer;}
                 // uint getGlobalLayer() const noexcept {return globalLayer;}
@@ -486,22 +489,23 @@ namespace Inavap {
 		unordered_map<uint, DDArc> arcs;
 		vector<vector<uint>> tree; // layer corresponds to vector of node ids.
 
-		uint16_t startTree;
-		vector<int> rootSolution;
-		uint terminalId;
+		uint16_t startTree; // position of sub tree in global tree.
+		vector<int16_t> rootSolution; // partial solution of root node.
+		uint terminalId = 0; // index of terminal node.
 		vector<uint> terminalInArcs;
 
 		uint WIDTH = 0;
-		uint lastInserted = 0;
+		uint lastInserted = 0; // index of last inserted node(and arc) to the container.
 
 		// bookkeeping variables.
 		// uint status = 0;
+		// list of ids of deleted node that are removed from the container, but yet to remove from the tree.
 		vector<uint> deletedNodeIds;
 
 		void updateStates(const vector<uint> &currentLayer, const vector<int16_t> &nextLayerState);
 		vector<uint> buildNextLayer(const vector<uint>& currentLayer, uint& nextLayerSize, bool stateChangesNext, bool& isExact);
 
-		void deleteArc(RDDNode& node, DDArc& arc, RDDNode& childNode);
+		void deleteArc(RDDNode& node, DDArc& arc, RDDNode& childNode) noexcept;
 		void deleteNode(RDDNode &node);
 		void topDownDelete(RDDNode& node);
 		void bottomUpDelete(RDDNode& node);
@@ -509,15 +513,15 @@ namespace Inavap {
 		void removeNode(uint nodeId, bool isBatch);
 		void batchRemoveNodes(vector<uint> &nodeIds);
 		[[nodiscard]] vector<Node> generateExactCutSet(uint layer) const;
-		[[nodiscard]] vector<int> getSolutionForNode(uint id) const;
+		[[nodiscard]] vector<int16_t> getSolutionForNode(uint id) const;
 
 	public:
-		explicit RestrictedDD(const shared_ptr<const Network>& network): networkPtr{network}, startTree{0} {}
+		explicit RestrictedDD(const shared_ptr<const Network>& network, uint MAXWIDTH_): networkPtr{network}, startTree{0}, WIDTH(MAXWIDTH_) {}
 
-		vi getSolution() const noexcept;
+		[[nodiscard]] vector<int16_t> getSolution() const noexcept;
 
 		// tree compilation functions.
-		optional<vector<Node>> buildTree(Node root, uint WIDTH_);
+		optional<vector<Node>> buildTree(Node root);
 
 		// refinement functions.
 		double applyOptimalityCut(const Inavap::Cut &cut);
