@@ -424,11 +424,11 @@ namespace Inavap {
 		vector<int16_t> solutionVector;
 		double lb;
 		double ub;
-		uint globalLayer;
+		uint16_t globalLayer;
 
 		Node(): lb{std::numeric_limits<double>::lowest()}, ub{std::numeric_limits<double>::max()}, globalLayer{0} {}
 
-		Node(vector<int16_t> states_, vector<int16_t> solutionVector_, double lb_, double ub_, uint gl_):
+		Node(vector<int16_t> states_, vector<int16_t> solutionVector_, double lb_, double ub_, uint16_t gl_):
 			states{move(states_)}, solutionVector{move(solutionVector_)}, lb{lb_}, ub{ub_}, globalLayer{gl_}{}
 
 		Node(Node&& node_) noexcept: states{move(node_.states)}, solutionVector{move(node_.solutionVector)},
@@ -484,6 +484,10 @@ namespace Inavap {
                 // uint getParent() const noexcept {return incomingArc;}
         };
 
+		/* actually we don't need store arcs in the first place to maintain the relationship between parent and child.
+		 * Since a node has one parent, we can store the arc information in the node itself and remove the arcs
+		 * container. Implement this if desperate for performance. */
+
 		const shared_ptr<const Network> networkPtr;
 		unordered_map<uint, RDDNode> nodes;
 		unordered_map<uint, DDArc> arcs;
@@ -504,6 +508,7 @@ namespace Inavap {
 
 		void updateStates(const vector<uint> &currentLayer, const vector<int16_t> &nextLayerState);
 		vector<uint> buildNextLayer(const vector<uint>& currentLayer, uint& nextLayerSize, bool stateChangesNext, bool& isExact);
+		vector<uint> buildRestrictedLayer(const vector<uint>& currentLayer);
 
 		void deleteArc(RDDNode& node, DDArc& arc, RDDNode& childNode) noexcept;
 		void deleteNode(RDDNode &node);
@@ -553,12 +558,15 @@ namespace Inavap {
 		unordered_map<uint, DDArc> arcs;
 		vector<vector<uint>> tree;
 		uint16_t startTree;
-		vector<int> rootSolution;
+		vector<int16_t> rootSolution;
 		uint lastInserted = 0;
 		uint terminalId = 0;
 		vector<uint> deletedNodeIds;
 
 		void updateStates(const vector<uint>& currentLayer, const vector<int16_t>& nextLayerState);
+
+		vector<uint> buildNextLayer(const vector<uint> &currentLayer, uint& nextLayerSize,
+				bool stateChangesNext);
 
 		// state reduction functions
 
@@ -572,7 +580,7 @@ namespace Inavap {
 		void updateTree();
 
 	public:
-		void buildTree(Node_t root);
+		void buildTree(Node root);
 
 		double applyOptimalityCut(const Inavap::Cut &cut);
 		uint8_t applyFeasibilityCut(const Inavap::Cut &cut);
