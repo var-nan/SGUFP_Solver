@@ -535,6 +535,7 @@ namespace Inavap {
 	};
 
 	class RelaxedDD {
+		/* for now the this class is almost identical to the DD class. */
 	private:
 		class LDDNode {
 		public:
@@ -557,7 +558,7 @@ namespace Inavap {
 		unordered_map<uint, LDDNode> nodes;
 		unordered_map<uint, DDArc> arcs;
 		vector<vector<uint>> tree;
-		uint16_t startTree;
+		uint16_t startTree = 0;
 		vector<int16_t> rootSolution;
 		uint lastInserted = 0;
 		uint terminalId = 0;

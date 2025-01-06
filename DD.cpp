@@ -2443,9 +2443,14 @@ void Inavap::RelaxedDD::topDownDelete(uint id) {
 	deleteNode(node);
 }
 
+/**
+ * Deletes the node recursively until the root. Deletes the given node from the node's container.
+ *
+ * Function only deletes the ancestor nodes that doesn't have any children, called bereaved parent.
+ */
 void Inavap::RelaxedDD::bottomUpDelete(uint id) {
 
-	// INFO this node might contain multiple incoming parents, but might contain one (or zero) children.
+	// INVARIANT this node might contain multiple incoming parents, but should not contain any children.
 
 	// for each incoming arc, remove arc and call soft delete on incoming node (iff has single outgoing arc).
 	auto& node = nodes[id];
@@ -2463,9 +2468,27 @@ void Inavap::RelaxedDD::bottomUpDelete(uint id) {
 	deleteNode(node);
 }
 
+void Inavap::RelaxedDD::deleteNode(LDDNode &node) {
+	deletedNodeIds.emplace_back(node.id);
+	nodes.erase(node.id);
+}
+
+[[always_inline]] void Inavap::RelaxedDD::deleteArc(LDDNode &tailNode, DDArc &arc, LDDNode &headNode) {
+	// erase-remove idiom is replaced with erase(). below functions are available since C++20.
+	erase(tailNode.outgoingArcs, arc.id);
+	erase(headNode.incomingArcs, arc.id);
+	arcs.erase(arc.id);
+}
+
 vector<uint> Inavap::RelaxedDD::buildNextLayer(const vector<uint> &currentLayer, uint& nextLayerSize, bool stateChangesNext) {
 
-	if (stateChangesNext) { // next layer will undergo state change, so create only one node.
+	vector<uint> nextLayer;
+	nextLayer.reserve(std::max(static_cast<uint>(4), nextLayerSize));
+	nextLayerSize = 0;
+
+	if (stateChangesNext) {
+		/* next layer will undergo state change, so create only one node and do not set its state,
+		 * its going to be changed in the next iteration anyway */
 
 		LDDNode node {++lastInserted};
 
@@ -2474,10 +2497,65 @@ vector<uint> Inavap::RelaxedDD::buildNextLayer(const vector<uint> &currentLayer,
 			node.nodeLayer = parent.nodeLayer + 1;
 			node.globalLayer = parent.globalLayer + 1;
 			for (auto decision: parent.states) {
-
+				// at least one arc should be matched to V-bar node. so remove all -1's in the matching.
+				if (stateChangesNext && parent.states.size() > 1 && decision == -1) continue;
+				auto nextArcId = ++lastInserted;
+				DDArc newArc{nextArcId, id, node.id, decision};
+				parent.outgoingArcs.push_back(nextArcId);
+				node.incomingArcs.push_back(nextArcId);
+				arcs.insert(make_pair(nextArcId, newArc));
 			}
 		}
+		nextLayer.push_back(node.id);
+		nodes.insert(make_pair(node.id, node));
 	}
+	else {
+		vector<LDDNode> nodesVector;
+		unordered_set<tuple<set<int16_t>, int, int>, tuple_hash, tuple_equal> allStates;
+		int j = 0;
+
+		for (const auto id: currentLayer) {
+			auto &node = nodes[id];
+			auto statesCopy = node.states;
+
+			for (auto decision: node.states) {
+				auto newStates(statesCopy);
+				if (decision != -1) newStates.erase(find(newStates.begin(), newStates.end(), decision), newStates.end());
+				auto nextId = ++lastInserted;
+
+				// if newStates already in allStates, update exising node in nodesVector.
+				set<int16_t> statesSet{newStates.begin(), newStates.end()};
+				auto [it, isInserted] = allStates.insert({statesSet, 0, j});
+				if (isInserted) { // create new Node
+					LDDNode newNode{nextId};
+					DDArc newArc{nextId, id, nextId, decision};
+					newNode.nodeLayer = node.nodeLayer+1;
+					newNode.globalLayer = node.globalLayer+1;
+					newNode.states = newStates;
+					newNode.incomingArcs.push_back(nextId);
+					node.outgoingArcs.push_back(nextId);
+					arcs.insert(make_pair(nextId, newArc));
+					nodesVector.push_back(newNode);
+					j++;
+				} else { // state already exists, update existing node in nodesVector.
+					auto [tempState, state2, pos] = *(it);
+					auto &prevNode = nodesVector[pos];
+					DDArc newArc{nextId, id, prevNode.id, decision};
+					prevNode.incomingArcs.push_back(nextId);
+					node.outgoingArcs.push_back(nextId);
+					arcs.insert(make_pair(nextId, newArc));
+				}
+			}
+		}
+
+		// populate nextLayer. LATER. move nodes from vector.
+		for (auto& node : nodesVector) {
+			nextLayer.push_back(node.id);
+			nextLayerSize += node.states.size();
+			nodes.insert(make_pair(node.id, node));
+		}
+	}
+	return nextLayer;
 }
 
 void Inavap::RelaxedDD::buildTree(Node node) {
@@ -2556,16 +2634,34 @@ void Inavap::RelaxedDD::updateStates(const vector<uint>& currentLayer, const vec
  * @param isBatch
  */
 void Inavap::RelaxedDD::removeNode(uint id, bool isBatch) {
+
+	/* Deletes the incoming arcs from the parent, updates parent's outgoing arcs. Deletes node's outgoing arcs
+	 * completely and updates the child's incoming arcs. Top-down delete is called for each child recursively until
+	 * all the eligible children are deleted. Bottom-up delete is called recursively on each eligible ancestor.*/
+
 	auto& node = nodes[id];
-	// recursively delete subtree.
-	auto outArcs = node.outgoingArcs;
-	for (auto childArcId : outArcs){
-		auto& childArc = arcs[childArcId];
-		auto& child = nodes[childArc.head];
-		deleteArc(node, childArc, child);
-		if (child.incomingArcs.empty()) topDownDelete(child.id); // orphan node
-	}
-	//if (node.incomingArcs.size() > 1) { // multiple parents
+
+	/* According to the way that feasibility cut is applied to relaxed tree right now, we only remove nodes from the
+     * last layer. This will not have any performance benefit if we call top-down delete on the terminal node multiple
+     * times without deleting it. Thus, we can skip calling top-down delete function after removing the outgoing arc.
+     * Uncomment the below block if new strategy is developed in applying the feasibility cut that involves deleting
+     * nodes from the upper layers of the tree.
+     */
+	// auto outArcs = node.outgoingArcs;
+	// for (auto childArcId : outArcs){
+	// 	auto& childArc = arcs[childArcId];
+	// 	auto& child = nodes[childArc.head];
+	// 	deleteArc(node, childArc, child);
+	//	// recursively delete sub-tree.
+	// 	if (child.incomingArcs.empty()) topDownDelete(child.id); // orphan node
+	// 	deleteNode(node); // comment this if uncommented the above line.
+	// }
+
+	// the last layer nodes have one outgoing arc to terminal, delete it.
+	auto& outgoingArc = arcs[node.outgoingArcs.back()];
+	auto& terminalNode = nodes[terminalId];
+	deleteArc(node, outgoingArc, terminalNode);
+
 	auto incomingArcs = node.incomingArcs;
 	for (auto arcId: incomingArcs){
 		auto& arc = arcs[arcId];
