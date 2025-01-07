@@ -2556,7 +2556,7 @@ vector<uint> Inavap::RelaxedDD::buildNextLayer(const vector<uint> &currentLayer,
 
 			for (auto decision: node.states) {
 				auto newStates(statesCopy);
-				if (decision != -1) newStates.erase(find(newStates.begin(), newStates.end(), decision), newStates.end());
+				if (decision != -1) newStates.erase(find(newStates.begin(), newStates.end(), decision));
 				auto nextId = ++lastInserted;
 
 				// if newStates already in allStates, update exising node in nodesVector.
