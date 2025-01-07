@@ -418,6 +418,32 @@ STATIC inline vector<uint> getShuffledList(const size_t n, const size_t m){
 
 namespace Inavap {
 
+	struct set_hash {
+		size_t operator() (const set<int16_t> &s) const {
+			size_t h = 0;
+			for (auto i : s) {
+				h ^= hash<int16_t>{}(i);
+			}
+			return h;
+		}
+	};
+
+	struct tuple_hash {
+		size_t operator()(const tuple<set<int16_t>, int, int> &t) const {
+			size_t h1 = set_hash{}(get<0>(t));
+			size_t h2 = hash<int>{}(get<1>(t));
+			return h1 ^ (h2 << 2);
+		}
+	};
+
+	struct tuple_equal {
+		bool operator()(const tuple<set<int16_t>, int, int>& t1, const tuple<set<int16_t>, int, int>&t2) const {
+			auto& first = get<0>(t1);
+			auto& second = get<0>(t2);
+			return first == second && get<1>(t1) == get<1>(t2);
+		}
+	};
+
 	class Node {
 	public:
 		vector<int16_t> states;
@@ -477,6 +503,9 @@ namespace Inavap {
                 // initialize Restricted DD Node from Node_t.
                 explicit RDDNode(Node node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
                                 nodeLayer{0}, state2{0}, incomingArc{0}, states{move(node.states)}{}
+
+        		// explicit RDDNode(Node &&node): id{0}, globalLayer{node.globalLayer}, nodeLayer{0},
+        		// 		state2{numeric_limits<double>::lowest()}, incomingArc{0}, states{move(node.states)}{}
 
                 // uint getNodeLayer() const noexcept {return nodeLayer;}
                 // uint getGlobalLayer() const noexcept {return globalLayer;}
@@ -581,6 +610,7 @@ namespace Inavap {
 		void updateTree();
 
 	public:
+		RelaxedDD(const shared_ptr<const Network>& network) : networkPtr{network}{}
 		void buildTree(Node root);
 
 		double applyOptimalityCut(const Inavap::Cut &cut);
