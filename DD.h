@@ -516,7 +516,7 @@ namespace Inavap {
 		/* actually we don't need store arcs in the first place to maintain the relationship between parent and child.
 		 * Since a node has one parent, we can store the arc information in the node itself and remove the arcs
 		 * container. Implement this if desperate for performance. */
-
+	public:
 		const shared_ptr<const Network> networkPtr;
 		unordered_map<uint, RDDNode> nodes;
 		unordered_map<uint, DDArc> arcs;
@@ -582,6 +582,7 @@ namespace Inavap {
                         globalLayer{static_cast<uint16_t>(node_.globalLayer)}, nodeLayer{0}, state2{0}{}
 
 		};
+	public:
 
 		const shared_ptr<const Network> networkPtr;
 		unordered_map<uint, LDDNode> nodes;
@@ -609,7 +610,7 @@ namespace Inavap {
 		void batchRemoveNodes(vector<uint> &nodeIds);
 		void updateTree();
 
-	public:
+	// public:
 		RelaxedDD(const shared_ptr<const Network>& network) : networkPtr{network}{}
 		void buildTree(Node root);
 

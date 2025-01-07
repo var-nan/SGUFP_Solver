@@ -1987,8 +1987,9 @@ optional<vector<Inavap::Node>> Inavap::RestrictedDD::buildTree(Inavap::Node root
 			updateStates(currentLayer, statesVector);
 		}
 
+		bool stateChangesNext = networkPtr->hasStateChanged[a+1];
 		vector<uint> nextLayer = buildNextLayer(currentLayer,nextLayerSize,
-			networkPtr->hasStateChanged[a+1], isExact);
+			stateChangesNext, isExact);
 		if (isExact) exactLayer++; // at last, this number should be exact layer number.
 		++index;
 		tree.push_back(nextLayer);
@@ -2008,7 +2009,7 @@ optional<vector<Inavap::Node>> Inavap::RestrictedDD::buildTree(Inavap::Node root
 	 * in terminal layer. Terminal node doesn't store the incoming arcs, instead terminal arcs are stored and
 	 * modified separately in the RestrictedDD class.
 	 */
-	terminalInArcs.reserve(nextLayerSize);
+	// terminalInArcs.reserve(nextLayerSize);
 	for (auto id : currentLayer) {
 		// create new arc for each node in current layer. we do not create separate arc for '0'.
 		auto& parentNode = nodes[id];
@@ -2054,7 +2055,7 @@ vector<int16_t> Inavap::RestrictedDD::getSolutionForNode(uint id) const {
 vector<Inavap::Node> Inavap::RestrictedDD::generateExactCutSet(uint layer) const{
 	// find exact layer first, then generate solution for each node in cutset.
 	vector<Node> cutsetNodes;
-	cutsetNodes.reserve(WIDTH);
+	cutsetNodes.reserve(tree[layer].size());
 
 	for (const auto id: tree[layer]) {
 		const auto& node = nodes.at(id);
@@ -2099,20 +2100,21 @@ vector<uint> Inavap::RestrictedDD::buildRestrictedLayer(const vector<uint> &curr
 	for (const auto id: currentLayer) {
 		// invariant: node Id and the arc incoming to the node will have same id.
 		auto& parent = nodes[id];
-		int16_t decision = parent.states.back();
+		int16_t decision = parent.states.back(); // get last decision from parent states.
 		auto childStates = parent.states;
 		if (decision != -1) { // remove decision from child states.
-			childStates.erase(find(childStates.begin(), childStates.end(), decision), childStates.end());
+			childStates.erase(find(childStates.begin(), childStates.end(), decision));
 		}
 		uint index = ++lastInserted;
 		// create new node with this decision.
 		DDArc arc{index, id, index, decision};
+		parent.outgoingArcs.push_back(arc.id);
 		RDDNode childNode {index};
 		childNode.globalLayer = parent.globalLayer + 1;
 		childNode.nodeLayer = parent.nodeLayer + 1;
 		childNode.incomingArc = index;
-
 		childNode.states = move(childStates);
+		nextLayer.push_back(childNode.id);
 		nodes.insert(make_pair(index, childNode));
 		arcs.insert(make_pair(index, arc));
 	}
@@ -2143,9 +2145,10 @@ vector<uint> Inavap::RestrictedDD::buildNextLayer(const vector<uint> &currentLay
 				auto index = ++lastInserted;
 				RDDNode node{index};
 				DDArc arc{index, parentNode.id, node.id, decision};
+				parentNode.outgoingArcs.push_back(arc.id);
 				node.states = parentStates;
-				if (decision != -1) node.states.erase(find(node.states.begin(), node.states.end(), -1));
-				node.incomingArc = parentNode.id;
+				if (decision != -1) node.states.erase(find(node.states.begin(), node.states.end(), decision));
+				node.incomingArc = arc.id;
 				node.nodeLayer = parentNode.nodeLayer+1;
 				node.globalLayer = parentNode.globalLayer + 1;
 				nextLayerSize += node.states.size(); // update next layer size.
