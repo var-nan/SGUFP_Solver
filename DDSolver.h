@@ -287,6 +287,18 @@ namespace Inavap {
         };
 
         class NodeQueue {
+
+            /* To dynamically change the queue order at runtime, a new 8-bit field "priority" is added
+             * to Node type. The priority value is calculated as:
+             *
+             * weight_DFS = 0.5, weight_BFS = 0.5
+             *
+             * priority = (weight_DFS) * globalLayer + (weight_BFS)*(1/globalLayer)
+             *
+             * The value is normalized to 2^8 if needed. The master thread can modify the priority by
+             * changing the weights of DFS and BFS.
+             */
+
             struct comparator {
                 bool operator() (const Node &node1, const Node &node2) const {
                     return node1.globalLayer > node2.globalLayer;
@@ -337,18 +349,19 @@ namespace Inavap {
             void operator() (DDSolver &solver);
         };
 
-        vector<Payload> payloads{NUM_WORKERS};
+        vector<Payload> payloads; // individual payloads for worker threads.
         CutResource CutResources;
         shared_ptr<Network> networkPtr;
         std::atomic_bool isCompleted{false};
         const uint16_t N_WORKERS;
-        vector<thread> workers;
+        vector<thread> workers; // worker threads.
 
         atomic<double> optimal;
 
 
     public:
-        explicit DDSolver(const shared_ptr<Network> &networkPtr_, uint16_t nWorkers): networkPtr{networkPtr_}, N_WORKERS{nWorkers} {}
+        explicit DDSolver(const shared_ptr<Network> &networkPtr_, uint16_t nWorkers):
+            networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers} {}
 
 
         void startSolver();
