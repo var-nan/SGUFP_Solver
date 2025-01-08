@@ -5,6 +5,8 @@
 #ifndef NODEEXPLORER_H
 #define NODEEXPLORER_H
 
+#include <utility>
+
 #include "DD.h"
 #include "Cut.h"
 #include "gurobi_c++.h"
@@ -74,17 +76,29 @@ public:
 
 namespace Inavap {
 
+    /* Return Object from the Node Explorer to the DDSolver. */
     using OutObject = struct OutObj{
-        double lb;
-        double ub;
+        double lb = std::numeric_limits<double>::lowest();
+        /* reason: new (empty) nodes should not be processed (or sent to queue) if not initialized. */
+        double ub = std::numeric_limits<double>::lowest();
         vector<Node> nodes;
         uint16_t status; // status bits after processing the node.
+        /* this will hold the status of the node explorer operation on the given node.
+         * 0X0 - fail
+         * 0X1 - success
+         * 0X2 - Success (with empty nodes returned).
+         */
 
-        OutObj(double lb_, double ub_, vector<Node> nodes_, uint16_t status_) :
-                lb{lb_}, ub{ub_}, nodes{nodes_}, status{status_}{}
+        // OutObj() = default;
+        OutObj(const double lb_, const double ub_, vector<Node> nodes_, const uint16_t status_) :
+                lb{lb_}, ub{ub_}, nodes{std::move(nodes_)}, status{status_}{}
         //
 
     };
+
+    constexpr static auto INVALID_OBJECT = OutObject{std::numeric_limits<double>::lowest(),
+                                                std::numeric_limits<double>::lowest(),
+                                                    {}, false};
 
     class NodeExplorer {
         GRBEnv env = GRBEnv();
