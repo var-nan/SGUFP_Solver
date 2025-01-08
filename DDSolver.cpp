@@ -590,24 +590,31 @@ void Inavap::DDSolver::Master::operator()(DDSolver &solver) {
 		return cuts;
 	};
 
-	while (!solver.isCompleted) {
+	while (!solverPtr->isCompleted) {
+		// number of idle workers, and number of processing workers.
 		uint16_t idle = 0, processing = 0;
 
+		// containers to hold the cuts shared by the workers.
 		vector<CutContainer> feasibilityCuts;
 		vector<CutContainer> optimalityCuts;
 
 		// iterate through all workers.
 		for (uint16_t i = 0; i < NUM_WORKERS; i++) {
-			auto& worker = solver.payloads[i];
-			auto workerCuts = func(worker);
+			auto& worker = solverPtr->payloads[i];
+			pair<CutContainer, CutContainer> workerCuts;
 			{
+				/* Worker might share cuts anytime. Instead of double locking for cuts and status check, acquire lock
+				 * on entire payload before operation starts.*/
+				scoped_lock l{worker.lock};
+				workerCuts = func(worker);
 				// st cannot be reordered with the below instructions. (invariant).
 				auto st = worker.payloadStatus.load(memory_order::relaxed);
 				if (st == Payload::WORKER_WORKING) {
 					processing++;
 				}
 				else if (st == Payload::WORKER_SHARED_NODES) {
-					scoped_lock l{worker.lock};
+					// scoped_lock l{worker.lock};
+					/* double check, the worker might take back the previously shared nodes if the worker is idle. */
 					st = worker.payloadStatus.load(memory_order::relaxed);
 					if (st == Payload::WORKER_SHARED_NODES) {
 						auto nodes = std::move(worker.nodes);
@@ -617,12 +624,12 @@ void Inavap::DDSolver::Master::operator()(DDSolver &solver) {
 					}
 				}
 				else if (st == Payload::WORKER_NEEDS_NODES) {
-					// status cannot changed by the worker once reached here.
+					// status cannot be changed by the worker once reached here.
 					if(!nodeQueue.empty()) {
-						{ // mutex unlocks after this scope.
-							scoped_lock l {worker.lock};
+						{ // mutex unlocks after this scope and signal can be properly viewed by worker.
+							// scoped_lock l {worker.lock};
 							uint size = nodeQueue.size();
-							size = static_cast<size_t> (ceil(size*0.4)); // share 40% of nodes to master.
+							size = static_cast<size_t> (ceil(size*PROPORTION_OF_SHARE));
 							auto nodes = nodeQueue.popNodes(size);
 							worker.nodes = std::move(nodes);
 							worker.payloadStatus.store(Payload::MASTER_ASSIGNED_NODES, memory_order::relaxed);
@@ -632,7 +639,7 @@ void Inavap::DDSolver::Master::operator()(DDSolver &solver) {
 					else idle++;
 				}
 				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
-					scoped_lock l{worker.lock};
+					// scoped_lock l{worker.lock};
 					/* reason for second check is that worker might change the status to 'WORKER_NEEDS_NODES' and wait for
 					 * master before the master changes the status to 'WORKER_WORKING',  resulting in infinite wait by the worker.*/
 					st = worker.payloadStatus.load(memory_order::relaxed);
