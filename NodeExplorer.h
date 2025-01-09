@@ -96,7 +96,7 @@ namespace Inavap {
 
     };
 
-    constexpr static auto INVALID_OBJECT = OutObject{std::numeric_limits<double>::lowest(),
+    static auto INVALID_OBJECT = OutObject{std::numeric_limits<double>::lowest(),
                                                 std::numeric_limits<double>::lowest(),
                                                     {}, false};
 

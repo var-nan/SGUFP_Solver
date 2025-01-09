@@ -599,7 +599,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
     double upperBound = node.ub;
 
     Inavap::RestrictedDD restrictedDD{networkPtr, 128};
-    auto cutset = restrictedDD.buildTree(std::move(node));
+    auto cutset = restrictedDD.buildTree(node);
 
     if (restrictedDD.isTreeExact()){
         // complete tree is built.
@@ -650,12 +650,12 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             // find out the cut type and create Inavap::Cut.
             auto temp = solver.solveSubProblemInstance(y_bar, 0);
             if (temp.cutType == FEASIBILITY) {
-                auto cut = cutToCut(temp);
+                auto cut = cutToCut(temp, networkPtr.get());
                 // feasibilityCuts.insertCut(cut); // do not move cut.
                 if (restrictedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
             }
             else {
-                auto cut = cutToCut(temp);
+                auto cut = cutToCut(temp, networkPtr.get());
                 if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB)
                     return INVALID_OBJECT;
             }
@@ -725,7 +725,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             auto y_bar = w2y(intSolution, networkPtr);
             auto temp = solver.solveSubProblemInstance(y_bar, 0);
             if (temp.cutType == FEASIBILITY) {
-                auto cut = cutToCut(temp);
+                auto cut = cutToCut(temp, networkPtr.get());
                 // ASAP insert to feasibility cuts.
                 if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
                 if (!restrictedDD.applyFeasibilityCut(cut)) {
@@ -734,7 +734,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
                 }
             }
             else {
-                auto cut = cutToCut(temp);
+                auto cut = cutToCut(temp, networkPtr.get());
                 // ASAP insert to optimality cuts.
                 if (upperBound = min(relaxedDD.applyOptimalityCut(cut),upperBound); upperBound <= optimalLB)
                     return INVALID_OBJECT;
