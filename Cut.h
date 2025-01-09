@@ -237,7 +237,7 @@ namespace Inavap {
 		}
 
 		explicit Cut(Cut&& c) noexcept :
-				hash_val{move(c.hash_val)}, RHS{c.RHS} ,coeff{move(c.coeff)}{}
+				hash_val{std::move(c.hash_val)}, RHS{c.RHS} ,coeff{std::move(c.coeff)}{}
 
 		bool operator==(const Cut& cut2) const {return cut2.hash_val == hash_val && cut2.RHS == RHS;}
 
@@ -276,7 +276,7 @@ namespace Inavap {
 			/* The reason for getStart() to return 0 if key didn't exist is, the conditional check in the below for loop
 			 * will definitely fail in first iteration if the 'q' in the key doesn't match with 'q' in the element of cut. */
 
-			for (; !((coeff[current].first & Q_MASK) ^ (key & Q_MASK)); ++current) {
+			for (; !((coeff[current].first & IQ_MASK) ^ (key & IQ_MASK)); ++current) {
 				// extract iqj and compare with key.
 				if (!((coeff[current].first & IQJ_MASK)^(key & IQJ_MASK))) return coeff[current].second;
 			}
@@ -309,7 +309,7 @@ namespace Inavap {
 		}
 
 		// TODO: define 'new' operator (efficient, without copying).
-		void insertCut(Cut&& cut) {cuts.push_back(move(cut));}
+		void insertCut(Cut&& cut) {cuts.push_back(std::move(cut));}
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
 		[[nodiscard]] size_t size() const noexcept {return cuts.size();}
 		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
@@ -329,7 +329,7 @@ namespace Inavap {
 			/* Not sure how the cast works on the bitwise operations.*/
 			uint64_t i = arc.tailId;
 			uint64_t q = arc.headId;
-			uint offset = 0;
+			uint64_t offset = 0;
 			for (uint64_t j: networkPtr->networkNodes[q].outNodeIds) {
 				double val = cut.cutCoeff.at(make_tuple(i,q,j));
 				if (val == 0.0) continue; // reduce size of cut.
