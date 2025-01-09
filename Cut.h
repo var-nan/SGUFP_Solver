@@ -95,8 +95,6 @@ public:
 	Cut(CutType cutType_, double RHS_, CutCoefficients cutCoeff_):
 		cutType{cutType_}, RHS{RHS_}, cutCoeff{std::move(cutCoeff_)}{
 			// compute hash here.
-
-
 	}
 };
 
@@ -195,53 +193,71 @@ namespace Inavap {
 	static constexpr uint64_t IQ_MASK = 0XFFFFFFFF;
 
 	class Cut {
-		size_t hash;
+		size_t hash_val;
 		double RHS;
 		// map<tuple<int,int,int>, double> coeff;
 		vector<pair<uint64_t, double>> coeff;
-		vector<uint32_t> q_offsets; // The 16 MSB contains the offset and the 16 LSB is the 'q' element.
+		// vector<uint32_t> q_offsets; // The 16 MSB contains the offset and the 16 LSB is the 'q' element.
+
+		// /**
+		//  * Returns the offset corresponding to 'q' and 'i' in the cut. The function scans all the elements in the
+		//  * offsets vector and returns the offset if match exists, else returns 0.
+		//  */
+		// [[nodiscard]] uint16_t getStart(uint16_t q) const noexcept {
+		// 	// iterate through all the elements.
+		// 	auto result = std::find_if(q_offsets.begin(), q_offsets.end(),
+		// 		[&q](const auto p) { return !((p&IQ_MASK) ^ q);});
+		// 	if (result != q_offsets.end()) return (*result)>>16; // return 16-MSB of the match.
+		// 	return 0;
+		// }
 
 		/**
-		 * Returns the offset corresponding to 'q' in the cut. The function scans all the elements in the offsets vector
-		 * and returns the offset if match exists, else returns 0.
+		 * Returns the start index corresponding to 'q' and 'i' in the cut. The function performs a jump-search on the
+		 * i_q elements in the coeff vector if match exists, else returns 0.
 		 */
-		[[nodiscard]] uint16_t getStart(uint16_t q) const noexcept {
-			// iterate through all the elements.
-			auto result = std::find_if(q_offsets.begin(), q_offsets.end(),
-				[&q](const auto p) { return !((p&Q_MASK) ^ q);});
-			if (result != q_offsets.end()) return (*result)>>16; // return 16-MSB of the match.
+		[[nodiscard]] uint16_t getStart(uint32_t qi) const noexcept {
+			// jump-search: search all q_i with offset of current q_i.
+			for (uint16_t i = 0; i < coeff.size(); ) {
+				if ((coeff[i].first & IQ_MASK) ^ qi) i += coeff[i].first >> 48; // jump to next q_i.
+				return i;
+			}
 			return 0;
 		}
 
 	public:
 
 		explicit Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
-			// TODO compute hash.
-			hash = 0;
+			hash_val = 0;
+			/* hash function: sum of (index * key + hash(val)) */
+			for (size_t i = 0; i< coeff.size(); i++) {
+				size_t val_hash = std::hash<double>{}(coeff[i].second);
+				size_t key_hash = coeff[i].first * i;
+				hash_val += (key_hash ^ val_hash);
+			}
 		}
 
 		explicit Cut(Cut&& c) noexcept :
-				hash{move(c.hash)}, RHS{c.RHS} ,coeff{move(c.coeff)}, q_offsets{move(c.q_offsets)}{}
+				hash_val{move(c.hash_val)}, RHS{c.RHS} ,coeff{move(c.coeff)}{}
 
-		bool operator==(const Cut& cut2) const {return cut2.hash == hash && cut2.RHS == RHS;}
+		bool operator==(const Cut& cut2) const {return cut2.hash_val == hash_val && cut2.RHS == RHS;}
 
 		Cut& operator=(Cut&& c) noexcept {
-			hash = c.hash;
+			hash_val = c.hash_val;
 			RHS = c.RHS;
 			coeff = std::move(c.coeff);
-			q_offsets = move(c.q_offsets);
+			// q_offsets = move(c.q_offsets);
 			return *this;
 		}
 
 		Cut& operator=(const Cut& cut2) {
-			hash = cut2.hash;
+			hash_val = cut2.hash_val;
 			RHS = cut2.RHS;
 			coeff = cut2.coeff;
-			q_offsets = cut2.q_offsets;
+			// q_offsets = cut2.q_offsets;
 			return *this;
 		}
 
-		[[nodiscard]]size_t getHash() const noexcept {return hash;}
+		[[nodiscard]]size_t getHash() const noexcept {return hash_val;}
 
 		/**
 		 * Returns the cut coefficient for the given key if exists, returns 0 otherwise.
@@ -249,11 +265,11 @@ namespace Inavap {
 		 */
 		[[nodiscard]] double get(uint64_t& key) const noexcept {
 
-			/* The 16 MSB of the key might contain offset of the q (from previous calls). If exists use it,
+			/* The 16 MSB of the key might contain offset of the qi (from previous calls). If exists use it,
 			 * else populate 16 MSB of key with the offset */
 			uint64_t current = (key>>48);
 			if (!current) {
-				current = getStart((key & Q_MASK));
+				current = getStart((key & IQ_MASK)); // current now holds index (offset) of start of q_i in coeff.
 				key |= (current<<48); // set offset in 16 MSB of key.
 			}
 
@@ -261,7 +277,7 @@ namespace Inavap {
 			 * will definitely fail in first iteration if the 'q' in the key doesn't match with 'q' in the element of cut. */
 
 			for (; !((coeff[current].first & Q_MASK) ^ (key & Q_MASK)); ++current) {
-				// extract q and compare with key.
+				// extract iqj and compare with key.
 				if (!((coeff[current].first & IQJ_MASK)^(key & IQJ_MASK))) return coeff[current].second;
 			}
 			return 0;
@@ -302,6 +318,31 @@ namespace Inavap {
 		auto begin() noexcept {return cuts.begin();}
 		auto end() noexcept {return cuts.end();}
 	};
+
+	static Inavap::Cut cutToCut(const ::Cut& cut, const Network *networkPtr) {
+		// Constructs the Inavap::Cut from ::Cut.
+		vector<pair<uint64_t, double>> coeff;
+		vector<uint32_t> q_offsets;
+		// processing order defines the global order.
+		for (const auto [index, arcId] : networkPtr->processingOrder) {
+			const auto& arc = networkPtr->networkArcs[arcId];
+			/* Not sure how the cast works on the bitwise operations.*/
+			uint64_t i = arc.tailId;
+			uint64_t q = arc.headId;
+			uint offset = 0;
+			for (uint64_t j: networkPtr->networkNodes[q].outNodeIds) {
+				double val = cut.cutCoeff.at(make_tuple(i,q,j));
+				if (val == 0.0) continue; // reduce size of cut.
+				offset++;
+				uint64_t key = Inavap::getKey(q,i,j);
+				coeff.emplace_back(key,val);
+			}
+			if (!offset) continue; // set offset information in 16MSB of coeff.first
+			uint64_t start = coeff.size() - offset;
+			coeff[start].first |= (offset << 48);
+		}
+		return Cut{cut.RHS, coeff};
+	}
 }
 
 //#endif //SGUFP_SOLVER_CUT_H
