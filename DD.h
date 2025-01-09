@@ -418,6 +418,8 @@ STATIC inline vector<uint> getShuffledList(const size_t n, const size_t m){
 
 namespace Inavap {
 
+	typedef vector<int16_t> Path;
+
 	struct set_hash {
 		size_t operator() (const set<int16_t> &s) const {
 			size_t h = 0;
@@ -455,10 +457,13 @@ namespace Inavap {
 		Node(): lb{std::numeric_limits<double>::lowest()}, ub{std::numeric_limits<double>::max()}, globalLayer{0} {}
 
 		Node(vector<int16_t> states_, vector<int16_t> solutionVector_, double lb_, double ub_, uint16_t gl_):
-			states{move(states_)}, solutionVector{move(solutionVector_)}, lb{lb_}, ub{ub_}, globalLayer{gl_}{}
+			states{std::move(states_)}, solutionVector{std::move(solutionVector_)}, lb{lb_}, ub{ub_}, globalLayer{gl_}{}
 
-		Node(Node&& node_) noexcept: states{move(node_.states)}, solutionVector{move(node_.solutionVector)},
-		                             lb{node_.lb}, ub{node_.ub}, globalLayer(node_.globalLayer) {}
+		// Node(Node&& node_) noexcept: states{move(node_.states)}, solutionVector{move(node_.solutionVector)},
+		                             // lb{node_.lb}, ub{node_.ub}, globalLayer(node_.globalLayer) {}
+
+		// Node(const Node& node) : states{node.states}, solutionVector{node.solutionVector},
+				// lb{node.lb}, ub{node.ub}, globalLayer(node.globalLayer) {}
 	};
 
 	class DDArc {
@@ -502,7 +507,7 @@ namespace Inavap {
                 explicit RDDNode(uint id_) :id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}, incomingArc{0} {}
                 // initialize Restricted DD Node from Node_t.
                 explicit RDDNode(Node node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
-                                nodeLayer{0}, state2{0}, incomingArc{0}, states{move(node.states)}{}
+                                nodeLayer{0}, state2{0}, incomingArc{0}, states{std::move(node.states)}{}
 
         		// explicit RDDNode(Node &&node): id{0}, globalLayer{node.globalLayer}, nodeLayer{0},
         		// 		state2{numeric_limits<double>::lowest()}, incomingArc{0}, states{move(node.states)}{}
@@ -531,7 +536,7 @@ namespace Inavap {
 		uint lastInserted = 0; // index of last inserted node(and arc) to the container.
 
 		// bookkeeping variables.
-		// uint status = 0;
+		uint status = 0;
 		// list of ids of deleted node that are removed from the container, but yet to remove from the tree.
 		vector<uint> deletedNodeIds;
 
@@ -561,6 +566,7 @@ namespace Inavap {
 		double applyOptimalityCut(const Inavap::Cut &cut);
 		uint8_t applyFeasibilityCut(const Inavap::Cut &cut);
 
+		[[nodiscard]] bool isTreeExact() const noexcept {return status&0b1;}
 	};
 
 	class RelaxedDD {
