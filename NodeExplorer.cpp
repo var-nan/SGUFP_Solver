@@ -601,7 +601,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
     Inavap::RestrictedDD restrictedDD{networkPtr, 128};
     auto cutset = restrictedDD.buildTree(node);
 
-    if (restrictedDD.isTreeExact()){
+    if (!cutset){ // TODO : set status field in RestrictedDD.
         // complete tree is built.
         // apply local cuts first.
         for (const auto& cut : feasibilityCuts) {

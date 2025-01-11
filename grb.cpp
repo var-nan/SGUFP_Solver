@@ -555,22 +555,22 @@ Cut GuroSolver::solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar
 		type = FEASIBILITY;
 	}
 
-	// create new cut from the cut.
-	vector<pair<uint64_t, double>> newCut;
-	// processing order defines the global order of tree.
-	for (const auto&[index, arcId] : networkPtr->processingOrder) {
-		const auto& arc = arcs[arcId];
-		uint64_t i = arc.tailId;
-		uint64_t q = arc.headId;
-		// get j
-		for (uint64_t j : nodes[q].outNodeIds) {
-			uint64_t key = Inavap::getKey(q,i,j);
-			double val = Y_bar_coef[make_tuple(i,q,j)];
-			newCut.emplace_back(key,val);
-		}
-	}
-	// build new cut
-	Inavap::Cut newC {rhs, newCut};
+	// // create new cut from the cut.
+	// vector<pair<uint64_t, double>> newCut;
+	// // processing order defines the global order of tree.
+	// for (const auto&[index, arcId] : networkPtr->processingOrder) {
+	// 	const auto& arc = arcs[arcId];
+	// 	uint64_t i = arc.tailId;
+	// 	uint64_t q = arc.headId;
+	// 	// get j
+	// 	for (uint64_t j : nodes[q].outNodeIds) {
+	// 		uint64_t key = Inavap::getKey(q,i,j);
+	// 		double val = Y_bar_coef[make_tuple(i,q,j)];
+	// 		newCut.emplace_back(key,val);
+	// 	}
+	// }
+	// // build new cut
+	// Inavap::Cut newC {rhs, newCut};
 	// reset the model.
 	//model.reset(1); // clean up gurobi variables.
 	for (int i = 0; i < n; i++){

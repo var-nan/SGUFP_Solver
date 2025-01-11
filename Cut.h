@@ -239,6 +239,8 @@ namespace Inavap {
 		explicit Cut(Cut&& c) noexcept :
 				hash_val{std::move(c.hash_val)}, RHS{c.RHS} ,coeff{std::move(c.coeff)}{}
 
+		explicit Cut(const Cut &c) = default;
+
 		bool operator==(const Cut& cut2) const {return cut2.hash_val == hash_val && cut2.RHS == RHS;}
 
 		Cut& operator=(Cut&& c) noexcept {
@@ -307,6 +309,9 @@ namespace Inavap {
 			cuts = std::move(c.cuts);
 			return *this;
 		}
+
+		CutContainer(const CutContainer &) = default;
+		CutContainer& operator=(const CutContainer &) = default;
 
 		// TODO: define 'new' operator (efficient, without copying).
 		void insertCut(Cut&& cut) {cuts.push_back(std::move(cut));}

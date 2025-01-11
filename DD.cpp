@@ -2023,7 +2023,8 @@ optional<vector<Inavap::Node>> Inavap::RestrictedDD::buildTree(Inavap::Node root
 
 	nodes.insert(make_pair(terminalId, terminalNode));
 
-	if (exactLayer == index-1) return {};
+	// if (exactLayer == index-1) return {};
+	if (isExact) return {};
 	return generateExactCutSet(exactLayer);
 }
 
