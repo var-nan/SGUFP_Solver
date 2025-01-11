@@ -722,8 +722,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 
 	NodeExplorer explorer{networkPtr};
 	auto& payload = solver->payloads[id];
-	auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n";
-	cout << str <<  endl;
+	// auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n"; cout << str <<  endl;
 	NodeQueue localQueue;
 	double zOpt = solver->optimal.load(memory_order::relaxed);
 
@@ -751,7 +750,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		}
 
 		while (!localQueue.empty()) {
-			cout << "worker: " << id << " processing " << endl;
+			// cout << "worker: " << id << " processing " << endl;
 
 			// get updated cuts from global space.
 			if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
@@ -764,7 +763,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			// Node node = localQueue.popNode();
 			auto result = explorer.process(localQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
 			nProcessed++;
-			auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
+			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
 
 			if (result.status) {
 				//
@@ -853,6 +852,8 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 	payloadStatus.store(WORKER_NEEDS_NODES, memory_order::relaxed);
 	uint st;
 
+	cout << "Node Queue is empty. Indicating Master. " << endl;
+
 	/* Conditionally wait for the nodes until master wakes (signals) this worker. The master can also set the
 	 * status as finished when all the other threads are waiting for the nodes and the master's queue is empty.
 	 *
@@ -901,10 +902,10 @@ void Inavap::DDSolver::startSolver() {
 	// all payloads are ready. launch threads.
 	// workers = vector<thread>();
 	for (uint i = 0; i < N_WORKERS; i++) {
-		// Worker worker{i, networkPtr};
-		// workersGroup.push_back(worker);
-		// workers.push_back(thread{&Worker::startWorker, &worker, this});
-		workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
+		Worker worker{i, networkPtr};
+		workersGroup.push_back(worker);
+		workers.push_back(thread{&Worker::startWorker, &workersGroup[i], this});
+		// workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
 	}
 	// start master
 	// Master m{networkPtr};

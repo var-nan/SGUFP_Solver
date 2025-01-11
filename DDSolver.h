@@ -363,11 +363,9 @@ namespace Inavap {
 
     public:
         explicit DDSolver(const shared_ptr<Network> &networkPtr_, uint16_t nWorkers):
-            networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers}{
-
-            for (uint i = 0; i < nWorkers; i++) {
-                workersGroup.emplace_back(Worker(i, networkPtr_));
-            }
+            networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers} {
+            workers.reserve(N_WORKERS);
+            workersGroup.reserve(N_WORKERS);
         }
 
 
