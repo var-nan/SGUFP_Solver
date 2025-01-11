@@ -590,8 +590,6 @@ static void updateNodeBounds(vector<Inavap::Node>& nodes, double lowerBound, dou
 
 Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
         const vector<CutContainer *>& globalFCuts, const vector<CutContainer *>& globalOCuts) {
-    // Fill this later.
-    // Inavap::OutObject outobj;
 
     // copied from Node Explorer 5.
 
@@ -651,11 +649,12 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             auto temp = solver.solveSubProblemInstance(y_bar, 0);
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
-                // feasibilityCuts.insertCut(cut); // do not move cut.
+                feasibilityCuts.insertCut(cut); // do not move cut.
                 if (restrictedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
             }
             else {
                 auto cut = cutToCut(temp, networkPtr.get());
+                optimalityCuts.insertCut(cut);
                 if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB)
                     return INVALID_OBJECT;
             }
@@ -727,6 +726,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
                 // ASAP insert to feasibility cuts.
+                feasibilityCuts.insertCut(cut);
                 if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
                 if (!restrictedDD.applyFeasibilityCut(cut)) {
                     updateNodeBounds(cutset.value(), lowerBound, upperBound);
@@ -736,6 +736,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             else {
                 auto cut = cutToCut(temp, networkPtr.get());
                 // ASAP insert to optimality cuts.
+                optimalityCuts.insertCut(cut);
                 if (upperBound = min(relaxedDD.applyOptimalityCut(cut),upperBound); upperBound <= optimalLB)
                     return INVALID_OBJECT;
                 if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
