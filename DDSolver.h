@@ -321,7 +321,7 @@ namespace Inavap {
         };
 
         class Worker {
-            uint id;
+            const uint id;
             vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
             vector<CutContainer *> feasCutsGlobal; // pointers to global feasibility cut containers.
             shared_ptr<Network> networkPtr;
@@ -355,14 +355,20 @@ namespace Inavap {
         shared_ptr<Network> networkPtr;
         std::atomic_bool isCompleted{false};
         const uint16_t N_WORKERS;
+        vector<Worker> workersGroup;
         vector<thread> workers; // worker threads.
 
-        atomic<double> optimal;
+        atomic<double> optimal = std::atomic<double>(std::numeric_limits<double>::lowest());
 
 
     public:
         explicit DDSolver(const shared_ptr<Network> &networkPtr_, uint16_t nWorkers):
-            networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers} {}
+            networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers}{
+
+            for (uint i = 0; i < nWorkers; i++) {
+                workersGroup.emplace_back(Worker(i, networkPtr_));
+            }
+        }
 
 
         void startSolver();

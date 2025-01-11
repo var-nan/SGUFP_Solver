@@ -695,7 +695,7 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		addCutsToGlobal(solver, p);
 
 		// process some nodes from local queue?
-		nProcessed += processNodes(solver, explorer, 4);
+		// nProcessed += processNodes(solver, explorer, 4);
 	}
 	// post-completion tasks by master?
 }
@@ -722,6 +722,8 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 
 	NodeExplorer explorer{networkPtr};
 	auto& payload = solver->payloads[id];
+	auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n";
+	cout << str <<  endl;
 	NodeQueue localQueue;
 	double zOpt = solver->optimal.load(memory_order::relaxed);
 
@@ -749,6 +751,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		}
 
 		while (!localQueue.empty()) {
+			cout << "worker: " << id << " processing " << endl;
 
 			// get updated cuts from global space.
 			if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
@@ -761,6 +764,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			// Node node = localQueue.popNode();
 			auto result = explorer.process(localQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
 			nProcessed++;
+			auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
 
 			if (result.status) {
 				//
@@ -770,6 +774,12 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 					 * Can be replaced with compare_exchange_strong, but might need additional check. */
 					while (!solver->optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)
 						&& (zOpt < result.lb)) {}
+
+					 if (result.lb == zOpt) {
+					 	const auto now = std::chrono::system_clock::now();
+					 	const auto t_c = std::chrono::system_clock::to_time_t(now);
+					 	cout << "Thread: " << id << " , optimal lb: " << zOpt << " set at, " << std::ctime(&t_c) << endl;
+					 }
 
 					counter = 0;
 				}
@@ -862,11 +872,15 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 
 void Inavap::DDSolver::startSolver() {
 
+	cout << "Starting DD Solver." << endl;
+
 	// create initial restricted tree and get cutset with desired max width.
 
-	RestrictedDD restrictedDD{networkPtr, 128};
+	RestrictedDD restrictedDD{networkPtr, 64};
 	Node root;
 	auto cutset = restrictedDD.buildTree(root);
+
+	if (cutset) cout << "Number of nodes from teh first tree: " << cutset.value().size() << endl;
 
 	vector<Node> cutsetNodes = cutset.value();
 	// assume nodes is a vector of nodes.
@@ -877,18 +891,26 @@ void Inavap::DDSolver::startSolver() {
 		payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
 	}
 
+
+	// static assert
+	// assert(0 == 1);
+	// for (const auto& payload: payloads) {
+	// 	assertm("Payload is empty.", !payload.nodes.empty());
+	// }
+
 	// all payloads are ready. launch threads.
 	// workers = vector<thread>();
 	for (uint i = 0; i < N_WORKERS; i++) {
-		Worker worker{i, networkPtr};
-		workers.push_back(thread{&Worker::startWorker, &worker, this});
-		// workers[i] = thread{&Worker::startWorker, &worker, this};
+		// Worker worker{i, networkPtr};
+		// workersGroup.push_back(worker);
+		// workers.push_back(thread{&Worker::startWorker, &worker, this});
+		workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
 	}
 	// start master
-	Master m{networkPtr};
-	std::thread master (&Master::startMaster, &m, std::ref(*this));
-
-	if (master.joinable()) master.join();
+	// Master m{networkPtr};
+	// std::thread master (&Master::startMaster, &m, std::ref(*this));
+	// if (master.joinable()) master.join();
+	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
 	for (unsigned int i = 0; i < N_WORKERS; i++) {
 		if (workers[i].joinable()) workers[i].join();
 	}
@@ -896,4 +918,27 @@ void Inavap::DDSolver::startSolver() {
 	// destruct global cuts?
 	cout << "Optimal Solution: " << optimal.load() << endl;
 
+}
+
+void Inavap::DDSolver::NodeQueue::pushNode(Node node) {
+	// push to local queue.
+	pq.push(std::move(node));
+}
+
+void Inavap::DDSolver::NodeQueue::pushNodes(vector<Node> nodes) {
+	for (auto&& node : nodes) pq.push(std::move(node));
+}
+
+Inavap::Node Inavap::DDSolver::NodeQueue::popNode() {
+	auto node = pq.top();
+	pq.pop();
+	return node;
+}
+
+vector<Inavap::Node> Inavap::DDSolver::NodeQueue::popNodes(size_t n) {
+	vector<Inavap::Node> nodes;
+	n = min(n, pq.size());
+	nodes.reserve(n);
+	while (n--) { nodes.emplace_back(pq.top()); pq.pop(); }
+	return nodes;
 }
