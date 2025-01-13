@@ -819,6 +819,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	}
 
 	// display cut statistics. append to global string instead of printing.
+	cout << "Number of nodes processed: " << nProcessed << endl;
 }
 
 void Inavap::DDSolver::Worker::shareCutsWithMaster(NodeExplorer &explorer, Inavap::DDSolver::Payload &payload) {

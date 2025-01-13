@@ -188,9 +188,10 @@ namespace Inavap {
 		uint16_t q;
 	};
 
-	static constexpr uint64_t Q_MASK = 0XFFFF;
-	static constexpr uint64_t IQJ_MASK = 0XFFFFFFFFFFFF;
-	static constexpr uint64_t IQ_MASK = 0XFFFFFFFF;
+	static constexpr uint64_t Q_MASK			= 0XFFFF;
+	static constexpr uint64_t IQ_MASK			= 0XFFFFFFF;
+	static constexpr uint64_t IQJ_MASK			= 0XFFFFFFFFFFFF;
+	static constexpr uint64_t EXTRACT_16_LSB	= 0XFFFF;
 
 	class Cut {
 		size_t hash_val;
@@ -210,6 +211,7 @@ namespace Inavap {
 		// 	if (result != q_offsets.end()) return (*result)>>16; // return 16-MSB of the match.
 		// 	return 0;
 		// }
+	public:
 
 		/**
 		 * Returns the start index corresponding to 'q' and 'i' in the cut. The function performs a jump-search on the
@@ -224,7 +226,7 @@ namespace Inavap {
 			return 0;
 		}
 
-	public:
+	// public:
 
 		explicit Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
 			hash_val = 0;
@@ -237,9 +239,9 @@ namespace Inavap {
 		}
 
 		explicit Cut(Cut&& c) noexcept :
-				hash_val{std::move(c.hash_val)}, RHS{c.RHS} ,coeff{std::move(c.coeff)}{}
+				hash_val{c.hash_val}, RHS{c.RHS} ,coeff{std::move(c.coeff)}{}
 
-		explicit Cut(const Cut &c) : hash_val{c.hash_val}, RHS{c.RHS} ,coeff{c.coeff} {}
+		Cut(const Cut &c) : hash_val{c.hash_val}, RHS{c.RHS} ,coeff{c.coeff} {}
 
 		bool operator==(const Cut& cut2) const {return cut2.hash_val == hash_val && cut2.RHS == RHS;}
 
@@ -251,13 +253,7 @@ namespace Inavap {
 			return *this;
 		}
 
-		Cut& operator=(const Cut& cut2) {
-			hash_val = cut2.hash_val;
-			RHS = cut2.RHS;
-			coeff = cut2.coeff;
-			// q_offsets = cut2.q_offsets;
-			return *this;
-		}
+		Cut& operator=(const Cut& cut2) = default;
 
 		[[nodiscard]]size_t getHash() const noexcept {return hash_val;}
 
@@ -266,6 +262,13 @@ namespace Inavap {
 		 * The key is divided into 4 words (offset, j, i, q).
 		 */
 		[[nodiscard]] double get(uint64_t& key) const noexcept {
+
+			/* Linear search. revert to original after fixing the original strategy. */
+			for (const auto& [k, v] : coeff) {
+				uint64_t expected = (k&IQJ_MASK), actual = (key&IQJ_MASK);
+				if (!(expected ^ actual)) return v;
+			}
+			return 0;
 
 			/* The 16 MSB of the key might contain offset of the qi (from previous calls). If exists use it,
 			 * else populate 16 MSB of key with the offset */
@@ -287,6 +290,37 @@ namespace Inavap {
 
 		[[nodiscard]] double getRHS() const noexcept {return RHS;}
 
+		// print function.
+		void printCut(int cut_type) const noexcept {
+			if (cut_type == 1) cout << "Feasibility Cut, RHS: " << RHS;
+			else cout << "Optimality Cut, RHS: "<< RHS;
+			cout << " Hash: " << hash_val << endl;
+			for (const auto& c : coeff) {
+				cout << "[(" << ((c.first>>16) & EXTRACT_16_LSB) << ","
+				<< ((c.first)&EXTRACT_16_LSB) << ","
+				<< ((c.first>>32) & EXTRACT_16_LSB) << ")"
+				<< ":" << c.second <<"]\n"; //endl;
+			}
+			cout.flush();
+		}
+
+		void printOffsets() const noexcept {
+			// print only offsets.
+			for (const auto& c: coeff) {
+				cout << "(" << (c.first&EXTRACT_16_LSB) << ",\t"
+				<< ((c.first>>16)&EXTRACT_16_LSB) << ",\t"
+				<< ((c.first>>32)&EXTRACT_16_LSB) << ",\t"
+				<< ((c.first>>48)&EXTRACT_16_LSB) <<")"<< endl;
+			}
+		}
+
+
+		void printFullCut() const noexcept {
+			cout << "RHS: " << RHS << endl;
+			for (const auto &c: coeff) {
+				cout << "{" << c.first << "," << c.second << "}" << endl;
+			}
+		}
 	};
 
 	/**
@@ -327,7 +361,7 @@ namespace Inavap {
 	static Inavap::Cut cutToCut(const ::Cut& cut, const Network *networkPtr) {
 		// Constructs the Inavap::Cut from ::Cut.
 		vector<pair<uint64_t, double>> coeff;
-		vector<uint32_t> q_offsets;
+		// vector<uint32_t> q_offsets;
 		// processing order defines the global order.
 		for (const auto [index, arcId] : networkPtr->processingOrder) {
 			const auto& arc = networkPtr->networkArcs[arcId];
@@ -336,14 +370,15 @@ namespace Inavap {
 			uint64_t q = arc.headId;
 			uint64_t offset = 0;
 			for (uint64_t j: networkPtr->networkNodes[q].outNodeIds) {
+				// typically the original cut should contain mapping to all permutations of (i,q,j).
 				double val = cut.cutCoeff.at(make_tuple(i,q,j));
-				if (val == 0.0) continue; // reduce size of cut.
+				if (val == 0.0) continue; // reduce size of cut, do not store zero coeffs.
 				offset++;
 				uint64_t key = Inavap::getKey(q,i,j);
 				coeff.emplace_back(key,val);
 			}
 			if (!offset) continue; // set offset information in 16MSB of coeff.first
-			uint64_t start = coeff.size() - offset;
+			uint64_t start = coeff.size() - offset; // this should give start of new IQ.
 			coeff[start].first |= (offset << 48);
 		}
 		return Cut{cut.RHS, coeff};

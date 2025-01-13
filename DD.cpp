@@ -1953,6 +1953,7 @@ optional<vector<Inavap::Node>> Inavap::RestrictedDD::buildTree(Inavap::Node root
 	// set the node to the root.
 	vector<uint> currentLayer; // should be root layer.
 	startTree = root.globalLayer;
+	rootSolution = root.solutionVector;
 
 	RDDNode node{move(root)};
 
@@ -2314,7 +2315,7 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 	size_t i = 0;
 	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
 [&processingOrder, &netArcs, &i, &cut](double val , int decision) { // pass reference to val?
-			if (decision == -1) return val;
+			if (decision == -1) {i++;return val;}
 			auto netArcId = processingOrder[i++].second;
 			auto iNetId = netArcs[netArcId].tailId;
 			auto qNetId = netArcs[netArcId].headId;
@@ -2326,7 +2327,7 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 
 	// apply function to each layer.
 
-	size_t index = startTree; // TODO set correct index.
+	size_t index = i; // start from index where the root solution ends.
 
 	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index](const auto& layer) {
 		const auto netArcId = processingOrder[index++].second;
@@ -2359,7 +2360,7 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 	for_each(tree.begin()+1, tree.begin()+offset, processLayer);
 
 	// terminal layer.
-	auto& terminalNode = nodes[tree[offset][0]];
+	auto& terminalNode = nodes[terminalId];
 	double terminalState = INT32_MIN;
 
 	for_each(terminalInArcs.begin(), terminalInArcs.end(),[this, &terminalState](auto arcId) {
@@ -2383,7 +2384,7 @@ uint8_t Inavap::RestrictedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 	// compute justified RHS for the root node.
 	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
 [&processingOrder, &netArcs, &i, &cut](double val , const int decision) {
-			if (decision == -1) return val;
+			if (decision == -1) {i++; return val;}
 			auto netArcId = processingOrder[i++].second;
 			auto iNetId = netArcs[netArcId].tailId;
 			auto qNetId = netArcs[netArcId].headId;
@@ -2395,7 +2396,7 @@ uint8_t Inavap::RestrictedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 
 	// nodes to remove.
 	vui nodesToRemove;
-	size_t index = startTree; // index of element in processing order vector. TODO verify this.
+	size_t index = i;// startTree; // index of element in processing order vector. TODO verify this.
 
 	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index, &nodesToRemove](const auto& layer) {
 		const auto netArcId = processingOrder[index++].second;
@@ -2409,7 +2410,7 @@ uint8_t Inavap::RestrictedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 			auto& inArc = arcs[node.incomingArc];
 			const auto& parentNode = nodes[inArc.tail];
 			// early stopping if decision == -1 without changing the arc weight.
-			if (inArc.weight == -1) {node.state2 = parentNode.state2; return;}
+			if (inArc.decision == -1) {node.state2 = parentNode.state2; return;}
 			// inArc.weight = 0;
 			// if (inArc.decision != -1) {
 			// 	auto jNetId = netArcs[inArc.decision].headId;
@@ -2603,9 +2604,10 @@ void Inavap::RelaxedDD::buildTree(Node node) {
 	// create root node and insert it.
 	LDDNode root{0};
 	root.globalLayer = node.globalLayer;
+	startTree = node.globalLayer;
 	root.nodeLayer = 0;
-	root.states = move(node.states);
-	rootSolution = move(node.solutionVector);
+	root.states = std::move(node.states);
+	rootSolution = std::move(node.solutionVector);
 	// insert root to the container.
 	nodes.insert(make_pair(0, root));
 	// setup root node and root layer.
@@ -2783,7 +2785,7 @@ double Inavap::RelaxedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 	// compute justified RHS for root node.
 	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
 [&processingOrder, &netArcs, &i, &cut](const double val , const int decision) {
-			if (decision == -1) return val;
+			if (decision == -1) {i++; return val;}
 			auto netArcId = processingOrder[i++].second;
 			auto iNetId = netArcs[netArcId].tailId;
 			auto qNetId = netArcs[netArcId].headId;
@@ -2794,7 +2796,7 @@ double Inavap::RelaxedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 	);
 
 	size_t offset = tree.size()-1;
-	size_t index = startTree; // TODO set correct index.
+	size_t index = i; //startTree; // TODO set correct index.
 
 	/* Nested lambda functions to apply cut on each layer and each node in the selected layer respectively. The cut
 	 * will be applied sequentially on each layer from the root to the terminal layer (both excluding). The functions
@@ -2826,8 +2828,10 @@ double Inavap::RelaxedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 			node.state2 = std::accumulate(node.incomingArcs.begin(), node.incomingArcs.end(), numeric_limits<double>::lowest(),
 				[this, &netArcs, &cut, &qNetId, &iNetId](const double val, const int inArcId) {
 					auto& inArc = arcs[inArcId];
-					if (inArc.decision == -1) return val;
+					inArc.weight = 0;
 					const auto& parentNode = nodes[inArc.tail];
+					if (inArc.decision == -1) return max(val, parentNode.state2); //return val;
+					// const auto& parentNode = nodes[inArc.tail];
 					auto jNetId = netArcs[inArc.decision].headId;
 					auto key = getKey(qNetId, iNetId, jNetId);
 					inArc.weight = cut.get(key);
@@ -2840,7 +2844,7 @@ double Inavap::RelaxedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 
 	// terminal layer.
 	auto& terminalNode = nodes[terminalId];
-	double terminalState = INT32_MIN;
+	double terminalState = INT32_MIN; // changing it to double::lowest() is acting weird, fix this later.
 
 	/* From the incoming arcs of terminal node, update the arc with new state. Find the arc with maximum state. */
 	for_each(terminalNode.incomingArcs.begin(), terminalNode.incomingArcs.end(),[this, &terminalState](auto arcId) {
@@ -2862,7 +2866,7 @@ uint8_t Inavap::RelaxedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 	// compute justified RHS for root node.
 	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
 [&processingOrder, &netArcs, &i, &cut](double val , int decision) { // pass reference to val?
-			if (decision == -1) return val;
+			if (decision == -1) {i++; return val; } // might not
 			auto netArcId = processingOrder[i++].second;
 			auto iNetId = netArcs[netArcId].tailId;
 			auto qNetId = netArcs[netArcId].headId;
@@ -2873,7 +2877,7 @@ uint8_t Inavap::RelaxedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 	);
 
 	size_t offset = tree.size()-1;
-	size_t index = startTree; // index of element in processing order vector. TODO verify this.
+	size_t index = i;// startTree; // index of element in processing order vector. TODO verify this.
 
 	auto processLayer = [this, &processingOrder, &netArcs, &cut, &index](const auto& layer) {
 		const auto netArcId = processingOrder[index++].second;
@@ -2891,8 +2895,10 @@ uint8_t Inavap::RelaxedDD::applyFeasibilityCut(const Inavap::Cut &cut) {
 			node.state2 = std::accumulate(node.incomingArcs.begin(), node.incomingArcs.end(), numeric_limits<double>::lowest(),
 				[this, &netArcs, &cut, iNetId, qNetId](auto val, int inArcId) {
 					auto& inArc = arcs[inArcId];
-					if (inArc.decision == -1) return val;
-					const auto& parentNode = nodes[inArc.tail];
+					inArc.weight = 0;
+					const auto &parentNode = nodes[inArc.tail];
+					if (inArc.decision == -1) return max(val, parentNode.state2);
+					// const auto& parentNode = nodes[inArc.tail];
 					auto jNetId = netArcs[inArc.decision].headId;
 					auto key = getKey(qNetId, iNetId, jNetId);
 					inArc.weight = cut.get(key);
