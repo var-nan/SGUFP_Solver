@@ -534,6 +534,7 @@ namespace Inavap {
 
 		uint WIDTH = 0;
 		uint lastInserted = 0; // index of last inserted node(and arc) to the container.
+		uint numberOfDeletedNodes = 0;
 
 		// bookkeeping variables.
 		uint status = 0;

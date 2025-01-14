@@ -2191,6 +2191,7 @@ void Inavap::RestrictedDD::deleteArc(RDDNode& tailNode, DDArc& arc, RDDNode& hea
 void Inavap::RestrictedDD::deleteNode(RDDNode& node) {
 	deletedNodeIds.emplace_back(node.id);
 	nodes.erase(node.id);
+	numberOfDeletedNodes++;
 }
 
 void Inavap::RestrictedDD::updateTree() {
@@ -2278,6 +2279,8 @@ void Inavap::RestrictedDD::removeNode(uint id, bool isBatch) {
 	// check for root node.
 	auto& incomingArc = arcs[node.incomingArc];
 	auto& parentNode = nodes[incomingArc.tail];
+	// the deleted arc is from the terminal arcs. Update terminalArcIds vector.
+	terminalInArcs.erase(find(terminalInArcs.begin(), terminalInArcs.end(), incomingArc.id));
 	deleteArc(parentNode, incomingArc, node);
 
 	/* According to the way that feasibility cut is applied, we only remove nodes from the last layer.
