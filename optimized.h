@@ -8,6 +8,7 @@
 #include "Network.h"
 #include "Cut.h"
 #include <mutex>
+#include <atomic>
 #include <shared_mutex>
 
 #ifndef FEASIBILITY_CONTAINER_CAPACITY
@@ -26,7 +27,7 @@ namespace Inavap {
     typedef unique_lock<shared_mutex> WriterLock;
 
     class CutResource {
-        std::atomic<uint> count = 0; // add padding to different cache line. // sum of opt and feas containers.
+        std::atomic<uint> count = std::atomic<uint>(0); // add padding to different cache line. // sum of opt and feas containers.
         shared_mutex m;
         // add padding to put in different cacheline.
         vector<Inavap::CutContainer *> fCutContainers;

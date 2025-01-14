@@ -853,7 +853,7 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 	payloadStatus.store(WORKER_NEEDS_NODES, memory_order::relaxed);
 	uint st;
 
-	cout << "Node Queue is empty. Indicating Master. " << endl;
+	cout << "Thread" << this_thread::get_id() << " Node Queue is empty. Indicating Master. " << endl;
 
 	/* Conditionally wait for the nodes until master wakes (signals) this worker. The master can also set the
 	 * status as finished when all the other threads are waiting for the nodes and the master's queue is empty.
