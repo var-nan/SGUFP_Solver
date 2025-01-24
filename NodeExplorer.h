@@ -118,6 +118,8 @@ namespace Inavap {
         OutObject process(Node node, double optimalLB,
             const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts);
 
+        OutObject process2(Node node, double optimalLB);
+
     };
 }
 

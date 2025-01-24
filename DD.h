@@ -454,7 +454,7 @@ namespace Inavap {
 		double ub;
 		uint16_t globalLayer;
 
-		Node(): lb{std::numeric_limits<double>::lowest()}, ub{std::numeric_limits<double>::max()}, globalLayer{0} {}
+		Node(): lb{std::numeric_limits<double>::lowest()}, ub{std::numeric_limits<double>::lowest()}, globalLayer{0} {}
 
 		Node(vector<int16_t> states_, vector<int16_t> solutionVector_, double lb_, double ub_, uint16_t gl_):
 			states{std::move(states_)}, solutionVector{std::move(solutionVector_)}, lb{lb_}, ub{ub_}, globalLayer{gl_}{}
@@ -464,6 +464,9 @@ namespace Inavap {
 
 		// Node(const Node& node) : states{node.states}, solutionVector{node.solutionVector},
 				// lb{node.lb}, ub{node.ub}, globalLayer(node.globalLayer) {}
+
+		Node(const Node& node) = default; // copy constructor.
+		Node& operator=(const Node& node) = default; // copy assignment. update to move semantics (asap).
 	};
 
 	class DDArc {
@@ -506,7 +509,8 @@ namespace Inavap {
                 RDDNode(): id{0}, incomingArc{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
                 explicit RDDNode(uint id_) :id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}, incomingArc{0} {}
                 // initialize Restricted DD Node from Node_t.
-                explicit RDDNode(Node node) : id{0}, globalLayer{static_cast<uint16_t>(node.globalLayer)},
+        		/* constructor only used during tree compilation */
+                explicit RDDNode(Node node) : id{0}, globalLayer{node.globalLayer},
                                 nodeLayer{0}, state2{0}, incomingArc{0}, states{std::move(node.states)}{}
 
         		// explicit RDDNode(Node &&node): id{0}, globalLayer{node.globalLayer}, nodeLayer{0},
@@ -537,6 +541,9 @@ namespace Inavap {
 		uint numberOfDeletedNodes = 0;
 
 		// bookkeeping variables.
+		/* 0X0 = tree is exact (complete tree).
+		 * 0X1 = tree is restricted tree.
+		 */
 		uint status = 0;
 		// list of ids of deleted node that are removed from the container, but yet to remove from the tree.
 		vector<uint> deletedNodeIds;
@@ -567,7 +574,7 @@ namespace Inavap {
 		double applyOptimalityCut(const Inavap::Cut &cut);
 		uint8_t applyFeasibilityCut(const Inavap::Cut &cut);
 
-		[[nodiscard]] bool isTreeExact() const noexcept {return status&0b1;}
+		[[nodiscard]] bool isTreeExact() const noexcept {return !status;}
 	};
 
 	class RelaxedDD {

@@ -762,6 +762,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 
 			// Node node = localQueue.popNode();
 			auto result = explorer.process(localQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
+			// auto result = explorer.process2(localQueue.popNode(), zOpt);
 			nProcessed++;
 			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
 
@@ -773,6 +774,9 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 					 * Can be replaced with compare_exchange_strong, but might need additional check. */
 					while (!solver->optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)
 						&& (zOpt < result.lb)) {}
+
+					// zOpt is not updated after CAS operation.
+					if (solver->optimal.load(memory_order::relaxed) == result.lb) zOpt = result.lb;
 
 					 if (result.lb == zOpt) {
 					 	const auto now = std::chrono::system_clock::now();
@@ -790,14 +794,14 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			}
 
 			// look into explorer's local cuts.
-			if ((explorer.feasibilityCuts.size() + explorer.optimalityCuts.size()) > LOCAL_CUTS_LIMIT) {
-				// use different strategy.
-				scoped_lock l{payload.lock};
-				if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT) payload.fCuts = std::move(explorer.feasibilityCuts);
-				if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT) payload.oCuts = std::move(explorer.optimalityCuts);
-				// shareCutsWithMaster(explorer, payload);
-				// At this point, node explorer cuts are empty.
-			}
+			// if ((explorer.feasibilityCuts.size() + explorer.optimalityCuts.size()) > LOCAL_CUTS_LIMIT) {
+			// 	// use different strategy.
+			// 	scoped_lock l{payload.lock};
+			// 	if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT) payload.fCuts = std::move(explorer.feasibilityCuts);
+			// 	if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT) payload.oCuts = std::move(explorer.optimalityCuts);
+			// 	// shareCutsWithMaster(explorer, payload);
+			// 	// At this point, node explorer cuts are empty.
+			// }
 
             // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
 			// TODO: instead of checking in every iteration, check periodically

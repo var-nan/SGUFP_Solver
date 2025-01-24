@@ -200,6 +200,8 @@ namespace Inavap {
 		vector<pair<uint64_t, double>> coeff;
 		// vector<uint32_t> q_offsets; // The 16 MSB contains the offset and the 16 LSB is the 'q' element.
 
+		map<tuple<int,int,int>,double> cutCoeff;
+
 		// /**
 		//  * Returns the offset corresponding to 'q' and 'i' in the cut. The function scans all the elements in the
 		//  * offsets vector and returns the offset if match exists, else returns 0.
@@ -236,6 +238,11 @@ namespace Inavap {
 				size_t key_hash = coeff[i].first * i;
 				hash_val += (key_hash ^ val_hash);
 			}
+
+			// initialize cut map.
+			for (const auto& [k,v]: coeff) {
+				// extract long
+			}
 		}
 
 		explicit Cut(Cut&& c) noexcept :
@@ -265,7 +272,7 @@ namespace Inavap {
 
 			/* Linear search. revert to original after fixing the original strategy. */
 			for (const auto& [k, v] : coeff) {
-				uint64_t expected = (k&IQJ_MASK), actual = (key&IQJ_MASK);
+				uint64_t expected = (k&IQJ_MASK); uint64_t actual = (key&IQJ_MASK);
 				if (!(expected ^ actual)) return v;
 			}
 			return 0;
@@ -306,11 +313,13 @@ namespace Inavap {
 
 		void printOffsets() const noexcept {
 			// print only offsets.
+			cout << "(q, \t i, \t j, \t offset)\t Val" << endl;
 			for (const auto& c: coeff) {
 				cout << "(" << (c.first&EXTRACT_16_LSB) << ",\t"
 				<< ((c.first>>16)&EXTRACT_16_LSB) << ",\t"
 				<< ((c.first>>32)&EXTRACT_16_LSB) << ",\t"
-				<< ((c.first>>48)&EXTRACT_16_LSB) <<")"<< endl;
+				<< ((c.first>>48)&EXTRACT_16_LSB) <<")" << "\t"<< c.second
+				<< endl;
 			}
 		}
 

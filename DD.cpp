@@ -1955,18 +1955,16 @@ optional<vector<Inavap::Node>> Inavap::RestrictedDD::buildTree(Inavap::Node root
 	startTree = root.globalLayer;
 	rootSolution = root.solutionVector;
 
-	RDDNode node{move(root)};
-
-	nodes.insert(std::make_pair(node.id, node));
+	RDDNode node{root};
 	currentLayer.push_back(node.id);
 	// insert root layer to tree.
 	tree.push_back(currentLayer);
+	nodes.insert(std::make_pair(node.id, node));
 
 	auto start = arcOrder.begin() + startTree;
 	auto end = arcOrder.end();
 
-	auto dist = std::distance(start, end);
-	tree.reserve(dist);
+	tree.reserve(std::distance(start, end)); // pre-allocate in vector.
 
 	uint index = 0; // for node layer.
 	bool isExact = true;
@@ -1997,35 +1995,35 @@ optional<vector<Inavap::Node>> Inavap::RestrictedDD::buildTree(Inavap::Node root
 		currentLayer = std::move(nextLayer);
 	}
 
-	RDDNode terminalNode {++lastInserted};
+	terminalId = ++lastInserted;
+	RDDNode terminalNode {terminalId};
+	terminalNode.nodeLayer = ++index;
 	// terminal node layer.
 	vector<uint> terminalLayer;
-	terminalLayer.push_back(terminalNode.id);
+	terminalLayer.push_back(terminalId);
 	tree.push_back(terminalLayer);
-
-	terminalId = terminalNode.id;
-	terminalNode.nodeLayer = ++index;
 
 	/* NOTE:: current layer now points to last layer of tree, and nextLayerSize is the number of arcs created
 	 * in terminal layer. Terminal node doesn't store the incoming arcs, instead terminal arcs are stored and
 	 * modified separately in the RestrictedDD class.
 	 */
-	// terminalInArcs.reserve(nextLayerSize);
+	terminalInArcs.reserve(nextLayerSize);
 	for (auto id : currentLayer) {
 		// create new arc for each node in current layer. we do not create separate arc for '0'.
 		auto& parentNode = nodes[id];
-		uint arcId = ++lastInserted;
+		uint arcId = ++lastInserted; // arc and the head node have different Id.
 		DDArc arc{arcId, id, terminalId, 1};
 		arc.weight = std::numeric_limits<double>::max();
 		parentNode.outgoingArcs.push_back(arcId);
-		arcs.insert(make_pair(arcId, arc));
 		terminalInArcs.push_back(arcId);
+		arcs.insert(make_pair(arcId, arc));
 	}
 
 	nodes.insert(make_pair(terminalId, terminalNode));
 
 	// if (exactLayer == index-1) return {};
 	if (isExact) return {};
+	status = 1;
 	return generateExactCutSet(exactLayer);
 }
 
@@ -2115,7 +2113,7 @@ vector<uint> Inavap::RestrictedDD::buildRestrictedLayer(const vector<uint> &curr
 		childNode.globalLayer = parent.globalLayer + 1;
 		childNode.nodeLayer = parent.nodeLayer + 1;
 		childNode.incomingArc = index;
-		childNode.states = move(childStates);
+		childNode.states = std::move(childStates);
 		nextLayer.push_back(childNode.id);
 		nodes.insert(make_pair(index, childNode));
 		arcs.insert(make_pair(index, arc));
@@ -2133,9 +2131,9 @@ vector<uint> Inavap::RestrictedDD::buildNextLayer(const vector<uint> &currentLay
 	nextLayer.reserve(min(WIDTH, nextLayerSize));
 	nextLayerSize = 0;
 
-	uint count = 0;
-
-	if (isExact) { // tree is still exact, build complete layer.
+	if (isExact) {
+		uint count = 0;
+		// tree is still exact, build complete layer.
 		for (auto id : currentLayer) {
 			RDDNode &parentNode = nodes[id];
 			const auto parentStates = parentNode.states;
@@ -2267,7 +2265,6 @@ void Inavap::RestrictedDD::bottomUpDelete(RDDNode& node) {
  * @param isBatch - If the function is called in a batch deletions?
  */
 void Inavap::RestrictedDD::removeNode(uint id, bool isBatch) {
-
 	/* Deletes the incoming arc from parent, update its outgoing arcs and start top-down delete
 	 * for the node. Top-down delete should internally delete the given node and update the node
 	 * container. Caller is responsible to check the given id is not the root id.
@@ -2275,12 +2272,19 @@ void Inavap::RestrictedDD::removeNode(uint id, bool isBatch) {
 
 	auto& node = nodes[id];
 
+	/* NOTE: This function is only called on the nodes from the last layer (before terminal) that have only one incoming
+	 * and one outgoing arc. Incoming arc ids of the terminal node is stored separately, thus update terminalInArcs
+	 * vector explicitly.
+	 */
+	auto& outgoingArc = arcs[node.outgoingArcs[0]];
+	auto& terminalNode = nodes[terminalId];
+	terminalInArcs.erase(find(terminalInArcs.begin(), terminalInArcs.end(), outgoingArc.id));
+	deleteArc(node, outgoingArc, terminalNode); // will not update incoming of terminalNode.
+
 	// delete parent arc. must contain only one parent arc except the root.
 	// check for root node.
 	auto& incomingArc = arcs[node.incomingArc];
 	auto& parentNode = nodes[incomingArc.tail];
-	// the deleted arc is from the terminal arcs. Update terminalArcIds vector.
-	terminalInArcs.erase(find(terminalInArcs.begin(), terminalInArcs.end(), incomingArc.id));
 	deleteArc(parentNode, incomingArc, node);
 
 	/* According to the way that feasibility cut is applied, we only remove nodes from the last layer.
@@ -2317,7 +2321,7 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 	auto& rootNode = nodes[0];
 	size_t i = 0;
 	rootNode.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
-[&processingOrder, &netArcs, &i, &cut](double val , int decision) { // pass reference to val?
+[&processingOrder, &netArcs, &i, &cut](double val , int16_t decision) { // pass reference to val?
 			if (decision == -1) {i++;return val;}
 			auto netArcId = processingOrder[i++].second;
 			auto iNetId = netArcs[netArcId].tailId;
@@ -2343,7 +2347,7 @@ double Inavap::RestrictedDD::applyOptimalityCut(const Inavap::Cut &cut) {
 			auto& inArc = arcs[node.incomingArc];
 			const auto& parentNode = nodes[inArc.tail];
 			// early stopping if decision == -1 without changing the weight to zero.
-			if (inArc.decision == -1) {node.state2 = parentNode.state2; return; }
+			if (inArc.decision == -1) {inArc.weight = 0; node.state2 = parentNode.state2; return; }
 			auto jNetId = netArcs[inArc.decision].headId;
 			auto key = getKey(qNetId, iNetId, jNetId);
 			inArc.weight = cut.get(key);
