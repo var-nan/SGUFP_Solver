@@ -608,9 +608,14 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
     // copied from Node Explorer 5.
 
     double lowerBound = node.lb;
-    double upperBound = node.ub;
+    double upperBound = DOUBLE_MAX;
 
-    Inavap::RestrictedDD restrictedDD{networkPtr, 128};
+    if (optimalLB >= -2205) {
+        // cout << "Node.ub: " << node.ub << " solution vector: " << node.solutionVector.size()
+        // << " states: " << node.states.size() << endl;
+    }
+
+    Inavap::RestrictedDDNew restrictedDD{networkPtr, 128};
     auto cutset = restrictedDD.buildTree(node);
 
     if (!cutset){ // TODO : set status field in RestrictedDD.
@@ -697,7 +702,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
 
         // apply local feasibility cuts.
         for (const auto& cut : feasibilityCuts) {
-            if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+            // if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
             if (!restrictedDD.applyFeasibilityCut(cut)) {
                 // get cutset. and update its value.
                 updateNodeBounds(cutset.value(), node.lb, upperBound);
@@ -708,7 +713,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
         // apply global feasibility cuts)
         for (const auto& containerPtr : globalFCuts) {
             for (const auto& cut :  *containerPtr) {
-                if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+                // if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
                 if (!restrictedDD.applyFeasibilityCut(cut)) {
                     updateNodeBounds(cutset.value(), node.lb, upperBound);
                     // cout <<"3" << endl;
@@ -719,8 +724,8 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
 
         // apply optimality cuts.
         for (const auto& cut : optimalityCuts) {
-            if (upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound); upperBound <= optimalLB)
-                return INVALID_OBJECT;
+            // if (upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound); upperBound <= optimalLB)
+            //     return INVALID_OBJECT;
             if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
                 updateNodeBounds(cutset.value(), node.lb, upperBound);
                 return {node.lb, upperBound, cutset.value(), true};
@@ -730,8 +735,8 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
         // apply global optimality cuts.
         for (const auto& containerPtr : globalOCuts) {
             for (const auto& cut :  *containerPtr) {
-                if (upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound); upperBound <= optimalLB)
-                    return INVALID_OBJECT;
+                // if (upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound); upperBound <= optimalLB)
+                //     return INVALID_OBJECT;
                 if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
                     updateNodeBounds(cutset.value(), node.lb, upperBound);
                     return {node.lb, upperBound, cutset.value(), true};
@@ -769,7 +774,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
                 feasibilityCuts.insertCut(cut);
-                if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+                // if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
                 if (!restrictedDD.applyFeasibilityCut(cut)) {
                     updateNodeBounds(cutset.value(), node.lb, upperBound);
                     return {node.lb, upperBound, cutset.value(), true};
@@ -778,8 +783,8 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             else {
                 auto cut = cutToCut(temp, networkPtr.get());
                 optimalityCuts.insertCut(cut);
-                if (upperBound = min(relaxedDD.applyOptimalityCut(cut),upperBound); upperBound <= optimalLB)
-                    return INVALID_OBJECT;
+                // if (upperBound = min(relaxedDD.applyOptimalityCut(cut),upperBound); upperBound <= optimalLB)
+                //     return INVALID_OBJECT;
                 if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
                     updateNodeBounds(cutset.value(), node.lb, upperBound);
                     return {node.lb, upperBound, cutset.value(), true};
@@ -794,7 +799,7 @@ Inavap::OutObject Inavap::NodeExplorer::process2(Node node, double optimalLB) {
     double lowerBound = node.lb;
     double upperBound = node.ub;
 
-    RestrictedDD restrictedDD{networkPtr, 128};
+    RestrictedDDNew restrictedDD{networkPtr, 128};
     auto cutset = restrictedDD.buildTree(node);
 
     if (restrictedDD.isTreeExact()) {

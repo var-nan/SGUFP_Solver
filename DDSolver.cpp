@@ -753,15 +753,15 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			// cout << "worker: " << id << " processing " << endl;
 
 			// get updated cuts from global space.
-			if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
-				auto res = solver->CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
-				if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
-				if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
-				prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
-			}
+			// if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
+			// 	auto res = solver->CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
+			// 	if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
+			// 	if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
+			// 	prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
+			// }
 
-			// Node node = localQueue.popNode();
-			auto result = explorer.process(localQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
+			Node node = localQueue.popNode();
+			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
 			// auto result = explorer.process2(localQueue.popNode(), zOpt);
 			nProcessed++;
 			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
@@ -806,19 +806,19 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
             // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
 			// TODO: instead of checking in every iteration, check periodically
             // auto payloadStatus = payload.payloadStatus.load(memory_order::relaxed);
-            if (payload.payloadStatus.load(memory_order::relaxed) == Payload::MASTER_NEEDS_NODES) {
-                uint n = localQueue.size();
-                auto sz = static_cast<size_t> (ceil(n*0.4));
-                auto nodes = localQueue.popNodes(sz);
-            	/* Do not share cuts with master. */
-            	// auto [fst, snd] = f_shareCuts(explorer);
-                scoped_lock l{payload.lock};
-                payload.nodes = std::move(nodes);
-                payload.payloadStatus.store(Payload::WORKER_SHARED_NODES, memory_order::relaxed);
-            	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
-            	// if (fst) payload.fCuts = move(fst.value());
-            	// if (snd) payload.oCuts = move(snd.value());
-            }
+            // if (payload.payloadStatus.load(memory_order::relaxed) == Payload::MASTER_NEEDS_NODES) {
+            //     uint n = localQueue.size();
+            //     auto sz = static_cast<size_t> (ceil(n*0.4));
+            //     auto nodes = localQueue.popNodes(sz);
+            // 	/* Do not share cuts with master. */
+            // 	// auto [fst, snd] = f_shareCuts(explorer);
+            //     scoped_lock l{payload.lock};
+            //     payload.nodes = std::move(nodes);
+            //     payload.payloadStatus.store(Payload::WORKER_SHARED_NODES, memory_order::relaxed);
+            // 	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
+            // 	// if (fst) payload.fCuts = move(fst.value());
+            // 	// if (snd) payload.oCuts = move(snd.value());
+            // }
 		}
 	}
 
@@ -882,7 +882,7 @@ void Inavap::DDSolver::startSolver() {
 
 	// create initial restricted tree and get cutset with desired max width.
 
-	RestrictedDD restrictedDD{networkPtr, 64};
+	RestrictedDD restrictedDD{networkPtr, 2};
 	Node root;
 	auto cutset = restrictedDD.buildTree(root);
 
@@ -936,7 +936,8 @@ void Inavap::DDSolver::NodeQueue::pushNodes(vector<Node> nodes) {
 }
 
 Inavap::Node Inavap::DDSolver::NodeQueue::popNode() {
-	auto node = pq.top();
+	// auto node = pq.top();
+	Node node {pq.top()};
 	pq.pop();
 	return node;
 }

@@ -11,6 +11,7 @@
 #include <tuple>
 #include <memory>
 #include <utility>
+#define private public
 
 using namespace std;
 
@@ -188,19 +189,22 @@ namespace Inavap {
 		uint16_t q;
 	};
 
-	static constexpr uint64_t Q_MASK			= 0XFFFF;
-	static constexpr uint64_t IQ_MASK			= 0XFFFFFFF;
-	static constexpr uint64_t IQJ_MASK			= 0XFFFFFFFFFFFF;
+	static constexpr uint64_t Q_MASK			= 0XFFFF;			// Turn on 16 LSB of the other operand.
+	static constexpr uint64_t IQ_MASK			= 0XFFFFFFFF;		// Turn on 32 LSB of the other operand.
+	static constexpr uint64_t IQJ_MASK			= 0XFFFFFFFFFFFF;	// Turn on 48 LSB of the other operand
 	static constexpr uint64_t EXTRACT_16_LSB	= 0XFFFF;
+	static constexpr uint64_t EXTRACT_I			= 0XFFFF0000;		// Turn on only the I bits of the other operand.
+	static constexpr uint64_t EXTRACT_J			= 0XFFFF00000000;	// Turn on only the J bits of the other operand.
 
 	class Cut {
+	private:
 		size_t hash_val;
 		double RHS;
 		// map<tuple<int,int,int>, double> coeff;
 		vector<pair<uint64_t, double>> coeff;
 		// vector<uint32_t> q_offsets; // The 16 MSB contains the offset and the 16 LSB is the 'q' element.
 
-		map<tuple<int,int,int>,double> cutCoeff;
+		map<tuple<uint16_t,uint16_t,uint16_t>,double> cutCoeff;
 
 		// /**
 		//  * Returns the offset corresponding to 'q' and 'i' in the cut. The function scans all the elements in the
@@ -241,7 +245,12 @@ namespace Inavap {
 
 			// initialize cut map.
 			for (const auto& [k,v]: coeff) {
-				// extract long
+				// extract i, q, and j from k.
+				uint16_t q = (k&Q_MASK);
+				uint16_t i = (k&EXTRACT_I)>>16;
+				uint16_t j = (k&EXTRACT_J)>>32;
+
+				cutCoeff[make_tuple(q,i,j)] = v;
 			}
 		}
 
@@ -250,7 +259,9 @@ namespace Inavap {
 
 		Cut(const Cut &c) : hash_val{c.hash_val}, RHS{c.RHS} ,coeff{c.coeff} {}
 
-		bool operator==(const Cut& cut2) const {return cut2.hash_val == hash_val && cut2.RHS == RHS;}
+		bool operator==(const Cut& cut2) const {
+			return cut2.hash_val == hash_val && cut2.RHS == RHS && coeff.size() == cut2.coeff.size();
+		}
 
 		Cut& operator=(Cut&& c) noexcept {
 			hash_val = c.hash_val;
@@ -357,7 +368,11 @@ namespace Inavap {
 		CutContainer& operator=(const CutContainer &) = default;
 
 		// TODO: define 'new' operator (efficient, without copying).
-		void insertCut(const Cut &cut) {cuts.push_back(cut);}
+		void insertCut(const Cut &cut) {
+			// do not insert duplicate cuts.
+			for (const auto& c: cuts) { if (c == cut) return;}
+			cuts.push_back(cut);
+		}
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
 		[[nodiscard]] size_t size() const noexcept {return cuts.size();}
 		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
@@ -367,9 +382,36 @@ namespace Inavap {
 		auto end() noexcept {return cuts.end();}
 	};
 
+
+	static void isNewAndOldCutEqual(const Inavap::Cut& cut, const ::Cut& cut2) {
+		// cout << "*******Checking if old cut and new cut are equal*******" << endl;
+
+		for (const auto& [k,v] : cut2.cutCoeff) {
+			auto [i,q,j] = k;
+			// check if values match in cut
+			auto key = getKey(q,i,j);
+			double val = cut.get(key);
+			if (val != v) cout <<"******************** Something wrong with cut********************" << endl;
+		}
+		// cout << "*******Both cuts are equal******" << endl;
+	}
+
 	static Inavap::Cut cutToCut(const ::Cut& cut, const Network *networkPtr) {
 		// Constructs the Inavap::Cut from ::Cut.
 		vector<pair<uint64_t, double>> coeff;
+
+		// iterate ::Cut and insert.
+		for (const auto& [k,v] : cut.cutCoeff) {
+			if (v == 0) continue;
+			auto [i,q,j] = k; // suspect signed to unsigned int?
+			uint64_t ui = static_cast<uint64_t>(i);
+			uint64_t uj = static_cast<uint64_t>(j);
+			auto uq = static_cast<uint64_t>(q);
+			auto key = getKey(uq, ui, uj);
+			// coeff.emplace_back(key, v);
+			coeff.push_back(std::make_pair(key,v));
+		}
+		return Cut{cut.RHS, coeff};
 		// vector<uint32_t> q_offsets;
 		// processing order defines the global order.
 		for (const auto [index, arcId] : networkPtr->processingOrder) {
@@ -380,16 +422,19 @@ namespace Inavap {
 			uint64_t offset = 0;
 			for (uint64_t j: networkPtr->networkNodes[q].outNodeIds) {
 				// typically the original cut should contain mapping to all permutations of (i,q,j).
-				double val = cut.cutCoeff.at(make_tuple(i,q,j));
-				if (val == 0.0) continue; // reduce size of cut, do not store zero coeffs.
+				// double val = cut.cutCoeff.at(make_tuple(i,q,j));
+				double val = cut.get(static_cast<uint>(i),static_cast<uint>(q),static_cast<uint>(j));
+				if (val == 0) continue; // reduce size of cut, do not store zero coeffs.
 				offset++;
 				uint64_t key = Inavap::getKey(q,i,j);
 				coeff.emplace_back(key,val);
 			}
-			if (!offset) continue; // set offset information in 16MSB of coeff.first
-			uint64_t start = coeff.size() - offset; // this should give start of new IQ.
-			coeff[start].first |= (offset << 48);
+			// if (!offset) continue; // set offset information in 16MSB of coeff.first
+			// uint64_t start = coeff.size() - offset; // this should give start of new IQ.
+			// coeff[start].first |= (offset << 48);
 		}
+		Cut c{cut.RHS, coeff};
+		isNewAndOldCutEqual(c, cut);
 		return Cut{cut.RHS, coeff};
 	}
 }

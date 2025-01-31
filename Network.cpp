@@ -156,9 +156,9 @@ Network::Network(const std::string& p_fileName){
 			auto& node = networkNodes[id];
 			set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
 			// uncomment it later.
-			// if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1) &&
-			// 	(node.outgoingArcs.size() < node.incomingArcs.size())) states.insert(-1); // add -1 to states.
-			states.insert(-1);
+			if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1) &&
+				(node.outgoingArcs.size() < node.incomingArcs.size())) states.insert(-1); // add -1 to states.
+			// states.insert(-1);
 			stateUpdateMap.insert({i, states});
 			bool first = true;
 			// sort incoming arcs based in decreasing order of reward

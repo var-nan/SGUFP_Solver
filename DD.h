@@ -52,10 +52,13 @@
 #include <ctime>
 #include <utility>
 #include <optional>
+#include <execution>
 #include <numeric>
 #include <set>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
+
+#define private public
 
 using namespace std;
 
@@ -448,8 +451,8 @@ namespace Inavap {
 
 	class Node {
 	public:
-		vector<int16_t> states;
-		vector<int16_t> solutionVector;
+		vector<int16_t> states{};
+		vector<int16_t> solutionVector{};
 		double lb;
 		double ub;
 		uint16_t globalLayer;
@@ -465,8 +468,8 @@ namespace Inavap {
 		// Node(const Node& node) : states{node.states}, solutionVector{node.solutionVector},
 				// lb{node.lb}, ub{node.ub}, globalLayer(node.globalLayer) {}
 
-		Node(const Node& node) = default; // copy constructor.
-		Node& operator=(const Node& node) = default; // copy assignment. update to move semantics (asap).
+		// Node(const Node& node) = default; // copy constructor.
+		// Node& operator=(const Node& node) = default; // copy assignment. update to move semantics (asap).
 	};
 
 	class DDArc {
@@ -511,7 +514,7 @@ namespace Inavap {
                 // initialize Restricted DD Node from Node_t.
         		/* constructor only used during tree compilation */
                 explicit RDDNode(Node node) : id{0}, globalLayer{node.globalLayer},
-                                nodeLayer{0}, state2{0}, incomingArc{0}, states{std::move(node.states)}{}
+                                nodeLayer{0}, state2{0}, incomingArc{0}, states{std::move(node.states)}, outgoingArcs{}{}
 
         		// explicit RDDNode(Node &&node): id{0}, globalLayer{node.globalLayer}, nodeLayer{0},
         		// 		state2{numeric_limits<double>::lowest()}, incomingArc{0}, states{move(node.states)}{}
@@ -549,7 +552,7 @@ namespace Inavap {
 		vector<uint> deletedNodeIds;
 
 		void updateStates(const vector<uint> &currentLayer, const vector<int16_t> &nextLayerState);
-		vector<uint> buildNextLayer(const vector<uint>& currentLayer, uint& nextLayerSize, bool stateChangesNext, bool& isExact);
+		vector<uint> buildNextLayer(const vector<uint>& currentLayer, uint& nextLayerSize, uint8_t stateChangesNext, uint8_t &isExact);
 		vector<uint> buildRestrictedLayer(const vector<uint>& currentLayer);
 
 		void deleteArc(RDDNode& node, DDArc& arc, RDDNode& childNode) noexcept;
@@ -632,5 +635,90 @@ namespace Inavap {
 		uint8_t applyFeasibilityCut(const Inavap::Cut &cut);
 
 		vi getSolution() const; // not required?
+	};
+
+	using Layer = vector<uint>;
+	using States = vector<int16_t>;
+
+	static constexpr double DOUBLE_MIN = std::numeric_limits<double>::lowest();
+	static constexpr double DOUBLE_MAX = std::numeric_limits<double>::max();
+
+	class RestrictedDDNew {
+	private:
+		class RDDNode {
+		public:
+			uint id;
+			uint16_t nodeLayer;
+			uint16_t globalLayer;
+			uint incomingArc;
+			vector<uint> outgoingArcs;
+			double state2;
+			vector<int16_t> states;
+		public:
+			RDDNode() : id{0}, nodeLayer{0}, globalLayer{0}, incomingArc{0}, state2{0} {}
+
+			// only for terminal Node.
+			explicit RDDNode(uint id_) : id {id_}, nodeLayer(0), globalLayer(0), incomingArc(0), state2{0}{}
+
+			explicit RDDNode(const Node& node) : id {0}, nodeLayer{0}, // only used in tree compilation().
+						globalLayer{node.globalLayer}, incomingArc{0}, states{node.states}, state2{0} {}
+		};
+
+		const Network *networkPtr;
+		const uint max_width;
+		unordered_map<uint, RDDNode> nodes;
+		unordered_map<uint, DDArc> arcs;
+		vector<Layer> tree;
+		uint16_t startTree;
+		Path rootSolution;
+		uint lastInserted;
+		uint terminalId = 0;
+		vector<uint> deletedNodeIds;
+
+		Layer terminalInArcs;
+
+		/* 0 - tree exact.
+		 * 1 - tree not-exact.
+		 */
+		uint status;
+
+		// bookkeeping variables
+		size_t nNodesRemoved = 0;
+		size_t nTerminalArcsRemoved = 0;
+
+		Layer buildNextLayer(const Layer& currentLayer, uint& nextLayerSize, uint8_t &isExact,
+			uint8_t stateChangesNext);
+		Layer buildRestrictedLayer(const Layer& currentLayer, uint8_t stateChangesNext);
+
+		// void updateStates(const Layer& currentLayer, const States& states);
+
+		vector<Node> getExactCutSet(const Layer& layer) const;
+		Path getPathForNode(uint id) const;
+
+		void batchRemoveNodes(const Layer &nodeIds);
+		void removeNode(uint id, bool isBatch= true);
+		void updateTree();
+
+	public:
+		RestrictedDDNew(const shared_ptr<Network> &networkPtr_, uint width) : networkPtr{networkPtr_.get()}, max_width{width},
+					startTree(0),status{0}, lastInserted{0}{}
+
+		optional<vector<Node>> compile(Node root);
+
+		optional<vector<Node>> buildTree(Node root) {
+			return compile(root);
+		}
+
+		uint8_t applyFeasibilityCut(const Inavap::Cut &cut);
+		double applyOptimalityCut(const Inavap::Cut &cut);
+
+		bool isTreeExact() const noexcept {return !(status&0b1);}
+
+		Path getMaxPath() const;
+
+		Path getSolution() const {
+			return getMaxPath();
+		}
+
 	};
 }
