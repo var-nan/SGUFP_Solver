@@ -449,6 +449,10 @@ namespace Inavap {
 		}
 	};
 
+
+	static constexpr double DOUBLE_MIN = std::numeric_limits<double>::lowest();
+	static constexpr double DOUBLE_MAX = std::numeric_limits<double>::max();
+
 	class Node {
 	public:
 		vector<int16_t> states{};
@@ -585,18 +589,23 @@ namespace Inavap {
 	private:
 		class LDDNode {
 		public:
-            uint id;
-            uint16_t nodeLayer;
-            uint16_t globalLayer;
-            vector<uint> outgoingArcs;
-            vector<uint> incomingArcs;
-            vector<int16_t> states;
-            double state2;
+			uint id;
+			uint16_t nodeLayer;
+			uint16_t globalLayer;
+			vector<uint> outgoingArcs;
+			vector<uint> incomingArcs;
+			vector<int16_t> states;
+			double state2;
 
-            LDDNode() : id{0}, nodeLayer{0}, globalLayer{0}, state2{0}{}
-            explicit LDDNode(uint id_): id{id_}, nodeLayer{0}, globalLayer{0}, state2{0}{}
-            explicit LDDNode(Node_t node_): id{0},
-                        globalLayer{static_cast<uint16_t>(node_.globalLayer)}, nodeLayer{0}, state2{0}{}
+			LDDNode() : id{0}, nodeLayer{0}, globalLayer{0}, state2{DOUBLE_MIN}{}
+			explicit LDDNode(uint id_): id{id_}, nodeLayer{0}, globalLayer{0}, state2{DOUBLE_MIN}{}
+			explicit LDDNode(Node_t node_): id{0}, nodeLayer{0},
+						globalLayer{static_cast<uint16_t>(node_.globalLayer)}, state2{DOUBLE_MIN} {
+				for (auto s : node_.states)
+					states.emplace_back(static_cast<int16_t>(s));
+			}
+			explicit LDDNode(Node node): id {0}, nodeLayer{0}, globalLayer{node.globalLayer},
+					states{std::move(node.states)}, state2 {DOUBLE_MIN}{}
 
 		};
 	public:
@@ -614,7 +623,7 @@ namespace Inavap {
 		void updateStates(const vector<uint>& currentLayer, const vector<int16_t>& nextLayerState);
 
 		vector<uint> buildNextLayer(const vector<uint> &currentLayer, uint& nextLayerSize,
-				bool stateChangesNext);
+				uint8_t stateChangesNext);
 
 		// state reduction functions
 
@@ -639,9 +648,6 @@ namespace Inavap {
 
 	using Layer = vector<uint>;
 	using States = vector<int16_t>;
-
-	static constexpr double DOUBLE_MIN = std::numeric_limits<double>::lowest();
-	static constexpr double DOUBLE_MAX = std::numeric_limits<double>::max();
 
 	class RestrictedDDNew {
 	private:
