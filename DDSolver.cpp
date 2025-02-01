@@ -858,6 +858,8 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 	uint st;
 
 	cout << "Thread" << this_thread::get_id() << " Node Queue is empty. Indicating Master. " << endl;
+	// for now, set the status to finished
+	status = status | 1; return {};
 
 	/* Conditionally wait for the nodes until master wakes (signals) this worker. The master can also set the
 	 * status as finished when all the other threads are waiting for the nodes and the master's queue is empty.
@@ -882,7 +884,7 @@ void Inavap::DDSolver::startSolver() {
 
 	// create initial restricted tree and get cutset with desired max width.
 
-	RestrictedDD restrictedDD{networkPtr, 2};
+	RestrictedDDNew restrictedDD{networkPtr, 2};
 	Node root;
 	auto cutset = restrictedDD.buildTree(root);
 
