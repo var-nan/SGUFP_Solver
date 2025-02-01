@@ -11,7 +11,7 @@ using namespace std;
 
 int main() {
 	cout << "C++ version: " << __cplusplus << endl;
-	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_93_20_4.txt";
+	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_95_20_5.txt";
 	Network network{fileName};
 
 	SolveOriginalProblem(network);
