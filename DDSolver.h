@@ -275,6 +275,7 @@ namespace Inavap {
                 SOLVER_FINISHED = 0X80
             };
             vector<Node> nodes;
+            uint id = 0;
             std::mutex lock;
             std::condition_variable cv;
             std::atomic<uint> payloadStatus;
@@ -366,6 +367,7 @@ namespace Inavap {
             networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers} {
             workers.reserve(N_WORKERS);
             workersGroup.reserve(N_WORKERS);
+            cout << "Number of workers: " << N_WORKERS << endl;
         }
 
 

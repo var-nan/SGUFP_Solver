@@ -205,6 +205,30 @@ using namespace Inavap;
 // }
 
 
+// test with some constant data.
+TEST(ConstantCut, SHOULD_RETURN_SAME) {
+	map<tuple<int,int,int>, double> coeff;
+	coeff.insert(make_pair(make_tuple(2,30,123), 432.0));
+	coeff.insert(make_pair(make_tuple(2,30,124), 456.67));
+	coeff.insert(make_pair(make_tuple(1,18,123), 1234.56));
+	coeff.insert(make_pair(make_tuple(4,1,90), -1298.98));
+	coeff.insert(make_pair(make_tuple(5,6,7), -1298.98));
+
+	::Cut cut {FEASIBILITY, 3012.0321, coeff};
+
+	Inavap::Cut cut2 = cutToCut(cut, nullptr);
+
+	uint64_t key = getKey(static_cast<uint64_t>(30), static_cast<uint64_t>(2), static_cast<uint64_t>(123));
+	ASSERT_EQ(cut2.get(key), 432.0);
+	ASSERT_EQ(cut2.get(key), cut.get(2,30,123));
+	key = getKey(static_cast<uint64_t>(30), static_cast<uint64_t>(2), static_cast<uint64_t>(124));
+	ASSERT_EQ(cut2.get(key), 456.67);
+	key = getKey(static_cast<uint64_t>(6), static_cast<uint64_t>(5), static_cast<uint64_t>(7));
+	ASSERT_EQ(cut2.get(key), -1298.98);
+	key = getKey(static_cast<uint64_t>(6), static_cast<uint64_t>(5), static_cast<uint64_t>(1));
+	ASSERT_EQ(cut2.get(key), 0.0);
+
+}
 
 ::Cut returnCut() {
 	// generate artifical cut with
@@ -242,17 +266,17 @@ using namespace Inavap;
 
 	for (const auto [a,b] : network->processingOrder) {
 		// b is arc id
-		const auto& arc = network->networkArcs[b];
+		const NetworkArc& arc = network->networkArcs[b];
 		uint i = arc.tailId;
 		uint q = arc.headId;
 
 		// j is the possible decisions.
-		const auto& node = network->networkNodes[q];
-		for (auto j : node.outNodeIds) {
+		const NetworkNode& node = network->networkNodes[q];
+		for (uint j : node.outNodeIds) {
 			// random coefficient.
 			if (int num = uid(e); num % 2 == 0)
 				coeffs[tuple(i,q,j)] = urd(e);
-			else coeffs[tuple(i,q,j)] = 0;
+			else coeffs[tuple(i,q,j)] = 0.0;
 		}
 	}
 	double RHS = urd(e);
@@ -265,8 +289,11 @@ Inavap::Cut changeCut(::Cut& cut) {
 	vector<pair<uint64_t, double>> coeff;
 	for (const auto [k,v] : cut.cutCoeff) {
 		if (v == 0) continue;
-		auto [i,q,j] = k;
-		auto key = getKey(q,i,j);
+		// auto [i,q,j] = k;
+		uint64_t i = std::get<0>(k);
+		uint64_t q = std::get<1>(k);
+		uint64_t j = std::get<2>(k);
+		uint64_t key = getKey(q,i,j);
 		coeff.push_back(make_pair(key,v));
 	}
 	std::reverse(coeff.begin(), coeff.end());
@@ -301,8 +328,11 @@ TEST_F(TestInavapCut, INVARIANT_1) {
 TEST_F(TestInavapCut, INVARIANT_2) {
 	// coeff should match
 	for (const auto [k,v] : oldCut.cutCoeff) {
-		auto [i,q,j] = k;
-		auto key = getKey(q,i,j);
+		// auto [i,q,j] = k;
+		uint64_t i = std::get<0>(k);
+		uint64_t q = std::get<1>(k);
+		uint64_t j = std::get<2>(k);
+		uint64_t key = getKey(q,i,j);
 		double val = newCut.get(key);
 		ASSERT_EQ(val, v);
 	}
@@ -361,14 +391,14 @@ TEST_F(TestRestrictedDD, INVARIANT_2) {
 }
 TEST_F(TestRestrictedDD, INVARIANT_3) {
 	for (size_t i = 1; i < new_restrictedDD.terminalId; i++) {
-		const auto& node = new_restrictedDD.nodes[i];
+		const Inavap::RestrictedDDNew::RDDNode& node = new_restrictedDD.nodes[i];
 		ASSERT_EQ(node.incomingArc, node.id);
-		const auto& node2 = old_restrictedDD.nodes[i];
+		const ::DDNode& node2 = old_restrictedDD.nodes[i];
 		ASSERT_EQ(node2.incomingArcs[0], node2.id);
 	}
 }
 TEST_F(TestRestrictedDD, INVARIANT_4) {
-	auto tree_size = new_restrictedDD.tree.size();
+	size_t tree_size = new_restrictedDD.tree.size();
 	ASSERT_EQ(new_restrictedDD.tree[tree_size-2].size(), new_restrictedDD.terminalInArcs.size());
 }
 TEST_F(TestRestrictedDD, INVARIANT_5) { // cutset should contain nodes if tree is not exact.
@@ -378,8 +408,8 @@ TEST_F(TestRestrictedDD, INVARIANT_5) { // cutset should contain nodes if tree i
 	// verify both cutsets contains same nodes.
 	for (size_t i = 0; i < new_cutset.size(); i++) {
 		// compare solutions of nodes in cutset.
-		const auto& node1 = new_cutset[i];
-		const auto& node2 = old_cutset[i];
+		const Inavap::Node& node1 = new_cutset[i];
+		const ::Node_t& node2 = old_cutset[i];
 
 		ASSERT_EQ(node1.solutionVector.size(), node2.solutionVector.size());
 		ASSERT_EQ(node1.globalLayer, node2.globalLayer);
@@ -395,13 +425,13 @@ TEST_F(TestRestrictedDD, INVARIANT_5) { // cutset should contain nodes if tree i
 TEST_F(TestRestrictedDD, INVARIANT_6) {
 	// incoming arc's decision should not be in the node's states (unless state updated)
 	// should go layer by layer.
-	const auto& nodes = new_restrictedDD.nodes;
-	const auto& arcs = new_restrictedDD.arcs;
+	const unordered_map<uint, Inavap::RestrictedDDNew::RDDNode>& nodes = new_restrictedDD.nodes;
+	const unordered_map<uint, Inavap::DDArc>& arcs = new_restrictedDD.arcs;
 	for (size_t layer = 1; layer < new_restrictedDD.tree.size()-1; layer++) {
 		if (networkPtr->hasStateChanged[layer]) continue;
 		for (auto id: new_restrictedDD.tree[layer]) {
-			const auto& node = nodes.at(id);
-			const auto& arc = arcs.at(node.incomingArc);
+			const Inavap::RestrictedDDNew::RDDNode& node = nodes.at(id);
+			const Inavap::DDArc& arc = arcs.at(node.incomingArc);
 			auto res = find(node.states.begin(), node.states.end(), arc.decision);
 			if (arc.decision != -1)
 				ASSERT_EQ(res, node.states.end());
@@ -414,7 +444,7 @@ TEST_F(TestRestrictedDD, INVARIANT_7) {
 	// no empty layers.
 	ASSERT_TRUE(!new_restrictedDD.tree.empty());
 	ASSERT_TRUE(!old_restrictedDD.tree.empty());
-	for (const auto layer: new_restrictedDD.tree) {
+	for (const Layer& layer: new_restrictedDD.tree) {
 		ASSERT_TRUE(!layer.empty());
 	}
 	for (size_t i = 0; i < new_restrictedDD.tree.size()-1; i++) {
@@ -440,10 +470,10 @@ void printOldCut(const ::Cut& cut) {
 TEST_F(TestRestrictedDD, INVARIANT_8) {
 	// apply 1000 optimality cuts.
 	for (size_t i = 0; i < 10000; i++) {
-		auto old_cut = getActualCut(networkPtr.get());
+		::Cut old_cut = getActualCut(networkPtr.get());
 		// apply this cut
 		// printOldCut(old_cut);
-		auto new_cut = cutToCut(old_cut, networkPtr.get());
+		Inavap::Cut new_cut = cutToCut(old_cut, networkPtr.get());
 		// new_cut.printCut(0);
 		double lowerBound = new_restrictedDD.applyOptimalityCut(new_cut);
 		// cout << "Lower Bound from new DD: " << lowerBound << endl;
@@ -456,8 +486,8 @@ TEST_F(TestRestrictedDD, INVARIANT_8) {
 TEST_F(TestRestrictedDD, INVARIANT_9) {
 	// apply feasibility cuts.
 	for (size_t i= 0; i < 1000; i++) {
-		auto old_cut = getActualCut(networkPtr.get(), FEASIBILITY);
-		auto new_cut = cutToCut(old_cut, networkPtr.get());
+		::Cut old_cut = getActualCut(networkPtr.get(), FEASIBILITY);
+		Inavap::Cut new_cut = cutToCut(old_cut, networkPtr.get());
 		uint8_t res = new_restrictedDD.applyFeasibilityCut(new_cut);
 		uint8_t res2 = old_restrictedDD.applyFeasibilityCutRestrictedLatest(old_cut);
 		if (res != res2) {
@@ -478,8 +508,8 @@ TEST_F(TestRestrictedDD, INVARIANT_10) {
 	for (size_t i = 0; i< 10; i++) {
 		if (int r = rand(); r % 2 == 0) {
 			// feasibility cut
-			auto old_cut = getActualCut(networkPtr.get(), FEASIBILITY);
-			auto new_cut = cutToCut(old_cut, networkPtr.get());
+			::Cut old_cut = getActualCut(networkPtr.get(), FEASIBILITY);
+			Inavap::Cut new_cut = cutToCut(old_cut, networkPtr.get());
 			uint8_t res = new_restrictedDD.applyFeasibilityCut(new_cut);
 			uint8_t res2 = old_restrictedDD.applyFeasibilityCutRestrictedLatest(old_cut);
 			ASSERT_EQ(res, res2);
@@ -487,13 +517,35 @@ TEST_F(TestRestrictedDD, INVARIANT_10) {
 		}
 		else {
 			// optimality cut
-			auto old_cut = getActualCut(networkPtr.get(), OPTIMALITY);
-			auto new_cut = cutToCut(old_cut, networkPtr.get());
+			::Cut old_cut = getActualCut(networkPtr.get(), OPTIMALITY);
+			Inavap::Cut new_cut = cutToCut(old_cut, networkPtr.get());
 			double lb = new_restrictedDD.applyOptimalityCut(new_cut);
 			double lb2 = old_restrictedDD.applyOptimalityCutRestrictedLatest(old_cut);
 			ASSERT_EQ(lb, lb2);
 		}
 	}
+}
+
+
+class TestRelaxedDD : public ::testing::Test {
+protected:
+	const string fileName {"C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_91_20_1.txt"};
+	const shared_ptr<Network> networkPtr = make_shared<Network>(Network{fileName});
+	Inavap::RelaxedDD relaxedDD;
+	::DD old_relaxedDD;
+
+	// don't need cutset.
+	TestRelaxedDD(): relaxedDD{networkPtr}, old_relaxedDD{networkPtr, EXACT} {
+		Node root;
+		::DDNode rootNode;
+		relaxedDD.buildTree(root);
+		old_relaxedDD.build(rootNode);
+	}
+
+};
+
+TEST_F(TestRelaxedDD, TEST_NUMBER_OF_ARCS_MATCH) {
+	ASSERT_EQ(relaxedDD.nodes.size(), old_relaxedDD.nodes.size());
 }
 
 int main() {
