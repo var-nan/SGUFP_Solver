@@ -50,11 +50,9 @@ if (UNIX)
     add_library(gurobi110 SHARED IMPORTED)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
-
     add_compile_definitions(SOLVER_STATS)
     target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g -pthread) # add -O3 flag in final phase. -Wunused
     target_link_options(SGUFP_Solver PRIVATE -pg -g -pthread)
-
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
@@ -68,13 +66,14 @@ if (UNIX)
     target_link_libraries(SGUFP_Solver PRIVATE gurobi110)
     target_include_directories(SGUFP_Solver PRIVATE ${GUROBI_INCLUDE})
 
+#    message(STATUS "General FLAGS: ${CMAKE_CXX_FLAGS}")
+    message(STATUS "RELEASE FLAGS: ${CMAKE_CXX_FLAGS_RELEASE}")
+    message(STATUS "DEBUG FLAGS: ${CMAKE_CXX_FLAGS_DEBUG}")
+    message(STATUS "RELWITHDEBINFO FLAGS: ${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -fno-omit-frame-pointer")
-    message(STATUS "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
 
     # test targets
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_executable(tests2 tests/tests.cpp ${SOURCES}
                 tests/test_utils.h)
         target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
