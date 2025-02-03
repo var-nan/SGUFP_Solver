@@ -5,974 +5,962 @@
 #include "DDSolver.h"
 #include <random>
 #include <chrono>
-#include <omp.h>
-#define OMP_NUM_THREADS 4
-void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
-    // push bunch of nodes.
-    // q.insert(q.end(), nodes.begin(), nodes.end());
-    for (auto& node : nodes) {
-        q.push(node);
-    }
-}
-
-void DDSolver::NodeQueue::pushNode(Node_t node) {
-    q.push(node);
-}
-
-Node_t DDSolver::NodeQueue::getNode() {
-    // auto node = q.back(); q.pop_back();
-    // auto node = q.front(); q.pop();
-    auto node = q.top(); q.pop();
-    return node;
-}
-
-vector<Node_t> DDSolver::NodeQueue::getNodes(size_t n = 8) {
-    vector<Node_t> nodes;
-
-	while (!q.empty() && n) {
-		//
-		if (n--) {
-			nodes.push_back(q.top()); q.pop();
-		}
-		// else break;
-	}
-    //
-    // for (size_t i = 0; i < n; i++) {
-    //     nodes.push_back(q.back());
-    //     q.pop_back();
-    // }
-    return nodes;
-}
-
-Node_t DDSolver::getNode() {
-    return nodeQueue.getNode();
-}
-
-void DDSolver::initialize() {
-    // place root node to queue
-    Node_t node;
-
-    node.lb = std::numeric_limits<int64_t>::min();
-    node.ub = std::numeric_limits<int64_t>::max();
-    node.globalLayer = 0;
-
-    nodeQueue.pushNode(node);
-}
-
-void DDSolver::startSolve(optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
-    if (initialCuts) {
-        NodeExplorer explorer{networkPtr, initialCuts.value()};
-        process(explorer);
-    }
-    else {
-        NodeExplorer explorer{networkPtr};
-        process(explorer);
-    }
-}
-
-void DDSolver::process(NodeExplorer explorer) {
-
-    /*
-     * 1. get node from node's queue
-     * 2. If LB is better than node's UB, get rid of node and get another.
-     * 4. Start NodeProcessor();
-     * 5. get cutset and LB, and UB. update the respective global values.
-     * 6. insert cutset nodes to the queue.
-     */
-
-    // NodeExplorer explorer{networkPtr, initialCuts.value()};
-
-    while (!nodeQueue.empty()) { // conditional wait in parallel version
-
-        Node_t node = nodeQueue.getNode();
-        // cout << "Procesisng Node from layer: "<< node.globalLayer << " LB: " << node.lb << " , UB: " << node.ub << " global: " << getOptimalLB()<< endl;
-        #ifdef DEBUG
-        // cout << "Processing node from layer: " << node.globalLayer << " lb: " << node.lb << " , ub: " << node.ub;
-        cout << " . global lower bound: " << getOptimalLB() << endl;
-        #endif
-        if (node.ub < getOptimalLB()) {
-            #ifdef SOLVER_STATS
-            numPrunedByBound++;
-            // cout << "Pruned by bound." << endl;
-            #endif
-            continue; // look for another
-        }
-
-        // start node processor
-        auto result = explorer.process3(node, getOptimalLB()); // use co-routines to update globalLB in between.
-
-        #ifdef SOLVER_STATS
-        numNodesExplored++;
-        numNodesUnnecessary += !result.success;
-        #endif
-        // either this node returns cutset or nothing.
-        if (result.success) {
-            if (result.lb > getOptimalLB()) {
-                setLB(result.lb);
-                const auto now = std::chrono::system_clock::now();
-                const auto t_c = std::chrono::system_clock::to_time_t(now);
-                cout << "Optimal LB: " << getOptimalLB() <<" set at "<< std::ctime(&t_c) << endl;
-            }
-            if (!result.nodes.empty()) {
-                if (result.ub > getOptimalLB()) {
-                    nodeQueue.pushNodes(result.nodes);
-                    #ifdef SOLVER_STATS
-                    // cout << result.nodes.size() << " nodes entered queue." << endl;
-                    numQueueEntered += result.nodes.size();
-                    #endif
-                }
-                else {
-#ifdef DEBUG
-                    cout << "Upper bound is worse than the global lb: " << getOptimalLB() << endl;
-#endif
-                }
-            }
-        }
-        // explorer.clearCuts();
-    }
-
-    #ifdef SOLVER_STATS
-    displayStats();
-    explorer.displayCutStats();
-    #endif
-    cout << "Optimal Solution: " << getOptimalLB() << endl;
-}
-
-void DDSolver::start() {
-    // startSolve();
-}
-
-double DDSolver::getOptimalLB() const{
-    double lb = 0;
-    #pragma omp atomic read
-	lb = optimalLB;
-
-    return lb;
-}
-
-void DDSolver::setLB(double lb) {
-    #pragma omp critical
-	{
-		optimalLB = (lb > optimalLB)? lb : optimalLB;
-		#pragma omp flush(optimalLB)
-    }
-}
-
-DDNode node2DDdfsNode(Node_t node) {
-    DDNode newNode;
-    newNode.states = set<int>(node.states.begin(), node.states.end());
-    newNode.solutionVector = node.solutionVector;
-    newNode.globalLayer = node.globalLayer;
-    newNode.nodeLayer = 0;
-    return newNode;
-}
-
-pair<CutContainer, CutContainer> DDSolver::initializeCuts2(size_t n) {
-
-    DD dd{networkPtr, EXACT};
-    DDNode root{0};
-    dd.build(root);
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    std::uniform_int_distribution<> dist(0, std::numeric_limits<int>::max());
-
-    // srand(time(nullptr));
-
-    // start with root and find random paths to terminal.
-    vector<vi> solutions;
-    CutContainer fCuts{FEASIBILITY};
-    CutContainer oCuts{OPTIMALITY};
-    GRBEnv env = GRBEnv();
-    env.set(GRB_IntParam_OutputFlag, 0);
-
-    solutions.reserve(n);
-
-    while (n) {
-        // get path from root to terminal.
-        vi solution;
-        ulint currentId = 0;
-
-        for (size_t i = 0; i < dd.tree.size() -2; i++) {
-            const auto& node = dd.nodes.at(currentId);
-            const auto& nArcs = node.outgoingArcs.size();
-            auto selection = node.outgoingArcs[ dist(gen)%nArcs];
-            const auto& arc = dd.arcs.at(selection);
-            solution.push_back(arc.decision);
-            currentId = arc.head;
-        }
-
-        // check if solution exists.
-        bool isExist = false;
-        for (const auto& sol : solutions) {
-            if (sol == solution) isExist = true; break;
-        }
-        if (isExist) continue;
-        cout << "Solution selected: "; for (auto s: solution) cout << s <<" "; cout <<endl;
-        solutions.push_back(solution);
-        // cout << "Solution: "; for (auto sol: solution) cout << sol << " "; cout << endl;
-        // get cut
-        GuroSolver solver{networkPtr, env};
-        const auto& y_bar = w2y(solution, networkPtr);
-        auto cut = solver.solveSubProblemInstance(y_bar, 0); // LATER set random scenario.
-        if (cut.cutType == FEASIBILITY) {
-            fCuts.insertCut(cut);
-        }
-        else oCuts.insertCut(cut);
-        n--;
-    }
-    return make_pair(fCuts, oCuts);
-}
-
-pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
-    // build a restricted tree, get exact cutsets, build subtrees and get solutions for each of subtree.
-
-    // change the max_width
-    constexpr size_t max_width = MAX_WIDTH;
-    // #undef MAX_WIDTH
-    // #define MAX_WIDTH 20
-    // #undef DEBUG
-
-    // cout << "Current max width is : " << MAX_WIDTH << endl;
-
-    /// build tree
-    DDNode root{0};
-    root.nodeLayer = 0;
-    root.globalLayer = 0;
-    DD relaxed{networkPtr, EXACT};
-    DDNode newRoot{0};
-    relaxed.build(newRoot);
-    DD restricted {networkPtr,RESTRICTED};
-    auto cutset = restricted.build(root);
-    cout << "Cutset size " << cutset.value().size() << endl;
-
-    CutContainer fCuts{FEASIBILITY};
-    CutContainer oCuts{OPTIMALITY};
-
-    GRBEnv env = GRBEnv();
-    env.set(GRB_IntParam_OutputFlag,0);
-    if (cutset) {
-
-        for (const auto& node: cutset.value()) {
-            DDNode ddNode = node2DDNode(node);
-            DD subTree{networkPtr,RESTRICTED};
-            auto _ = subTree.build(ddNode);
-
-            // get solution
-            auto sol = subTree.solution();
-            // solve sub problem
-            GuroSolver solver{networkPtr,env};
-            auto y_bar = w2y(sol, networkPtr);
-            auto cut = solver.solveSubProblemInstance(y_bar, 0);
-            // add cut to containers
-            if (cut.cutType == FEASIBILITY) {
-                if (!fCuts.isCutExists(cut))
-                    fCuts.insertCut(cut);
-            }
-            else {
-                if(!oCuts.isCutExists(cut)) oCuts.insertCut(cut);
-            }
-        }
-
-    }
-
-    // #undef MAX_WIDTH
-    // #define DEBUG
-    // #define MAX_WIDTH max_width
-
-    // for (auto cut : fCuts.cuts) {
-    //     cout << endl << "RHS: " << cut.RHS << endl;
-    //     if (cut.cutType == FEASIBILITY) cout << "Type: FEASIBILITY" << endl;
-    //     else cout << "Type: OPTIMALITY" << endl;
-    //     for (auto [k,v] : cut.cutCoeff) {
-    //         auto [i,q,j] = k;
-    //         cout << "i: " << i << ", q: " << q << " j: " << j << " val: " << v << endl;
-    //     }
-    // }
-
-    // cout << "Current max width is : " << MAX_WIDTH  << endl;
-    return make_pair(fCuts, oCuts);
-
-}
-
-
-//void DDSolver::processWork() {
-//	NodeExplorer explorer{networkPtr};
-//
-//	NodeQueue localQueue;
-//
-//	double zOpt = globalLB.load();
-//	size_t nProcessed = 0;
-//	Node_t rootNode;
-//	rootNode.lb = numeric_limits<double>::lowest();
-//	rootNode.ub = numeric_limits<double>::max();
-//	rootNode.globalLayer = 0;
-//	localQueue.pushNode(rootNode);
-//	// insert all but one node to the local queue.
-////	while (!nodeQueue.empty()) {localQueue.pushNode(nodeQueue.getNode());}
-////	localQueue = nodeQueue;
-//	while (true) {
-//		// acquire lock get a node from global queue
-////		Node_t node;
-////		{
-////			lock_guard<mutex> guard(queueLock);
-////			if (nodeQueue.empty()) break;
-////			node = nodeQueue.getNode();
-////		}
-////
-////		localQueue.pushNode(node);
-//		if (localQueue.empty()) break;
-//		zOpt = globalLB.load(memory_order_acquire);
-//
-//		while (!localQueue.empty()){
-//
-//			Node_t node1 = localQueue.getNode();
-////			zOpt = globalLB.load();
-//			if (node1.ub < zOpt){
-//				continue;
-//				// pruned by bound.
-//			}
-//
-//			auto result = explorer.process3(node1, zOpt);
-//			nProcessed++;
-//
-//			if (result.success){
-//				if (result.lb > zOpt){
-//					// read lower bound.
-//					zOpt = globalLB.load(memory_order_acquire);
-//					if(result.lb > zOpt){
-//						zOpt = result.lb;
-//						globalLB.store(result.lb, memory_order_release); // check this in case of multiple threads.
-//						const auto now = std::chrono::system_clock::now();
-//						const auto t_c = std::chrono::system_clock::to_time_t(now);
-//						cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
-//								<< " set at " << std::ctime(&t_c) << endl;
-//					}
-//				}
-//				if (!result.nodes.empty()){
-//					if (result.ub > zOpt){
-//						localQueue.pushNodes(result.nodes);
-//					}
-//				}
-//			}
-//		}
-//	}
-//	cout << "Processed " << nProcessed << " nodes. " << endl;
-//	explorer.displayCutStats();
-//
-//	//
-//}
-
-void DDSolver::startPThreadSolver() {
-	// fill up work queue, make thread lock queue before accessing.
-//	std::mutex queueLock;
-
-	pair<CutContainer, CutContainer> cuts{CutContainer{FEASIBILITY}, CutContainer{OPTIMALITY}};
-
-	NodeQueue tempQ1, tempQ2;
-    vector<Node_t> t1, t2;
-	vector<vector<Node_t>> vecvec{NUM_WORKERS};
-
-	{
-
-		// single iteration of node explorer.
-		Node_t node {{},{}, numeric_limits<double>::lowest(), numeric_limits<double>::max(),0};
-		NodeExplorer explorer {networkPtr};
-		auto result = explorer.process3(node, numeric_limits<double>::lowest());
-
-		if (result.lb > globalLB.load(memory_order_acquire))
-			globalLB.store(result.lb, memory_order_release);
-//		nodeQueue.pushNodes(result.nodes);
-		int size = result.nodes.size();
-		for (int i = 0; i < size; i++) {
-		    if (i < size/2) {tempQ1.pushNode(result.nodes[i]); t1.push_back(result.nodes[i]);}
-		    else {tempQ2.pushNode(result.nodes[i]); t2.push_back(result.nodes[i]);}
-			vecvec[i%NUM_WORKERS].push_back(result.nodes[i]);
-		}
-		// vecvec[0] = t1;
-		// vecvec[1] = t2;
-		cuts = explorer.getCuts();
-
-//		DDNode root{0};
-//		root.globalLayer = 0;
-//		DD restrictedDD{networkPtr, RESTRICTED};
-//		auto cutset = restrictedDD.build(root);
-//
-//		// insert to cutset.
-//		if (cutset)
-//			nodeQueue.pushNodes(cutset.value());
-
-		// cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
-
-		// start thread
-	}
-
-    const unsigned nWorkers = 2;
-	vector<thread> workerThreads{NUM_WORKERS};
-
-    // vector<WorkerElement> workers(2);
-	// workers[0].addNodesToWorker(vecvec[0]);
-	// workers[1].addNodesToWorker(vecvec[1]);
-	for (unsigned i = 0; i < NUM_WORKERS; i++) {
-		workers[i].addNodesToWorker(vecvec[i]);
-		workerThreads[i] = thread{&DDSolver::processWork3, this, i, cuts};
-		// if (workerThreads[i].joinable()) workerThreads[i].join();
-	}
-    // workers[0].addNodes(t1); workers[1].addNodes(t2);
-	std::thread master{&DDSolver::startMaster3, this};
-
-	if (master.joinable()) master.join();
-	for (unsigned i = 0; i < NUM_WORKERS; i++) {
-		if (workerThreads[i].joinable()) workerThreads[i].join();
-	}
-	// std::thread worker{&DDSolver::processWork3, this, 0, cuts};
-	// std::thread worker2{&DDSolver::processWork3, this, 1, cuts};
-	// std::thread worker3{&DDSolver::processWork3, this, 2 , cuts};
-	//
-	// if (worker.joinable()) {
-	// 	//cout << "Worker thread is joinable" << endl;
-	// 	worker.join();
-	// }
-	// if (worker2.joinable()) worker2.join();
-	// if (master.joinable()) master.join();
-	// if (worker3.joinable()) worker3.join();
-	//else {cout << "worker thread is not joinable" << endl;}
-
-	//assert(nodeQueue.empty());
-	//cout << "Number of nodes in the queue: " << nodeQueue.size() << endl;
-
-	cout << "Optimal Solution : " << globalLB.load() << endl;
-
-}
-
-
-void DDSolver::processWork(unsigned int id, pair<CutContainer, CutContainer> cuts) {
-
-	NodeExplorer explorer{networkPtr, cuts}; // get initial cuts later.
-	auto& payload = workers[id];
-	bool done = false;
-	auto nodeVec  = payload.getNodes(done);
-	NodeQueue localQueue{nodeVec}; // initialize localQueue later.
-
-	double zOpt = globalLB.load(memory_order_acquire);
-	size_t nProcessed  = 0;
-
-	while (!isCompleted.load(memory_order_seq_cst)) {
-		if (localQueue.empty()) {
-			cout << "thread: " << this_thread::get_id() << " local queue is empty. indicating master." << endl;
-			auto nodes = payload.getNodes(done);
-			if (done) {cout << "thread: solver is finished" << endl; break;}
-			localQueue.pushNodes(nodes);
-		}
-		while (!localQueue.empty()){
-			Node_t node = localQueue.getNode();
-			auto result = explorer.process3(node, zOpt);
-			nProcessed++;
-			if (result.success) {
-				if (result.lb > zOpt){
-					zOpt = globalLB.load(memory_order_acquire);
-					if (result.lb > zOpt){
-						globalLB.store(result.lb, memory_order_release);
-						zOpt = result.lb;
-						const auto now = std::chrono::system_clock::now();
-						const auto t_c = std::chrono::system_clock::to_time_t(now);
-						cout << "thread: " << this_thread::get_id() << " , optimal LB: " << result.lb
-								<< " set at " << std::ctime(&t_c) << endl;
-					}
-				}
-
-				if (result.ub > zOpt && !result.nodes.empty()){
-					// add nodes to queue
-					localQueue.pushNodes(result.nodes);
-				}
-			}
-
-			//if master wants some work?
-			scoped_lock l{payload.lock};
-			auto st = payload.getStatus();
-			if (st == MASTER_NEEDS_NODES) {
-				// cout << "thread: " << this_thread::get_id() << " master needs nodes" << endl;
-				auto n = localQueue.size();
-				auto nodes = localQueue.getNodes(n/2);
-				payload.addNodesToMaster(nodes); // payload status is updated here.
-				cout << "thread " << this_thread::get_id() << " sent nodes to master" << endl;
-			}
-		}
-	}
-	// display stats.
-	cout << "thread: " << this_thread::get_id() << " processed " << nProcessed << " nodes." << endl;
-	explorer.displayCutStats();
-}
-
-void DDSolver::startMaster() {
-	// master thread.
-	const unsigned nWorkers = NUM_WORKERS;
-
-	// constantly iterate
-	while (true) {
-
-		// look for idle workers and assign work.
-		unsigned idleCount = 0;
-		unsigned working = 0;
-
-		for (unsigned i = 0; i < nWorkers; i++) {
-			auto& worker = workers[i];
-			auto status = worker.getStatus();
-
-			if (status & STATUS::WORKER_NEEDS_NODES) {
-				idleCount++;
-			}
-			else if (status & STATUS::WORKER_SHARED_NODES) {
-				// take work from worker.
-				auto nodes = worker.getNodesFromWorker();
-				cout << "master received nodes from thread: " << i << endl;
-				if (!nodes.empty())nodeQueue.pushNodes(nodes);
-				working++;
-				worker.setStatus(STATUS::MASTER_RECEIVED_NODES);
-			}
-			else if (status & STATUS::WORKER_WORKING) {
-				// if
-				working++;
-			}
-			else if (status & STATUS::NOT_ENOUGH_NODES_TO_SHARE) {
-				// change the stauts
-
-			}
-		}
-
-		if (idleCount == nWorkers &&  nodeQueue.empty()) {
-			isCompleted.store(true, memory_order_seq_cst);
-			// wake up all the workers.
-			for (unsigned i = 0; i < nWorkers; i++) {
-				auto& worker = workers[i];
-				worker.setStatus(SOLVER_FINISHED);
-				worker.cv.notify_one();
-			}
-			cout <<"Master: Solver is finished. Notified all workers" << endl;
-			break;
-		}
-
-		if (idleCount > 0) {
-			if (!nodeQueue.empty()) {
-				// assign nodes to idle workers.
-				int chunk = (nodeQueue.size()+idleCount)/idleCount;
-				for (unsigned i = 0; i < nWorkers && !nodeQueue.empty() && idleCount; i++) {
-					auto nodes = nodeQueue.getNodes(chunk);
-					auto& worker = workers[i];
-					// scoped_lock mut{worker.lock};
-					if (worker.getStatus() & STATUS::WORKER_NEEDS_NODES) {
-						worker.addNodesToWorker(nodes);
-						idleCount--;
-					}
-					else {
-						worker.askWorkerForNodes();
-					}
-				}
-
-				if (idleCount > 0) {
-					// ask nodes sequentially.
-					for (unsigned i = 0; i < nWorkers; i++) {
-						auto& worker = workers[i];
-						if (worker.getStatus() & STATUS::WORKER_WORKING) {
-							worker.askWorkerForNodes();
-
-						}
-					}
-
-				}
-			}
-		}
-	}
-
-}
-//
-// uint8_t Payload::getStatus() const noexcept{
-// 	return payloadStatus;
-// 	// return status.load(memory_order_seq_cst);
+// // #include <omp.h>
+// // #define OMP_NUM_THREADS 4
+// void DDSolver::NodeQueue::pushNodes(vector<Node_t> nodes) {
+//     // push bunch of nodes.
+//     // q.insert(q.end(), nodes.begin(), nodes.end());
+//     for (auto& node : nodes) {
+//         q.push(node);
+//     }
 // }
 //
-// void Payload::addNodes(vector<Node_t> nodes) { // called by master to insert nodes
-// 	{
-// 		// scoped_lock l{lock};
-// 		nodes_ = nodes;
-// 		payloadStatus = MASTER_ASSIGNED_NODES;
+// void DDSolver::NodeQueue::pushNode(Node_t node) {
+//     q.push(node);
+// }
+//
+// Node_t DDSolver::NodeQueue::getNode() {
+//     // auto node = q.back(); q.pop_back();
+//     // auto node = q.front(); q.pop();
+//     auto node = q.top(); q.pop();
+//     return node;
+// }
+//
+// vector<Node_t> DDSolver::NodeQueue::getNodes(size_t n = 8) {
+//     vector<Node_t> nodes;
+//
+// 	while (!q.empty() && n) {
+// 		//
+// 		if (n--) {
+// 			nodes.push_back(q.top()); q.pop();
+// 		}
+// 		// else break;
 // 	}
-// 	// status.store(MASTER_ASSIGNED_NODES, memory_order_seq_cst);
-// 	cv.notify_one();
+//     //
+//     // for (size_t i = 0; i < n; i++) {
+//     //     nodes.push_back(q.back());
+//     //     q.pop_back();
+//     // }
+//     return nodes;
 // }
+//
+// Node_t DDSolver::getNode() {
+//     return nodeQueue.getNode();
+// }
+//
+// void DDSolver::initialize() {
+//     // place root node to queue
+//     Node_t node;
+//
+//     node.lb = std::numeric_limits<int64_t>::min();
+//     node.ub = std::numeric_limits<int64_t>::max();
+//     node.globalLayer = 0;
+//
+//     nodeQueue.pushNode(node);
+// }
+//
+// void DDSolver::startSolve(optional<pair<CutContainer, CutContainer>> initialCuts = nullopt) {
+//     if (initialCuts) {
+//         NodeExplorer explorer{networkPtr, initialCuts.value()};
+//         process(explorer);
+//     }
+//     else {
+//         NodeExplorer explorer{networkPtr};
+//         process(explorer);
+//     }
+// }
+//
+// DDNode node2DDdfsNode(Node_t node) {
+//     DDNode newNode;
+//     newNode.states = set<int>(node.states.begin(), node.states.end());
+//     newNode.solutionVector = node.solutionVector;
+//     newNode.globalLayer = node.globalLayer;
+//     newNode.nodeLayer = 0;
+//     return newNode;
+// }
+//
+//
+//
+// void DDSolver::processWork3(unsigned int id, pair<CutContainer, CutContainer> cuts) {
+//
+// 	NodeExplorer explorer{networkPtr, cuts};
+// 	auto& payload = workers[id];
+// 	bool done = false;
+// 	auto nodeVec = payload.getNodes(done);
+// 	NodeQueue localQueue{nodeVec};
+//
+// 	double zOpt = globalLB.load(memory_order_acquire);
+// 	size_t nProcessed = 0;
+//
+// 	while (!isCompleted.load(memory_order_seq_cst)) {
+// 		if (localQueue.empty()) {
+// 			string s = "thread : " + to_string(id) + " local queue is empty. indicating master\n";
+// 			cout << s;
+// 			auto nodes = payload.getNodes(done);
+// 			if (done) {cout<< "thread: solver is finished" << endl; break;}
+// 			auto st = "thread " + to_string(id) + " received " + to_string(nodes.size()) + " nodes from master\n";
+// 			cout << st;
+// 			localQueue.pushNodes(nodes);
+// 		}
+//
+// 		while (!localQueue.empty()) {
+// 			Node_t node = localQueue.getNode();
+// 			auto result = explorer.process3(node, zOpt);
+// 			nProcessed++;
+// 			if (result.success) {
+// 				if (result.lb > zOpt) {
+// 					zOpt = globalLB.load(memory_order_acquire);
+// 					if (result.lb > zOpt) {
+// 						globalLB.store(result.lb, memory_order_release);
+// 						zOpt = result.lb;
+// 						const auto now = std::chrono::system_clock::now();
+// 						const auto t_c = std::chrono::system_clock::to_time_t(now);
+// 						cout << "thread: " << id << " , optimal LB: " << result.lb
+// 							<< " set at " << std::ctime(&t_c) << endl;
+// 					}
+// 				}
+//
+// 				if (result.ub > zOpt && !result.nodes.empty()) {
+// 					localQueue.pushNodes(result.nodes);
+// 				}
+// 			}
+//
+// 			// if master wants nodes?
+// 			{
+// 				scoped_lock l{payload.lock};
+// 				// auto st = payload.status;
+// 				if (payload.status == Payload::MASTER_NEEDS_NODES) {
+// 					auto n = localQueue.size();
+// 					auto sz = static_cast<size_t>(ceil(n/2));
+// 					auto nodes = localQueue.getNodes(sz);
+// 					payload.nodes_ = move(nodes);
+// 					payload.status = Payload::WORKER_SHARED_NODES;
+// 					auto s = "thread " + to_string(id) + " sent " + to_string(payload.nodes_.size()) + " nodes  to master\n";
+// 					cout<< s;
+// 				}
+// 			}
+// 		}
+// 	}
+//
+// 	auto s = "thread: " + to_string(id) + " processed " + to_string(nProcessed) + " nodes\n"; cout << s;
+// 	explorer.displayCutStats();
+// }
+//
 //
 // vector<Node_t> Payload::getNodes(bool& done) {
-// 	// get nodes from master or payload.
 //
-// 	std::unique_lock l{lock};
-// 	payloadStatus = WORKER_NEEDS_NODES;
+// 	unique_lock l{lock};
+// 	status = WORKER_NEEDS_NODES;
 // 	if (!nodes_.empty()) {
-// 		/* either master placed some nodes initially, or worker placed some nodes previously
-// 		   for master on master's request. Status flag should be zero. */
 // 		auto nodes = move(nodes_);
-// 		payloadStatus = WORKER_WORKING;
-// 		// status.store(0, memory_order_release); // really necessary?
+// 		status = WORKER_WORKING;
 // 		return nodes;
 // 	}
-// 	// payloadStatus = WORKER_NEEDS_NODES;
-// 	cv.wait(l, [&]{return ( payloadStatus == MASTER_ASSIGNED_NODES || payloadStatus == SOLVER_FINISHED);});
-// 	if (payloadStatus == SOLVER_FINISHED) {cout <<"thread: finish status acknowledged"; done=true; return {};}
-// 	payloadStatus = WORKER_WORKING;
-// 	done = false;
+// 	cv.wait(l, [&]{return (status == MASTER_ASSIGNED_NODES|| status == SOLVER_FINISHED);});
+// 	if (status == SOLVER_FINISHED) { done = true; return{};}
+// 	// auto s = "Received " + to_string(nodes_.size()) + " nodes from master.\n"; cout << s;
 // 	auto nodes = move(nodes_);
-// 	string s = "Recevied " + to_string(nodes.size()) + " nodes from master.\n";
-// 	cout << s;
+// 	done = false;
+// 	status = WORKER_WORKING;
 // 	return nodes;
-//
-// 	// indicate master and wait.
-// 	// payloadStatus = WORKER_NEEDS_NODES;
-// 	// status.store(WORKER_NEEDS_NODES,memory_order_seq_cst);
-//
-//
-// 	// while (true) {
-// 	// 	auto st = status.load(memory_order_seq_cst);
-// 	// 	std::unique_lock ul{lock};
-// 	// 	cv.wait(ul, [&]{return !nodes_.empty() || (st == SOLVER_FINISHED);}); // add isCompleted flag check to break out.
-// 	// 	if (nodes_.empty()) return{}; // master doesn't have any work to share. quit.
-// 	// 	vector<Node_t> work = std::move(nodes_);
-// 	// 	status.store(WORKER_WORKING, memory_order_seq_cst);
-// 	// 	// nodes_.clear();
-// 	// 	return work;
-// 	// }
 // }
 //
-// bool Payload::masterRequireNodes() const noexcept {
-// 	// status.store(MASTER_NEEDS_NODES, memory_order_release);
-// 	return  payloadStatus == MASTER_NEEDS_NODES;
-// 	// return status.load(memory_order_relaxed) & MASTER_NEEDS_NODES;
+// void Payload::setStatus(uint8_t status_) { // assuming already locked.
+// 	status = status_;
 // }
 //
-// void Payload::askWorkerForNodes() { // ask worker for more nodes.
-// 	payloadStatus = MASTER_NEEDS_NODES;
-// 	// status.store(MASTER_NEEDS_NODES, memory_order_seq_cst);
+// uint8_t Payload::getStatus() const noexcept {
+// 	return status; // assuming already locked.
 // }
 //
-//
-// void Payload::addNodesToMaster(vector<Node_t> nodes) {
+// void Payload::addNodesToWorker(vector<Node_t> nodes) {
+// 	// thread must be waiting for nodes.
+// 	auto n = nodes.size();
 // 	{
-// 		// scoped_lock l{lock};
+// 		scoped_lock l{lock};
 // 		nodes_ = move(nodes);
-// 		payloadStatus = WORKER_SHARED_NODES;
+// 		status = MASTER_ASSIGNED_NODES;
 // 	}
-// 	// status.store(WORKER_SHARED_NODES, memory_order_seq_cst);
+// 	cv.notify_one(); // wake up worker.
+// 	auto s = "Master sent " + to_string(n) + " nodes\n"; cout << s;
+// }
+//
+// void Payload::askWorkerForNodes() {
+// 	status = MASTER_NEEDS_NODES;
+// 	// assuming already locked.
 // }
 //
 // vector<Node_t> Payload::getNodesFromWorker() {
-// 	// return nodes from worker.
-// 	vector<Node_t> nodes;
+// 	// scoped_lock l{lock}; // assuming master locks before this function.
+// 	if (status == WORKER_SHARED_NODES) {
+// 		vector<Node_t> nodes;
+// 		status = MASTER_RECEIVED_NODES;
+// 		return move(nodes_);
+// 	} // if worker has not enough nodes, ignore.
+// 	return {};
+// }
 //
+// void Payload::addNodesToMaster(vector<Node_t> nodes) {
+// 	auto n = nodes.size(); // caller locked the mutex.
 // 	{
-// 		// scoped_lock l{lock};
-// 		nodes = move(nodes_);
+// 		scoped_lock l{lock};
+// 		nodes_ = move(nodes);
+// 		// this request only occurs when the master specifically asked for nodes.
+// 		// the previous payload status should be MASTER_NEEDS_NODES. any other status should not be appeared.
 // 	}
-// 	// set update flag
-// 	// status.store(MASTER_RECEIVED_NODES, memory_order_seq_cst);
-// 	payloadStatus = MASTER_RECEIVED_NODES;
-// 	return nodes;
+// 	payloadStatus.store(WORKER_SHARED_NODES, memory_order::release);
+// 	// nodes_ = move(nodes);
+// 	// status = WORKER_SHARED_NODES;
 // }
 //
-// void Payload::setStatus(uint8_t status_) {
-// 	// status.store(status_, memory_order_seq_cst);
-// 	payloadStatus = status_;
+//
+// void DDSolver::startMaster3() {
+// 	cout << "Starting master." << endl;
+// 	NodeQueue globalQueue;
+//
+// 	while (true) {
+// 		unsigned idle = 0, processing = 0;
+//
+// 		// iterate through all workers.
+// 		for (unsigned i = 0; i < NUM_WORKERS; i++) {
+// 			auto& worker = workers[i];
+// 			bool added = false;
+// 			{
+// 				scoped_lock l{worker.lock};
+// 				auto st = worker.status;
+// 				if (st == Payload::WORKER_WORKING) {
+// 					processing++;
+// 				}
+// 				else if (st == Payload::WORKER_SHARED_NODES) {
+// 					// cout << "Some worker shared nodes" << endl;
+// 					auto nodes = worker.nodes_;
+// 					worker.nodes_.clear();
+// 					worker.status = Payload::MASTER_RECEIVED_NODES;
+// 					processing++;
+// 					globalQueue.pushNodes(nodes);
+// 					auto s= "Master received " + to_string(nodes.size()) +
+// 						" nodes from worker: "+ to_string(i)+"\n" ; cout << s;
+// 				}
+// 				else if (st == Payload::WORKER_NEEDS_NODES) {
+// 					if (!globalQueue.empty()) {
+// 						// add nodes
+// 						auto sz = globalQueue.size();
+// 						sz  = static_cast<size_t> (ceil(static_cast<double>(sz)*0.5));
+// 						auto nodes = globalQueue.getNodes(sz);
+// 						worker.nodes_ = nodes; nodes.clear();
+// 						worker.status = Payload::MASTER_ASSIGNED_NODES;
+// 						added = true;
+// 						auto s = "master added " + to_string(worker.nodes_.size()) +
+// 							" nodes to worker " + to_string(i)+"\n"; cout <<s;
+// 					}
+// 					else idle++;
+// 				}
+// 				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
+// 					// if not enough nodes to share or recevied nodes, change status.
+// 					worker.status = Payload::WORKER_WORKING;
+// 					processing++;
+// 				}
+// 				// else if (st == WORKER_SHARED_NODES) {
+// 				// 	cout << "Some worker shared nodes" << endl;
+// 				// 	// get nodes
+// 				// 	auto nodes = worker.nodes_; worker.nodes_.clear();
+// 				// 	worker.status = MASTER_RECEIVED_NODES;
+// 				// 	processing++;
+// 				// 	auto s = "Master received " + to_string(nodes.size()) +
+// 				// 			" nodes from worker: "+ to_string(i)+"\n"; cout << s;
+// 				// 	globalQueue.pushNodes(nodes);
+// 				// }
+// 			}
+// 			if (added) worker.cv.notify_one();
+// 		}
+//
+// 		if (idle == NUM_WORKERS && globalQueue.empty()) {
+// 			// solver is finished.
+// 			isCompleted.store(true, memory_order_seq_cst);
+// 			cout << "Solver is finished" << endl;
+// 			for (unsigned i = 0; i < NUM_WORKERS; i++) {
+// 				auto& worker = workers[i];
+// 				{
+// 					scoped_lock l{worker.lock};
+// 					worker.status = Payload::SOLVER_FINISHED;
+// 				}
+// 				worker.cv.notify_one();
+// 			}
+// 			cout << "master indicated all workers" <<endl;
+// 			return;
+// 		}
+//
+// 		if (idle > 0 ) {
+// 			auto s = "Number of nodes in the queue: " + to_string(globalQueue.size()) + "\n";
+// 			cout << s;
+// 			// ask processing nodes for work.
+// 			for (unsigned i = 0; i < NUM_WORKERS; i++) {
+// 				auto& worker = workers[i];
+// 				{
+// 					scoped_lock l{worker.lock};
+// 					if (worker.status == Payload::WORKER_WORKING) {
+// 						// ask this worker.
+// 						worker.status = Payload::MASTER_NEEDS_NODES;
+// 					}
+// 					else if (worker.status == Payload::NOT_ENOUGH_NODES_TO_SHARE || worker.status == Payload::MASTER_RECEIVED_NODES) {
+// 						worker.status = Payload::WORKER_WORKING;
+// 					}
+// 				}
+// 			}
+// 		}
+// 		this_thread::sleep_for(chrono::seconds(1));
+// 	}
 // }
 
-void DDSolver::startMaster2() {
-	cout << "master starting" << endl;
-	NodeQueue globalQueue;
-	while (true) {
-		//
-		unsigned idle = 0, processing = 0;
-		// iterate through every node and count idle workers
-		for (unsigned i = 0; i < NUM_WORKERS; i++) {
-			auto& worker = workers[i];
-			scoped_lock l{worker.lock};
+//
+// void DDSolver::Master::operator()(DDSolver &solver) {
+// 	cout << "Master started" << endl;
+//
+// 	NodeQueue globalQueue;
+//
+// 	while (true) {
+// 		unsigned idle = 0, processing = 0;
+//
+// 		for (unsigned i = 0; i < NUM_WORKERS; i++) {
+// 			auto& worker = solver.workers[i];
+// 			bool added = false;
+// 			{
+// 				scoped_lock l{worker.lock};
+// 				auto st = worker.payloadStatus.load(memory_order::acquire);
+// 				if (st == Payload::WORKER_WORKING) {
+// 					processing++;
+// 				}
+// 				else if (st == Payload::WORKER_SHARED_NODES) {
+// 					auto nodes = worker.nodes_;
+// 					worker.nodes_.clear();
+// 					worker.payloadStatus.store(Payload::MASTER_RECEIVED_NODES, memory_order::relaxed);
+// 					processing++;
+// 					globalQueue.pushNodes(nodes);
+// 					auto s = "Master received " + to_string(worker.nodes_.size()) + " nodes from worker: " + to_string(i)+"\n" ; cout << s;
+// 				}
+// 				else if (st == Payload::WORKER_NEEDS_NODES) {
+// 					if (!globalQueue.empty()) {
+// 						// add ndoes
+// 						auto sz = globalQueue.size();
+// 						sz  = static_cast<size_t> (ceil(static_cast<double>(sz)*0.5));
+// 						auto nodes = globalQueue.getNodes(sz);
+// 						worker.nodes_ = move(nodes);
+// 						added = true;
+// 						worker.payloadStatus.store(Payload::STATUS::MASTER_ASSIGNED_NODES, memory_order::relaxed);
+// 					}
+// 					else idle++;
+// 				}
+// 				else if (st == Payload::STATUS::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::STATUS::MASTER_RECEIVED_NODES) {
+// 					worker.payloadStatus.store(Payload::STATUS::WORKER_WORKING, memory_order::relaxed);
+// 					processing++;
+// 				}
+//
+// 				if (worker.feasibilityCuts_ != nullptr) {
+// 					fCutsGlobal.push_back(worker.feasibilityCuts_);
+// 					worker.feasibilityCuts_ = nullptr;
+// 				}
+// 				if (worker.optimalityCuts_ != nullptr) {
+// 					oCutsGlobal.push_back(worker.optimalityCuts_);
+// 					worker.optimalityCuts_ = nullptr;
+// 				}
+// 			}
+// 			if (added) worker.cv.notify_one();
+// 		}
+// 		if (idle == NUM_WORKERS && nodeQueue.empty()) {
+// 			solver.isCompleted.store(true, memory_order::relaxed);
+// 			for_each(solver.workers.begin(), solver.workers.end(), [](auto& worker) {
+// 				worker.payloadStatus.store(Payload::STATUS::SOLVER_FINISHED, memory_order::release);
+// 				worker.cv.notify_one();
+// 			});
+// 			cout << "Master indicated all the workers" << endl;
+// 			return;
+// 		}
+// 		if (idle > 0) {
+// 			// can I use memory_order_relax on all these updates and use single release order?
+// 			for_each(solver.workers.begin(), solver.workers.end(), [](auto& worker) {
+// 				worker.payloadStatus.compare_exchange_strong(Payload::STATUS::WORKER_WORKING, Payload::STATUS::MASTER_NEEDS_NODES, memory_order::acq_rel);
+// 			});
+// 		}
+// 	}
+// }
+//
+// void DDSolver::Worker::operator()(DDSolver &solver) {
+//
+// 	NodeExplorer explorer{solver.networkPtr};
+// 	auto& payload = solver.workers[id];
+// 	bool done = false;
+// 	NodeQueue localQueue{payload.getNodes(done)};
+//
+// 	double zOpt = solver.globalLB.load(memory_order::relaxed);
+// 	size_t nProcessed = 0;
+// 	auto globalCuts = make_pair(fCutsGlobal, oCutsGlobal);
+//
+// 	uint prevCount = 0;
+//
+// 	while (!solver.isCompleted.load(memory_order::relaxed)) {
+// 		if (localQueue.empty()) {
+// 			string s = "Thread: " + to_string(id) + " local queue is empty.\n"; cout << s;
+// 			auto nodes = payload.getNodes(done);
+// 			if (done){ cout << ("Thread: "+to_string(id)+ " stopping...\n") << endl; break;}
+// 			cout << ("Thread: "+to_string(id) + " received " + to_string(nodes.size()) +" nodes from master\n" ) <<endl;
+// 			localQueue.pushNodes(nodes);
+// 		}
+//
+// 		while (!localQueue.empty()) {
+// 			Node_t node = localQueue.getNode();
+// 			auto result = explorer.process4(node, zOpt,globalCuts);
+// 			nProcessed++;
+// 			// if cuts in the explorer exceeds limit? update to global.
+// 			if ((explorer.optimalityCuts.cuts.size() + explorer.feasibilityCuts.cuts.size()) > LOCAL_CUTS_LIMIT) {
+// 				shareCutsWithMaster(explorer, payload);
+// 				// at this point explorer's cuts are empty.
+// 			}
+// 			if (solver.cutResources.getCount() > prevCount) { // TODO instead of polling continuously, poll periodically.
+// 				// new cuts are added to the container, update local pointers.
+// 				auto res = solver.cutResources.get(fCutsGlobal.size(), oCutsGlobal.size());
+// 				if (!res.first.empty()) fCutsGlobal.insert(fCutsGlobal.end(), res.first.begin(), res.first.end());
+// 				if (!res.second.empty()) oCutsGlobal.insert(oCutsGlobal.end(), res.second.begin(), res.second.end());
+// 				prevCount = fCutsGlobal.size() + oCutsGlobal.size();
+// 			}
+// 			if (result.success) {
+// 				if (is_poll_time(nProcessed) || result.lb > zOpt) { // poll for optimal value periodically.
+// 					zOpt = solver.globalLB.load(memory_order::acquire);
+// 					if (result.lb > zOpt) {
+// 						while (!solver.globalLB.compare_exchange_strong(zOpt, result.lb, memory_order::release))
+// 							{if(result.lb<zOpt) break;}
+// 						if (zOpt == result.lb) {
+// 							const auto now = std::chrono::system_clock::now();
+// 							const auto t_c = std::chrono::system_clock::to_time_t(now);
+// 							cout << "Thread: " << id << " , optimal LB: " << result.lb << " set at " << std::ctime(&t_c) << endl;
+// 						}
+// 						// share cuts with master.
+// 					}
+// 				}
+// 				if (result.ub > zOpt && !result.nodes.empty()) localQueue.pushNodes(result.nodes);
+// 			}
+// 			// if master wants nodes?
+// 			if (payload.payloadStatus.load(memory_order::relaxed) == Payload::STATUS::MASTER_NEEDS_NODES) {
+// 				// scoped_lock l{payload.lock};
+// 				auto n = localQueue.size();
+// 				auto sz = static_cast<size_t>(ceil(static_cast<double>(n)/2));
+// 				auto nodes = localQueue.getNodes(sz);
+// 				payload.addNodesToMaster(nodes);
+// 				shareCutsWithMaster(explorer, payload); // share cuts
+// 			}
+// 		}
+// 	}
+// #ifdef SOLVER_STATS
+// 	auto s = "Thread: " + to_string(id) + " processed " + to_string(nProcessed) + " nodes\n"; cout << s;
+// 	explorer.displayCutStats();
+// #endif
+// }
+//
+// void DDSolver::Worker::shareCutsWithMaster(NodeExplorer &explorer, Payload &payload) {
+// 	// acquire lock
+// 	// CutContainer* fcuts = new CutContainer(explorer.feasibilityCuts);
+// 	// CutContainer* ocuts = new CutContainer(explorer.optimalityCuts);
+// 	// clear clear cut containers.
+// 	// explorer.feasibilityCuts.clearContainer();
+// 	// explorer.optimalityCuts.clearContainer();
+// 	{
+// 		scoped_lock l{payload.lock};
+// 		payload.feasibilityCuts_ = std::move(explorer.feasibilityCuts);
+// 		payload.optimalityCuts_ = std::move(explorer.optimalityCuts);
+// 		// atomic status update (with release order).
+// 	}
+// }
+//
+// void DDSolver::Master::addCutsToGlobal(DDSolver &solver) {
+//
+// 	// create cut containers defined in Inavap namespace.
+// 	Inavap::CutContainer * fcuts = new Inavap::CutContainer();
+// 	Inavap::CutContainer * ocuts = new Inavap::CutContainer();
+//
+// 	// insert fCuts to fcuts.
+// 	for (auto container_p: fCutsGlobal) {
+// 		for (auto cut : (*container_p).cuts) {
+// 			Inavap::Cut c{cut.RHS, cut.cutCoeff};
+// 			fcuts->insertCut(c);
+// 		}
+// 	}
+//
+// 	for (auto container_p : oCutsGlobal) {
+// 		for (auto cut: container_p->cuts) {
+// 			Inavap::Cut c{cut.RHS, cut.cutCoeff};
+// 			ocuts->insertCut(c);
+// 		}
+// 	}
+// 	// add to cutresource
+// 	solver.cutResources.add({{fcuts}, {ocuts}});
+// }
 
-			// get status
-			auto st = worker.getStatus();
-			if (st == WORKER_WORKING) {
-				processing++;
-			}
-			else if (st  == WORKER_NEEDS_NODES) idle++;
-		}
 
-		if (idle == NUM_WORKERS && globalQueue.empty()) {
-			// solver is finished.
-			isCompleted.store(true, memory_order_seq_cst);
-			cout << "Master: Solver is finished. " << endl;
-			for (int i = 0; i < NUM_WORKERS; i++) {
-				auto& worker = workers[i];
-				{
-					scoped_lock l {worker.lock};
-					worker.setStatus(SOLVER_FINISHED);
-				}
-				worker.cv.notify_one();
-			}
+// bool Inavap::DDSolver::Master::isCutsShared(Payload &worker) {
+// 	// check if worker shared cuts?
+// }
 
-			cout << "Master: Notified all workers" << endl;
-			break; // exit from loop.
-		}
+/**
+ * Adds the given Cuts to the global space.
+ * @param solver
+ * @param cuts
+ */
+void Inavap::DDSolver::Master::addCutsToGlobal(DDSolver &solver, pair<vector<Inavap::CutContainer>, vector<Inavap::CutContainer>> &cuts) {
 
-		if (idle > 0){
-			// ask for work.
-			// cout << "Number of idle workers: " << idle << endl;
-			for (unsigned i = 0; i < NUM_WORKERS; i++) {
-				auto& worker = workers[i];
-				scoped_lock l{worker.lock};
-				auto st = worker.getStatus();
-				if (st == STATUS::WORKER_WORKING) {
-					worker.askWorkerForNodes(); // notify the working workers.
-					string s = "Master: informed worker " + to_string(i) +" for nodes\n";
-					cout << s;
-				}
-				else if ( st == STATUS::WORKER_NEEDS_NODES) {
-					// share nodes
-					if (!globalQueue.empty()) {
-						// node queue is not empty.
-						auto s = globalQueue.size();
-						s /= 2;
-						auto nodes = globalQueue.getNodes(s);
-						worker.addNodesToWorker(nodes); // status update in the function.
-						cout << "master: sent nodes to worker" << endl;
-					}
-				}
-				else if (st == STATUS::WORKER_SHARED_NODES) {
-					// TAKE nodes
-					auto nodes = worker.getNodesFromWorker();
-					string s = "Master: received " + to_string(nodes.size()) + " nodes\n";
-					cout << s;
-					globalQueue.pushNodes(nodes);
+	vector<CutContainer *> feasibilityPointers, optimalityPointers;
+
+	size_t nfCuts = accumulate(cuts.first.begin(), cuts.first.end(), 0,
+		[](size_t sum, const CutContainer &cont) { return sum + cont.size(); });
+	// size_t nfCuts = 0;
+	// for (const auto &cutContainer : cuts.first) {
+	// 	nfCuts += cutContainer.size();
+	// }
+
+	// TODO: add master's local cuts to the global.
+
+	if (nfCuts > FEASIBILITY_CONTAINER_CAPACITY) {
+		uint nContainers = static_cast<uint> (floor(nfCuts/FEASIBILITY_CONTAINER_CAPACITY));
+		if (nContainers) {
+			feasibilityPointers = vector<CutContainer *>(nContainers);
+			uint c_index = 0;
+			uint n_so_far = 0;
+			for (auto& container : cuts.first) {
+				for (auto&& cut : container) { // don't know if it causes problem?
+					feasibilityPointers[c_index]->insertCut(std::move(cut));
+					n_so_far++;
+					if (n_so_far == FEASIBILITY_CONTAINER_CAPACITY) c_index++;
 				}
 			}
 		}
 	}
+
+	size_t nOCuts = accumulate(cuts.second.begin(), cuts.second.end(), 0,
+		[](size_t sum, const CutContainer &cont) { return sum + cont.size(); });
+	if (nOCuts > OPTIMALITY_CONTAINER_CAPACITY) {
+		uint nContainers = static_cast<uint>(floor(nOCuts/OPTIMALITY_CONTAINER_CAPACITY));
+		if (nContainers) {
+			optimalityPointers = vector<CutContainer *> (nContainers);
+			uint c_index = 0;
+			uint n_so_far = 0;
+			for (auto& container : cuts.second) {
+				for (auto&& cut: container) { // capturing by references (without copying).
+					optimalityPointers[c_index]->insertCut(std::move(cut));
+					n_so_far++;
+					if (n_so_far == OPTIMALITY_CONTAINER_CAPACITY) c_index++;
+				}
+			}
+		}
+	}
+
+	solver.CutResources.add(make_pair(feasibilityPointers, optimalityPointers));
+	// if (nOCuts > OPTIMALITY_CONTAINER_CAPACITY) CutContainer
 }
 
-void DDSolver::processWork3(unsigned int id, pair<CutContainer, CutContainer> cuts) {
-
-	NodeExplorer explorer{networkPtr, cuts};
-	auto& payload = workers[id];
-	bool done = false;
-	auto nodeVec = payload.getNodes(done);
-	NodeQueue localQueue{nodeVec};
-
-	double zOpt = globalLB.load(memory_order_acquire);
+/**
+ * Master thread enters to worker mode and process nodes from its local queue.
+ * @param solver
+ * @param explorer - Node explorer of master thread.
+ * @param n - Number of nodes to process.
+ * @return - number of nodes processed by the master in this function call.
+ */
+size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::NodeExplorer &explorer, size_t n) {
+	// worker-mode.
+	double zOpt = solver.optimal.load(memory_order::relaxed);
 	size_t nProcessed = 0;
 
-	while (!isCompleted.load(memory_order_seq_cst)) {
+	while (!nodeQueue.empty() && n--) {
+		auto result = explorer.process(nodeQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
+		nProcessed++;
+		// TODO: what to do with local cuts?
+		if (result.status) {
+			if (result.lb > zOpt) {
+				while ((!solver.optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)) && (zOpt < result.lb));
+			}
+			if (result.ub > zOpt && !result.nodes.empty()) nodeQueue.pushNodes(result.nodes);
+		}
+	}
+	return nProcessed;
+}
+
+void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
+	cout << "Starting Master thread" << endl;
+
+	NodeExplorer explorer{networkPtr};
+	size_t nProcessed = 0;
+
+	// check if the worker shared any cuts?
+	auto func = [&](Payload &worker) { // pair of feasibility, optimality cuts.
+		// need to lock again?
+		pair<CutContainer, CutContainer> cuts;
+		if (!worker.fCuts.empty()) {
+			cuts.first = std::move(worker.fCuts);
+		}
+		if (!worker.oCuts.empty()) {
+			cuts.second = std::move(worker.oCuts);
+		}
+		return cuts;
+	};
+
+	while (!solver.isCompleted) {
+		// number of idle workers, and number of processing workers.
+		uint16_t idle = 0, processing = 0;
+
+		// containers to hold the cuts shared by the workers.
+		vector<CutContainer> feasibilityCuts;
+		vector<CutContainer> optimalityCuts;
+
+		// iterate through all workers.
+		for (uint16_t i = 0; i < solver.N_WORKERS; i++) {
+			auto& worker = solver.payloads[i];
+			pair<CutContainer, CutContainer> workerCuts;
+			uint8_t watchStatus = 0;
+			{
+				/* Worker might share cuts anytime. Instead of double locking for cuts and status check, acquire lock
+				 * on entire payload before operation starts.*/
+				scoped_lock l{worker.lock};
+				workerCuts = func(worker);
+				// st cannot be reordered with the below instructions. (invariant).
+				auto st = worker.payloadStatus.load(memory_order::relaxed);
+				if (st == Payload::WORKER_WORKING) {
+					processing++;
+				}
+				else if (st == Payload::WORKER_SHARED_NODES) {
+					// scoped_lock l{worker.lock};
+					/* double check, the worker might take back the previously shared nodes if the worker is idle. */
+					// st = worker.payloadStatus.load(memory_order::relaxed); // lock acquired at start of block.
+					// if (st == Payload::WORKER_SHARED_NODES) {
+					auto message = "Thread " +std::to_string(worker.id) + " sent " + std::to_string(worker.nodes.size()) + " nodes."; cout << message << endl;
+                    auto nodes = std::move(worker.nodes);
+                    worker.payloadStatus.store(Payload::MASTER_RECEIVED_NODES, memory_order::relaxed);
+                    processing++;
+                    nodeQueue.pushNodes(nodes);
+					// }
+				}
+				else if (st == Payload::WORKER_NEEDS_NODES) {
+					// status cannot be changed by the worker once reached here.
+					if(!nodeQueue.empty()) {
+						{ // mutex unlocks after this scope and signal can be properly viewed by worker.
+							// scoped_lock l {worker.lock};
+							uint size = nodeQueue.size();
+							size = static_cast<size_t> (ceil(size*PROPORTION_OF_SHARE));
+							auto nodes = nodeQueue.popNodes(size);
+							worker.nodes = std::move(nodes);
+							worker.payloadStatus.store(Payload::MASTER_ASSIGNED_NODES, memory_order::relaxed);
+							auto msg = "Master sent " + to_string(worker.nodes.size()) + " nodes to worker " + std::to_string(worker.id); cout << msg << endl;
+						}
+						// worker.cv.notify_one(); // signal after lock release instead.
+						watchStatus = 1;
+					}
+					else idle++;
+				}
+				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
+					// scoped_lock l{worker.lock};
+					/* reason for second check is that worker might change the status to 'WORKER_NEEDS_NODES' and wait for
+					 * master before the master changes the status to 'WORKER_WORKING',  resulting in infinite wait by the worker.*/
+					st = worker.payloadStatus.load(memory_order::relaxed);
+					if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
+						worker.payloadStatus.store(Payload::WORKER_WORKING, memory_order::relaxed);
+						processing++;
+					}
+				}
+			}
+			if (watchStatus) worker.cv.notify_one();
+			// add cuts to global.
+			if (!workerCuts.first.empty()) feasibilityCuts.push_back( std::move(workerCuts.first));
+			if (!workerCuts.second.empty()) optimalityCuts.push_back(std::move(workerCuts.second));
+		}
+
+		if (idle == solver.N_WORKERS && nodeQueue.empty()) {
+			cout << "Indicating all workers" << endl;
+			solver.isCompleted.store(true, std::memory_order::release);
+			for_each (solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
+				// all the workers must be in waiting state. lock not needed.
+				worker.payloadStatus.store(Payload::SOLVER_FINISHED, memory_order::release);
+				worker.cv.notify_one();
+			});
+			cout << "Solver finished. "<< endl;
+			return;
+		}
+
+		if (idle > 0) {
+			// some workers are idle, get nodes from busy workers.
+			for_each(solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
+				scoped_lock l{worker.lock};
+				auto st = worker.payloadStatus.load(memory_order::relaxed);
+				if (st == Payload::WORKER_WORKING)
+					worker.payloadStatus.store(Payload::MASTER_NEEDS_NODES, memory_order::relaxed);
+				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES)
+					worker.payloadStatus.store(Payload::WORKER_WORKING, memory_order::relaxed);
+					// either this worker don't have enough nodes to share or it shared earlier.
+			});
+		}
+
+		// thread sleep?
+
+		// update local cuts to global.
+		auto p = make_pair(feasibilityCuts, optimalityCuts);
+		addCutsToGlobal(solver, p);
+
+		// process some nodes from local queue?
+		// nProcessed += processNodes(solver, explorer, 4);
+	}
+	// post-completion tasks by master?
+}
+
+void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
+	// change to pointer of DDSolver.
+
+	/* function: returns true if it is time to read the atomic variable of global optimal, else increases counter. */
+	auto is_poll_time = [](size_t &counter) { // resets counter when reaches limit.
+       if (counter == POLL_FREQUENCY) { counter = 0; return true; }
+        counter++; return false;
+    };
+
+	/* function: returns cuts from the node explorer */
+    // auto f_shareCuts = [](NodeExplorer &explorer) { // share cuts with master if exceeds limit.
+    //     pair<optional<CutContainer>, optional<CutContainer>> cuts;
+    //     if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT )
+    //         cuts.first.value() = move(explorer.feasibilityCuts);
+    //     if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT)
+    //         cuts.second.value() = move(explorer.optimalityCuts);
+    //     return cuts;
+    // };
+
+
+	NodeExplorer explorer{networkPtr};
+	auto& payload = solver->payloads[id];
+	payload.id = id;
+	// auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n"; cout << str <<  endl;
+	NodeQueue localQueue;
+	double zOpt = solver->optimal.load(memory_order::relaxed);
+
+	uint8_t done = 0; // flag to indicate solver is finished.
+	size_t nProcessed = 0; // # nodes processed so far.
+	size_t counter = 0;
+	uint prevCount = 0; // # newly generated cuts since last shared with global.
+
+	/* Operations on same variable by a single thread with relaxed-order will obey the happens-before relationships.
+	 * The access to a single atomic variable from  the same thread can't be reordered. Once a given thread see a
+	 * particular value of atomic variable, any subsequent read by that thread is guaranteed to retrieve same value or
+	 * latest value since the last read operation.
+	 */
+
+	/* Still don't know how the atomic store is implemented at the hardware level. Does it directly write to memory ?
+	 * or does it store in caches in case of relaxed ordering?
+	 */
+	while (!solver->isCompleted.load(memory_order::relaxed)) {
+
 		if (localQueue.empty()) {
-			string s = "thread : " + to_string(id) + " local queue is empty. indicating master\n";
-			cout << s;
+			// indicate master for nodes. wait until master responds.
 			auto nodes = payload.getNodes(done);
-			if (done) {cout<< "thread: solver is finished" << endl; break;}
-			auto st = "thread " + to_string(id) + " received " + to_string(nodes.size()) + " nodes from master\n";
-			cout << st;
+			if (done) { break;} // solver is finished. isFinished flag has been set?
 			localQueue.pushNodes(nodes);
 		}
 
 		while (!localQueue.empty()) {
-			Node_t node = localQueue.getNode();
-			auto result = explorer.process3(node, zOpt);
+			// cout << "worker: " << id << " processing " << endl;
+
+			// get updated cuts from global space.
+			// if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
+			// 	auto res = solver->CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
+			// 	if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
+			// 	if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
+			// 	prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
+			// }
+
+			Node node = localQueue.popNode();
+			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
+			// auto result = explorer.process2(localQueue.popNode(), zOpt);
 			nProcessed++;
-			if (result.success) {
+			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
+
+			if (result.status) {
+				//
 				if (result.lb > zOpt) {
-					zOpt = globalLB.load(memory_order_acquire);
-					if (result.lb > zOpt) {
-						globalLB.store(result.lb, memory_order_release);
-						zOpt = result.lb;
-						const auto now = std::chrono::system_clock::now();
-						const auto t_c = std::chrono::system_clock::to_time_t(now);
-						cout << "thread: " << id << " , optimal LB: " << result.lb
-							<< " set at " << std::ctime(&t_c) << endl;
-					}
-				}
+					/* short-circuit operation. If the store is successful, exit the loop, else keep trying until
+					 * either one of holds (1) store successful, (2) another best optimal found.
+					 * Can be replaced with compare_exchange_strong, but might need additional check. */
+					while (!solver->optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)
+						&& (zOpt < result.lb)) {}
 
-				if (result.ub > zOpt && !result.nodes.empty()) {
+					// zOpt is not updated after CAS operation.
+					if (solver->optimal.load(memory_order::relaxed) == result.lb) zOpt = result.lb;
+
+					 if (result.lb == zOpt) {
+					 	const auto now = std::chrono::system_clock::now();
+					 	const auto t_c = std::chrono::system_clock::to_time_t(now);
+					 	cout << "Thread: " << id << " , optimal lb: " << zOpt << " set at, " << std::ctime(&t_c) << endl;
+					 }
+
+					counter = 0;
+				}
+				else if (is_poll_time(counter)) { // check periodically for latest optimal value.
+					zOpt = solver->optimal.load(memory_order::relaxed);
+				}
+				if (result.ub > zOpt && !result.nodes.empty())
 					localQueue.pushNodes(result.nodes);
-				}
 			}
 
-			// if master wants nodes?
-			{
-				scoped_lock l{payload.lock};
-				// auto st = payload.status;
-				if (payload.status == MASTER_NEEDS_NODES) {
-					auto n = localQueue.size();
-					auto sz = static_cast<size_t>(ceil(n/2));
-					auto nodes = localQueue.getNodes(sz);
-					payload.nodes_ = move(nodes);
-					payload.status = WORKER_SHARED_NODES;
-					auto s = "thread " + to_string(id) + " sent " + to_string(payload.nodes_.size()) + " nodes  to master\n";
-					cout<< s;
-				}
-			}
+			// look into explorer's local cuts.
+			// if ((explorer.feasibilityCuts.size() + explorer.optimalityCuts.size()) > LOCAL_CUTS_LIMIT) {
+			// 	// use different strategy.
+			// 	scoped_lock l{payload.lock};
+			// 	if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT) payload.fCuts = std::move(explorer.feasibilityCuts);
+			// 	if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT) payload.oCuts = std::move(explorer.optimalityCuts);
+			// 	// shareCutsWithMaster(explorer, payload);
+			// 	// At this point, node explorer cuts are empty.
+			// }
+
+            // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
+			// TODO: instead of checking in every iteration, check periodically
+			scoped_lock l{payload.lock};
+            auto payloadStatus = payload.payloadStatus.load(memory_order::relaxed);
+            if (payload.payloadStatus.load(memory_order::relaxed) == Payload::MASTER_NEEDS_NODES) {
+                uint n = localQueue.size();
+                auto sz = static_cast<size_t> (ceil(n*0.4));
+                auto nodes = localQueue.popNodes(sz);
+            	/* Do not share cuts with master. */
+            	// auto [fst, snd] = f_shareCuts(explorer);
+                // scoped_lock l{payload.lock};
+                payload.nodes = std::move(nodes);
+                payload.payloadStatus.store(Payload::WORKER_SHARED_NODES, memory_order::relaxed);
+            	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
+            	// if (fst) payload.fCuts = move(fst.value());
+            	// if (snd) payload.oCuts = move(snd.value());
+            }
 		}
 	}
 
-	auto s = "thread: " + to_string(id) + " processed " + to_string(nProcessed) + " nodes\n"; cout << s;
-	explorer.displayCutStats();
+	// display cut statistics. append to global string instead of printing.
+	std::string msg = "Worker: " + std::to_string(id) + " processed " + std::to_string(nProcessed) + " nodes";
+	cout << msg << endl;
+}
+
+void Inavap::DDSolver::Worker::shareCutsWithMaster(NodeExplorer &explorer, Inavap::DDSolver::Payload &payload) {
+	// lock the paylaod and share cuts.
+	// should share all the cuts to the payload.
+	// payload.fCuts = move(explorer.feasibilityCuts);
+	// if (explorer.optimalityCuts.size() > )
 }
 
 
-vector<Node_t> Payload::getNodes(bool& done) {
+/**
+ * Returns vector of nodes to process from the Payload.
+ * @param status
+ * @return
+ */
+vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 
-	unique_lock l{lock};
-	status = WORKER_NEEDS_NODES;
-	if (!nodes_.empty()) {
-		auto nodes = move(nodes_);
-		status = WORKER_WORKING;
-		return nodes;
+	/* Acquire lock and get already existing nodes (if any) from the payload. This is possible when
+	 * the worker recently shared nodes with master, and master yet to take the nodes shared by this worker.
+	 *
+	 * NOTE: unique_lock is a type of lock that unlocks the acquired mutex when the code reaches out-of-scope,
+	 * thus eliminating explicit unlocking of the acquired locks.
+	 */
+
+	unique_lock l {lock};
+	if (!nodes.empty()) {
+		auto temp = std::move(nodes);
+		payloadStatus.store(WORKER_WORKING, memory_order::relaxed);
+		return temp;
 	}
-	cv.wait(l, [&]{return (status == MASTER_ASSIGNED_NODES|| status == SOLVER_FINISHED);});
-	if (status == SOLVER_FINISHED) { done = true; return{};}
-	// auto s = "Received " + to_string(nodes_.size()) + " nodes from master.\n"; cout << s;
-	auto nodes = move(nodes_);
-	done = false;
-	status = WORKER_WORKING;
+	payloadStatus.store(WORKER_NEEDS_NODES, memory_order::relaxed);
+	uint st;
+
+	// cout << "Thread" << this_thread::get_id() << " Node Queue is empty. Indicating Master. " << endl;
+	// std::string message = "Thread " + std::to_string(id) + ": Queue is empty. Indicating Master."; cout << message << endl;
+	// for now, set the status to finished
+	// status = status | 1; return {};
+
+	/* Conditionally wait for the nodes until master wakes (signals) this worker. The master can also set the
+	 * status as finished when all the other threads are waiting for the nodes and the master's queue is empty.
+	 *
+	 * NOTE: While waiting, the worker gives-up the acquired lock on the payload, and so that master can acquire
+	 * it in the future. unique_lock can be re-locked again, thus particularly useful in conditional waiting.
+	 */
+	cv.wait(l, [&] {
+		st = payloadStatus.load(memory_order::relaxed);
+		return (st == MASTER_ASSIGNED_NODES || st == SOLVER_FINISHED);
+	});
+	if (st == SOLVER_FINISHED) {status = 1; return {};}
+	auto temp = std::move(nodes);
+	auto msg = "Thread " + std::to_string(id) + ": received " + std::to_string(temp.size()) + " nodes"; cout << msg << endl;
+	status = 0;
+	payloadStatus.store(WORKER_WORKING, memory_order::relaxed);
+	return temp;
+}
+
+void Inavap::DDSolver::startSolver() {
+
+	cout << "Starting DD Solver." << endl;
+
+	// create initial restricted tree and get cutset with desired max width.
+
+	RestrictedDDNew restrictedDD{networkPtr, 128};
+	Node root;
+	auto cutset = restrictedDD.buildTree(root);
+
+	if (cutset) cout << "Number of nodes from teh first tree: " << cutset.value().size() << endl;
+
+	vector<Node> cutsetNodes = cutset.value();
+	// assume nodes is a vector of nodes.
+	// divide the nodes to all workers.
+	uint current = 0;
+	payloads = vector<Payload>(N_WORKERS);
+	for (const auto& node : cutsetNodes) {
+		// round robin.
+		payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
+	}
+
+
+	// static assert
+	// assert(0 == 1);
+	// for (const auto& payload: payloads) {
+	// 	assertm("Payload is empty.", !payload.nodes.empty());
+	// }
+
+	// all payloads are ready. launch threads.
+	// workers = vector<thread>();
+	for (uint i = 0; i < N_WORKERS; i++) {
+		Worker worker{i, networkPtr};
+		workersGroup.push_back(worker);
+		workers.push_back(thread{&Worker::startWorker, &workersGroup[i], this});
+		// workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
+	}
+	// start master
+	Master m{networkPtr};
+	m.startMaster(std::ref(*this));
+	// std::thread master (&Master::startMaster, &m, std::ref(*this));
+	// if (master.joinable()) master.join();
+	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
+	for (unsigned int i = 0; i < N_WORKERS; i++) {
+		if (workers[i].joinable()) workers[i].join();
+	}
+
+	// destruct global cuts?
+	cout << "Optimal Solution: " << optimal.load() << endl;
+
+}
+
+void Inavap::DDSolver::NodeQueue::pushNode(Node node) {
+	// push to local queue.
+	pq.push(std::move(node));
+}
+
+void Inavap::DDSolver::NodeQueue::pushNodes(vector<Node> nodes) {
+	for (auto&& node : nodes) pq.push(std::move(node));
+}
+
+Inavap::Node Inavap::DDSolver::NodeQueue::popNode() {
+	// auto node = pq.top();
+	Node node {pq.top()};
+	pq.pop();
+	return node;
+}
+
+vector<Inavap::Node> Inavap::DDSolver::NodeQueue::popNodes(size_t n) {
+	vector<Inavap::Node> nodes;
+	n = min(n, pq.size());
+	nodes.reserve(n);
+	while (n--) { nodes.emplace_back(pq.top()); pq.pop(); }
 	return nodes;
-}
-
-void Payload::setStatus(uint8_t status_) { // assuming already locked.
-	status = status_;
-}
-
-uint8_t Payload::getStatus() const noexcept {
-	return status; // assuming already locked.
-}
-
-void Payload::addNodesToWorker(vector<Node_t> nodes) {
-	// thread must be waiting for nodes.
-	auto n = nodes.size();
-	{
-		scoped_lock l{lock};
-		nodes_ = move(nodes);
-		status = MASTER_ASSIGNED_NODES;
-	}
-	cv.notify_one(); // wake up worker.
-	auto s = "Master sent " + to_string(n) + " nodes\n"; cout << s;
-}
-
-void Payload::askWorkerForNodes() {
-	status = MASTER_NEEDS_NODES;
-	// assuming already locked.
-}
-
-vector<Node_t> Payload::getNodesFromWorker() {
-	// scoped_lock l{lock}; // assuming master locks before this function.
-	if (status == WORKER_SHARED_NODES) {
-		vector<Node_t> nodes;
-		status = MASTER_RECEIVED_NODES;
-		return move(nodes_);
-	} // if worker has not enough nodes, ignore.
-	return {};
-}
-
-void Payload::addNodesToMaster(vector<Node_t> nodes) {
-	auto n = nodes.size(); // caller locked the mutex.
-	nodes_ = move(nodes);
-	status = WORKER_SHARED_NODES;
-}
-
-
-void DDSolver::startMaster3() {
-	cout << "Starting master." << endl;
-	NodeQueue globalQueue;
-
-	while (true) {
-		unsigned idle = 0, processing = 0;
-
-		// iterate through all workers.
-		for (unsigned i = 0; i < NUM_WORKERS; i++) {
-			auto& worker = workers[i];
-			bool added = false;
-			{
-				scoped_lock l{worker.lock};
-				auto st = worker.status;
-				if (st == WORKER_WORKING) {
-					processing++;
-				}
-				else if (st == WORKER_SHARED_NODES) {
-					// cout << "Some worker shared nodes" << endl;
-					auto nodes = worker.nodes_;
-					worker.nodes_.clear();
-					worker.status = MASTER_RECEIVED_NODES;
-					processing++;
-					globalQueue.pushNodes(nodes);
-					auto s= "Master received " + to_string(nodes.size()) +
-						" nodes from worker: "+ to_string(i)+"\n" ; cout << s;
-				}
-				else if (st == WORKER_NEEDS_NODES) {
-					if (!globalQueue.empty()) {
-						// add nodes
-						auto sz = globalQueue.size();
-						sz  = static_cast<size_t> (ceil(static_cast<double>(sz)*0.5));
-						auto nodes = globalQueue.getNodes(sz);
-						worker.nodes_ = nodes; nodes.clear();
-						worker.status = MASTER_ASSIGNED_NODES;
-						added = true;
-						auto s = "master added " + to_string(worker.nodes_.size()) +
-							" nodes to worker " + to_string(i)+"\n"; cout <<s;
-					}
-					else idle++;
-				}
-				else if (st == NOT_ENOUGH_NODES_TO_SHARE || st == MASTER_RECEIVED_NODES) {
-					// if not enough nodes to share or recevied nodes, change status.
-					worker.status = WORKER_WORKING;
-					processing++;
-				}
-				// else if (st == WORKER_SHARED_NODES) {
-				// 	cout << "Some worker shared nodes" << endl;
-				// 	// get nodes
-				// 	auto nodes = worker.nodes_; worker.nodes_.clear();
-				// 	worker.status = MASTER_RECEIVED_NODES;
-				// 	processing++;
-				// 	auto s = "Master received " + to_string(nodes.size()) +
-				// 			" nodes from worker: "+ to_string(i)+"\n"; cout << s;
-				// 	globalQueue.pushNodes(nodes);
-				// }
-			}
-			if (added) worker.cv.notify_one();
-		}
-
-		if (idle == NUM_WORKERS && globalQueue.empty()) {
-			// solver is finished.
-			isCompleted.store(true, memory_order_seq_cst);
-			cout << "Solver is finished" << endl;
-			for (unsigned i = 0; i < NUM_WORKERS; i++) {
-				auto& worker = workers[i];
-				{
-					scoped_lock l{worker.lock};
-					worker.status = SOLVER_FINISHED;
-				}
-				worker.cv.notify_one();
-			}
-			cout << "master indicated all workers" <<endl;
-			return;
-		}
-
-		if (idle > 0 ) {
-			auto s = "Number of nodes in the queue: " + to_string(globalQueue.size()) + "\n";
-			cout << s;
-			// ask processing nodes for work.
-			for (unsigned i = 0; i < NUM_WORKERS; i++) {
-				auto& worker = workers[i];
-				{
-					scoped_lock l{worker.lock};
-					if (worker.status == WORKER_WORKING) {
-						// ask this worker.
-						worker.status = MASTER_NEEDS_NODES;
-					}
-					else if (worker.status == NOT_ENOUGH_NODES_TO_SHARE || worker.status == MASTER_RECEIVED_NODES) {
-						worker.status = WORKER_WORKING;
-					}
-				}
-			}
-		}
-		this_thread::sleep_for(chrono::seconds(1));
-	}
 }

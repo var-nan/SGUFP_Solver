@@ -466,8 +466,448 @@ OutObject NodeExplorer::process3(const Node_t node, const double optimalLB) {
     return {lowerBound, upperBound, {}, true};
 
 }
+
+OutObject NodeExplorer::process4(Node_t node, double optimalLB,
+        const pair<vector<CutContainer *>, vector<CutContainer *>>& globalCuts) {
+    // apply node explroer
+
+    const auto& feasibilityCutContainer = globalCuts.first;
+    const auto& optimalityCutContainer = globalCuts.second;
+
+    // auto& feasibilityCutContainerStart = feasibilityCutContainer.begin();
+
+    double lowerBound = node.lb;
+    double upperBound = node.ub;
+
+    DDNode root1{0, node.globalLayer, node.states, node.solutionVector};
+    DD restrictedDD{networkPtr, RESTRICTED};
+    auto cutset = restrictedDD.build(root1);
+
+    if (cutset) { // tree is not exact.
+        DD relaxedDD {networkPtr, EXACT};
+        DDNode root2{0, node.globalLayer, node.states, node.solutionVector};
+        relaxedDD.build(root2);
+        // apply global cuts first
+        for (const auto& fStart : feasibilityCutContainer) {
+            for (const auto& cut: fStart->cuts) {
+                if (!relaxedDD.applyFeasibilityCutHeuristic(cut)) return {0,0,{}, false};
+                if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+
+        // apply optimality cuts
+        for (const auto& oStart : optimalityCutContainer) {
+            for (const auto& cut: oStart->cuts) {
+                upperBound = min(relaxedDD.applyOptimalityCutHeuristic(cut), upperBound);
+                if (upperBound <= optimalLB) return {0,0,{}, false};
+                lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+                if (lowerBound <= optimalLB) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+
+        // actual refinement
+        double previousLowerBound;
+        vi previousSolution;
+
+        while (true) {
+            vi solution = restrictedDD.solution();
+            if (previousSolution == solution) {
+                if (previousLowerBound == lowerBound) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = lowerBound; // changed here.
+                    });
+                    return {lowerBound, upperBound, cutset.value(), true};
+                }
+                else previousLowerBound = lowerBound;
+            }
+            else {
+                previousSolution = solution;
+                previousLowerBound = lowerBound;
+            }
+
+            auto y_bar = w2y(solution , networkPtr);
+            GuroSolver solver{networkPtr, env};
+            auto cut = solver.solveSubProblemInstance(y_bar, 0);
+            if (cut.cutType == FEASIBILITY) {
+                feasibilityCuts.insertCut(cut);
+                if (!relaxedDD.applyFeasibilityCutHeuristic(cut)) return {0,0,{}, false};
+                if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+            else {
+                // optimality cut.
+                optimalityCuts.insertCut(cut);
+                upperBound = min(relaxedDD.applyOptimalityCutHeuristic(cut), upperBound);
+                if (upperBound <= optimalLB) return {0,0,{}, false};
+                lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+                if (lowerBound <= optimalLB) {
+                    ranges::for_each(cutset.value(), [&](auto& c_node) {
+                        c_node.ub = upperBound;
+                        c_node.lb = node.lb;
+                    });
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+    }
+    else {
+        // tree is exact.
+        // apply global cuts.
+    }
+
+}
+
 void NodeExplorer::clearCuts() {
     feasibilityCuts.clearContainer();
     optimalityCuts.clearContainer();
 }
 
+[[always_inline]]
+static void updateNodeBounds(vector<Inavap::Node>& nodes, double lowerBound, double upperBound ) {
+    for (auto& node : nodes) {
+        node.lb = lowerBound;
+        node.ub = upperBound;
+    }
+}
+
+
+void printBothCuts(const ::Cut& oldCut, const Inavap::Cut& newCut) {
+
+    cout << "Old RHS: " << oldCut.RHS << endl;
+
+    for (const auto&[key, val]: oldCut.cutCoeff) {
+        auto [i,q,j] = key;
+        cout << "(" << i << ", " << q << ", " << j << "): " << val << endl;
+    }
+
+    if (oldCut.cutType == FEASIBILITY) newCut.printCut(1);
+    else newCut.printCut(0);
+}
+
+Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
+        const vector<CutContainer *>& globalFCuts, const vector<CutContainer *>& globalOCuts) {
+
+    // copied from Node Explorer 5.
+
+    double lowerBound = node.lb;
+    double upperBound = DOUBLE_MAX;
+
+    if (optimalLB >= -2205) {
+        // cout << "Node.ub: " << node.ub << " solution vector: " << node.solutionVector.size()
+        // << " states: " << node.states.size() << endl;
+    }
+
+    Inavap::RestrictedDDNew restrictedDD{networkPtr, 128};
+    auto cutset = restrictedDD.buildTree(node);
+
+    if (!cutset){ // TODO : set status field in RestrictedDD.
+        // complete tree is built.
+        // apply local cuts first.
+        for (const auto& cut : feasibilityCuts) {
+            if (!restrictedDD.applyFeasibilityCut(cut))
+                return INVALID_OBJECT;
+        }
+
+        // apply global feasibility cuts.
+        for (const auto& containerPtr: globalFCuts) {
+            for (const auto& cut :  *containerPtr) {
+                if (!restrictedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+            }
+        }
+
+        for (const auto& cut: optimalityCuts) {
+            if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB)
+                return INVALID_OBJECT;
+        }
+
+        // apply global optimality cuts.
+        for (const auto& containerPtr : globalOCuts) {
+            for (const auto& cut : *containerPtr) {
+                if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB)
+                    return INVALID_OBJECT;
+            }
+        }
+
+        // actual refinement.
+        double previousLowerBound;
+        Path previousSolution;
+
+        while (true) {
+            Path solution = restrictedDD.getSolution();
+
+            if (previousSolution == solution) {
+                if (previousLowerBound == lowerBound) {
+                    return {lowerBound, upperBound, {}, true};
+                }
+                previousLowerBound = lowerBound;
+            }
+            else {
+                previousSolution = solution;
+                previousLowerBound = lowerBound;
+            }
+
+            // if ((previousSolution == solution) && (previousLowerBound == lowerBound)) {
+            //     cout <<"1" << endl;
+            //     return {lowerBound, upperBound, {}, true};
+            // }
+
+            // previousSolution = solution;
+            // previousLowerBound = lowerBound;
+
+            // convert solution to vector<int>
+            vector<int> intSolution; for (auto s: solution) intSolution.push_back(s);
+            auto y_bar = w2y(intSolution, networkPtr);
+            GuroSolver solver{networkPtr, env};
+            // auto cut = cutToCut(solver.solveSubProblemInstance(y_bar, 0));
+            // find out the cut type and create Inavap::Cut.
+            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+            if (temp.cutType == FEASIBILITY) {
+                auto cut = cutToCut(temp, networkPtr.get());
+                feasibilityCuts.insertCut(cut); // do not move cut.
+                // printBothCuts(temp, cut);
+                if (!restrictedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+            }
+            else {
+                auto cut = cutToCut(temp, networkPtr.get());
+                optimalityCuts.insertCut(cut);
+                // printBothCuts(temp, cut);
+                lowerBound = restrictedDD.applyOptimalityCut(cut);
+                if (lowerBound <= optimalLB)
+                    return INVALID_OBJECT;
+            }
+        }
+    }
+    else { // delete this else statement,
+        // tree is not exact, can build relaxed Tree.
+        RelaxedDD relaxedDD {networkPtr};
+        relaxedDD.buildTree(node);
+
+        // apply local feasibility cuts.
+        for (const auto& cut : feasibilityCuts) {
+            if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+            if (!restrictedDD.applyFeasibilityCut(cut)) {
+                // get cutset. and update its value.
+                updateNodeBounds(cutset.value(), node.lb, upperBound);
+                // cout <<"2" << endl;
+                return {node.lb, upperBound, cutset.value(), true};
+            }
+        }
+        // apply global feasibility cuts)
+        for (const auto& containerPtr : globalFCuts) {
+            for (const auto& cut :  *containerPtr) {
+                // if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+                if (!restrictedDD.applyFeasibilityCut(cut)) {
+                    updateNodeBounds(cutset.value(), node.lb, upperBound);
+                    // cout <<"3" << endl;
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+
+        // apply optimality cuts.
+        for (const auto& cut : optimalityCuts) {
+            if (upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound); upperBound <= optimalLB)
+                return INVALID_OBJECT;
+            if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
+                updateNodeBounds(cutset.value(), node.lb, upperBound);
+                return {node.lb, upperBound, cutset.value(), true};
+            }
+        }
+
+        // apply global optimality cuts.
+        for (const auto& containerPtr : globalOCuts) {
+            for (const auto& cut :  *containerPtr) {
+                // if (upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound); upperBound <= optimalLB)
+                //     return INVALID_OBJECT;
+                if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
+                    updateNodeBounds(cutset.value(), node.lb, upperBound);
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+
+        // actual refinement.
+        double previousLowerBound = lowerBound;
+        Path previousSolution;
+        while (true) {
+            Path solution = restrictedDD.getSolution();
+            if (previousSolution == solution) {
+                if (previousLowerBound == lowerBound) {
+                    updateNodeBounds(cutset.value(), lowerBound, upperBound);
+                    return {lowerBound, upperBound, cutset.value(), true};
+                }
+                previousLowerBound = lowerBound;
+            }
+            else {
+                previousSolution = solution;
+                previousLowerBound = lowerBound;
+            }
+            // if (previousSolution == solution && previousLowerBound == lowerBound) {
+            //     updateNodeBounds(cutset.value(), lowerBound, upperBound);
+            //     return {lowerBound, upperBound, cutset.value(), true};
+            // }
+            // previousSolution = solution;
+            // previousLowerBound = lowerBound;
+
+            vector<int> intSolution; for (auto s: solution) intSolution.push_back(s);
+            GuroSolver solver{networkPtr, env};
+            auto y_bar = w2y(intSolution, networkPtr);
+            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+            if (temp.cutType == FEASIBILITY) {
+                auto cut = cutToCut(temp, networkPtr.get());
+                feasibilityCuts.insertCut(cut);
+                if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+                if (!restrictedDD.applyFeasibilityCut(cut)) {
+                    updateNodeBounds(cutset.value(), node.lb, upperBound);
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+            else {
+                auto cut = cutToCut(temp, networkPtr.get());
+                optimalityCuts.insertCut(cut);
+                if (upperBound = min(relaxedDD.applyOptimalityCut(cut),upperBound); upperBound <= optimalLB)
+                return INVALID_OBJECT;
+                if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB) {
+                    updateNodeBounds(cutset.value(), node.lb, upperBound);
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+        }
+    }
+    // return outobj;
+}
+
+Inavap::OutObject Inavap::NodeExplorer::process2(Node node, double optimalLB) {
+    double lowerBound = node.lb;
+    double upperBound = node.ub;
+
+    RestrictedDDNew restrictedDD{networkPtr, 128};
+    auto cutset = restrictedDD.buildTree(node);
+
+    if (restrictedDD.isTreeExact()) {
+        // apply feasibility cuts
+        for (const auto &cut : feasibilityCuts) {
+            if (!restrictedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+        }
+
+        // apply optimality cuts
+        for (const auto &cut : optimalityCuts) {
+            if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB)
+                return INVALID_OBJECT;
+        }
+
+        // actual refinement.
+        double previousLowerBound = std::numeric_limits<double>::lowest();
+        Path previousSolution;
+
+        while (true) {
+            Path solution = restrictedDD.getSolution();
+            if (previousSolution == solution) {
+                if (previousLowerBound == lowerBound)
+                    return {lowerBound, upperBound, {}, true};
+                previousLowerBound = lowerBound;
+            }
+            else {
+                previousSolution = solution;
+                previousLowerBound = lowerBound;
+            }
+
+            vector<int> intSolution; for (auto s: solution) intSolution.push_back(s);
+            auto y_bar = w2y(intSolution, networkPtr);
+            GuroSolver solver{networkPtr, env};
+            // auto cut = cutToCut(solver.solveSubProblemInstance(y_bar, 0));
+            // find out the cut type and create Inavap::Cut.
+            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+
+            if (temp.cutType == FEASIBILITY) {
+                auto cut = cutToCut(temp, networkPtr.get());
+                feasibilityCuts.insertCut(cut);
+                if (!restrictedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+            }
+            else {
+                auto cut = cutToCut(temp, networkPtr.get());
+                optimalityCuts.insertCut(cut);
+                if (lowerBound = restrictedDD.applyOptimalityCut(cut); lowerBound <= optimalLB)
+                    return INVALID_OBJECT;
+            }
+        }
+    }
+    else {
+        RelaxedDD relaxedDD{networkPtr};
+        relaxedDD.buildTree(node);
+        // apply feasibility cuts
+        for (const auto &cut : feasibilityCuts) {
+            if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+            if (!restrictedDD.applyFeasibilityCut(cut)) {
+                updateNodeBounds(cutset.value(), node.lb, upperBound);
+                return {node.lb, upperBound, cutset.value(), true};
+            }
+        }
+        //apply optimality cuts.
+        for (const auto &cut : optimalityCuts) {
+            upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound);
+            if (upperBound <= optimalLB) return INVALID_OBJECT;
+            lowerBound = restrictedDD.applyOptimalityCut(cut);
+        }
+
+        // actual refinement.
+        double previousLowerBound = std::numeric_limits<double>::lowest();
+        Path previousSolution;
+        while (true) {
+            Path solution = restrictedDD.getSolution();
+            if (previousSolution == solution) {
+                if (previousLowerBound == lowerBound) {
+                    updateNodeBounds(cutset.value(), lowerBound, upperBound);
+                    return {lowerBound, upperBound, cutset.value(), true};
+                }
+                previousLowerBound = lowerBound;
+            }
+            else {
+                previousSolution = solution;
+                previousLowerBound = lowerBound;
+            }
+
+            vector<int> intSolution; for (auto s: solution) intSolution.push_back(s);
+            auto y_bar = w2y(intSolution, networkPtr);
+            GuroSolver solver{networkPtr, env};
+            // auto cut = cutToCut(solver.solveSubProblemInstance(y_bar, 0));
+            // find out the cut type and create Inavap::Cut.
+            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+
+            if (temp.cutType == FEASIBILITY) {
+                auto cut = cutToCut(temp, networkPtr.get());
+                feasibilityCuts.insertCut(cut);
+                if (!relaxedDD.applyFeasibilityCut(cut)) return INVALID_OBJECT;
+                if (!restrictedDD.applyFeasibilityCut(cut)) {
+                    updateNodeBounds(cutset.value(), node.lb, upperBound);
+                    return {node.lb, upperBound, cutset.value(), true};
+                }
+            }
+            else {
+                auto cut = cutToCut(temp, networkPtr.get());
+                optimalityCuts.insertCut(cut);
+                upperBound = min(relaxedDD.applyOptimalityCut(cut), upperBound);
+                if (upperBound <= optimalLB) return INVALID_OBJECT;
+                lowerBound = restrictedDD.applyOptimalityCut(cut);
+            }
+        }
+    }
+}

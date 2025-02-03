@@ -6,8 +6,10 @@
 #define TEST_UTILS_H
 
 #include "../DD.h"
+#include "../NodeExplorer.h"
 #include <chrono>
 #include <gtest/gtest.h>
+#include <random>
 
 using namespace std;
 

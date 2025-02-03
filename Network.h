@@ -86,7 +86,7 @@ public:
 	vui A2;
 	vui A3;
 	vui A4;
-	vector<bool> hasStateChanged; // true if state changes at v[i], false otherwise.
+	vector<uint8_t> hasStateChanged; // true if state changes at v[i], false otherwise.
 	vi layerRewards;
 	vector<uint8_t> troubleMaker; // contains zero if layer is not a trouble maker.
 

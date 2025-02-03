@@ -5,11 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-set(SOURCES Network.cpp DD.cpp grb.cpp DDSolver.cpp NodeExplorer.cpp OriginalProblem.h)
+set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h)
+#set(SOURCES Network.cpp DD.cpp NodeExplorer.cpp grb.cpp)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=300)
+add_compile_definitions(MAX_WIDTH=32)
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -113,21 +114,28 @@ elseif(WIN32)
     message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER}")
     message(STATUS "C++ compiler version: ${CMAKE_CXX_COMPILER_VERSION}")
 
+
+#    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /openmp /openmp:llvm")
+#
 #    if (MSVC AND MT)
-#        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-#        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
-#        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-#        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
+#        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT /openmp")
+#        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd /openmp")
+#        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT /openmp")
+#        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd /openmp")
 #    endif()
-    # flag specific for Dr Memory
-#    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd")
-#    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
+#    # flag specific for Dr Memory
+#    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Oy- /MTd /openmp /openmp:llvm")
+#    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /openmp /openmp:llvm")
+##    message(STATUS "${CMAKE_CXX_FLAGS_DEBUG}")
     find_package(GUROBI REQUIRED)
 
     include_directories(${GUROBI_INCLUDE_DIRS})
 
 #    add_compile_definitions(DEBUG)
     add_compile_definitions(SOLVER_STATS)
+
+    target_compile_options(SGUFP_Solver PRIVATE -O0 -g -Wextra)
+#    target_link_options(SGUFP_Solver PRIVATE -g -O0 -fsanitize=addr)
 
     message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
     message(STATUS "GUROBI_CXX_DEBUG LIBRARY: ${GUROBI_CXX_DEBUG_LIBRARY}")
@@ -142,18 +150,27 @@ elseif(WIN32)
         feature_summary(WHAT ALL)
     endif()
 
-    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_executable(testmain testmain.cpp ${SOURCES})
-        target_link_libraries(testmain GTest::gtest_main)
+#    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+#        add_executable(testmain testmain.cpp ${SOURCES})
+#        target_link_libraries(testmain GTest::gtest_main)
+    message(STATUS "Fetching google test")
+    # google test dependency
+    include(FetchContent)
+    FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+    enable_testing()
 
-        add_executable(tests2 tests/tests.cpp ${SOURCES} tests/test_utils.h)
+        add_executable(tests2 tests/tests2.cpp DD.cpp Network.cpp tests/test_utils.h)
         target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
                 debug ${GUROBI_CXX_DEBUG_LIBRARY})
         target_link_libraries(tests2 ${GUROBI_LIBRARY})
         target_link_libraries(tests2 GTest::gtest_main)
 
         include(GoogleTest)
-        gtest_discover_tests(testmain)
+#        gtest_discover_tests(testmain)
         gtest_discover_tests(tests2)
-    endif()
+#    endif()
 endif()
