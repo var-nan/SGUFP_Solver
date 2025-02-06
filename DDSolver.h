@@ -33,6 +33,8 @@ const unsigned int NUM_WORKERS = 3;
 #define FEASIBILITY_CONTAINER_LIMIT 50
 #define OPTIMALITY_CONTAINER_LIMIT 100
 #define PROPORTION_OF_SHARE 0.4
+#define MASTER_FEASIBILITY_CONTAINER_LIMIT 50
+#define MASTER_OPTIMALITY_CONTAINER_LIMIT 100
 
 
 //
@@ -342,7 +344,7 @@ namespace Inavap {
             vector<CutContainer *> feasCutsGlobal; // pointers to global feasibility cut containers.
             shared_ptr<Network> networkPtr;
 
-            void addCutsToGlobal(DDSolver &solver, pair<vector<CutContainer>, vector<CutContainer>> &cuts);
+            void addCutsToGlobal(DDSolver &solver, pair<CutContainer, CutContainer> &cuts);
             // bool isCutsShared(Payload &worker);
             size_t processNodes(DDSolver &solver, NodeExplorer &explorer, size_t n);
 

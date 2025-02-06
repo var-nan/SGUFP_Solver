@@ -11,6 +11,7 @@
 #include <atomic>
 #include <shared_mutex>
 
+/* Max number of cuts in feasibility container */
 #ifndef FEASIBILITY_CONTAINER_CAPACITY
     #define FEASIBILITY_CONTAINER_CAPACITY 128
 #endif
@@ -48,6 +49,18 @@ namespace Inavap {
         CutResource(CutResource &&other) = delete;
         CutResource& operator=(const CutResource &other) = delete;
         CutResource& operator=(CutResource &&other) = delete;
+
+        void printStats() const noexcept {
+            cout << "Number of Feasibility cut containers: " << fCutContainers.size() << endl;
+            cout << "Number of Optimality cut containers: " << oCutContainers.size() << endl;
+            size_t f = 0, o = 0;
+            for (const CutContainer *container: fCutContainers) {
+                f+= container->size();
+            }
+            cout << "Total feasibility cuts: " << f << endl;
+            for (const CutContainer *container: oCutContainers) {o+= container->size();}
+            cout << "Total optimality cuts: " << o << endl;
+        }
 
         /* TODO: create destructor that frees all the cut containers */
         ~CutResource() {

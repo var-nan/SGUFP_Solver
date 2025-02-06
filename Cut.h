@@ -373,6 +373,10 @@ namespace Inavap {
 			for (const auto& c: cuts) { if (c == cut) return;}
 			cuts.push_back(cut);
 		}
+		// void insertCut(Cut&& cut) {
+		// 	// move constructor.
+		// 	if (!isCutExists(cut)) cuts.push_back(std::move(cut));
+		// }
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
 		[[nodiscard]] size_t size() const noexcept {return cuts.size();}
 		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
@@ -380,6 +384,12 @@ namespace Inavap {
 
 		auto begin() noexcept {return cuts.begin();}
 		auto end() noexcept {return cuts.end();}
+
+		const Cut& operator[](size_t index) const noexcept { return cuts[index]; }
+
+		void append(CutContainer&& c) noexcept {
+			cuts.insert(cuts.end(), std::make_move_iterator(cuts.begin()),std::make_move_iterator(cuts.end()));
+		}
 	};
 
 
