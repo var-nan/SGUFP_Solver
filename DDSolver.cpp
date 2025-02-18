@@ -564,7 +564,7 @@ void Inavap::DDSolver::Master::addCutsToGlobal(DDSolver &solver, pair<vector<Ina
  */
 size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::NodeExplorer &explorer, size_t n) {
 	// worker-mode.
-	double zOpt = solver.optimal.load(memory_order::relaxed);
+	double zOpt = solver.optimal;
 	size_t nProcessed = 0;
 
 	while (!nodeQueue.empty() && n--) {
@@ -573,7 +573,12 @@ size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::
 		// TODO: what to do with local cuts?
 		if (result.status) {
 			if (result.lb > zOpt) {
-				while ((!solver.optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)) && (zOpt < result.lb));
+				// use separate lock?
+				omp_set_lock(&solver.optimal_lock);
+				if (result.lb > solver.optimal)
+					solver.optimal = result.lb;
+				zOpt = solver.optimal;
+				omp_unset_lock(&solver.optimal_lock);
 			}
 			if (result.ub > zOpt && !result.nodes.empty()) nodeQueue.pushNodes(result.nodes);
 		}
@@ -612,58 +617,46 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		for (uint16_t i = 0; i < solver.N_WORKERS; i++) {
 			auto& worker = solver.payloads[i];
 			pair<CutContainer, CutContainer> workerCuts;
-			uint8_t watchStatus = 0;
+			omp_set_lock(&worker.lock);
 			{
 				/* Worker might share cuts anytime. Instead of double locking for cuts and status check, acquire lock
 				 * on entire payload before operation starts.*/
-				scoped_lock l{worker.lock};
-				workerCuts = func(worker);
-				// st cannot be reordered with the below instructions. (invariant).
-				auto st = worker.payloadStatus.load(memory_order::relaxed);
-				if (st == Payload::WORKER_WORKING) {
+				// workerCuts = func(worker);
+				if (worker.payloadStatus == Payload::WORKER_WORKING) {
 					processing++;
 				}
-				else if (st == Payload::WORKER_SHARED_NODES) {
-					// scoped_lock l{worker.lock};
-					/* double check, the worker might take back the previously shared nodes if the worker is idle. */
-					// st = worker.payloadStatus.load(memory_order::relaxed); // lock acquired at start of block.
-					// if (st == Payload::WORKER_SHARED_NODES) {
-					auto message = "Thread " +std::to_string(worker.id) + " sent " + std::to_string(worker.nodes.size()) + " nodes."; cout << message << endl;
-                    auto nodes = std::move(worker.nodes);
-                    worker.payloadStatus.store(Payload::MASTER_RECEIVED_NODES, memory_order::relaxed);
+				else if (worker.payloadStatus == Payload::WORKER_SHARED_NODES) {
+					auto message = "Thread " +std::to_string(worker.id) + " sent " + std::to_string(worker.payloadNodes.size()) + " nodes."; cout << message << endl;
+                    auto nodes = std::move(worker.payloadNodes);
+                    worker.payloadStatus = Payload::MASTER_RECEIVED_NODES;
                     processing++;
                     nodeQueue.pushNodes(nodes);
-					// }
 				}
-				else if (st == Payload::WORKER_NEEDS_NODES) {
+				else if (worker.payloadStatus == Payload::WORKER_NEEDS_NODES) {
 					// status cannot be changed by the worker once reached here.
 					if(!nodeQueue.empty()) {
-						{ // mutex unlocks after this scope and signal can be properly viewed by worker.
-							// scoped_lock l {worker.lock};
+						{ //
 							uint size = nodeQueue.size();
 							size = static_cast<size_t> (ceil(size*PROPORTION_OF_SHARE));
 							auto nodes = nodeQueue.popNodes(size);
-							worker.nodes = std::move(nodes);
-							worker.payloadStatus.store(Payload::MASTER_ASSIGNED_NODES, memory_order::relaxed);
-							auto msg = "Master sent " + to_string(worker.nodes.size()) + " nodes to worker " + std::to_string(worker.id); cout << msg << endl;
+							worker.payloadNodes = std::move(nodes);
+							worker.payloadStatus = Payload::MASTER_ASSIGNED_NODES;
+							auto msg = "Master sent " + to_string(worker.payloadNodes.size()) + " nodes to worker " + std::to_string(worker.id); cout << msg << endl;
 						}
+						processing++;
 						// worker.cv.notify_one(); // signal after lock release instead.
-						watchStatus = 1;
+						// watchStatus = 1;
 					}
 					else idle++;
 				}
-				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
-					// scoped_lock l{worker.lock};
-					/* reason for second check is that worker might change the status to 'WORKER_NEEDS_NODES' and wait for
-					 * master before the master changes the status to 'WORKER_WORKING',  resulting in infinite wait by the worker.*/
-					st = worker.payloadStatus.load(memory_order::relaxed);
-					if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
-						worker.payloadStatus.store(Payload::WORKER_WORKING, memory_order::relaxed);
-						processing++;
-					}
+				else if (worker.payloadStatus == Payload::NOT_ENOUGH_NODES_TO_SHARE ||
+							worker.payloadStatus == Payload::MASTER_RECEIVED_NODES) {
+					worker.payloadStatus = Payload::WORKER_WORKING;
+					processing++;
 				}
 			}
-			if (watchStatus) worker.cv.notify_one();
+			omp_unset_lock(&worker.lock);
+			// if (watchStatus) worker.cv.notify_one(); // since no conditional variable, remove this.
 			// add cuts to global.
 			if (!workerCuts.first.empty()) feasibilityCuts.push_back( std::move(workerCuts.first));
 			if (!workerCuts.second.empty()) optimalityCuts.push_back(std::move(workerCuts.second));
@@ -671,35 +664,38 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 
 		if (idle == solver.N_WORKERS && nodeQueue.empty()) {
 			cout << "Indicating all workers" << endl;
-			solver.isCompleted.store(true, std::memory_order::release);
-			for_each (solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
-				// all the workers must be in waiting state. lock not needed.
-				worker.payloadStatus.store(Payload::SOLVER_FINISHED, memory_order::release);
-				worker.cv.notify_one();
-			});
+			omp_set_lock(&solver.bool_lock);
+			solver.isCompleted = true;
+			omp_unset_lock(&solver.bool_lock);
+			// all workers must be in spin  loop, eventually reads the status flag from payload.
+			for (auto& worker : solver.payloads) {
+				omp_set_lock(&worker.lock);
+				worker.payloadStatus = Payload::SOLVER_FINISHED;
+				omp_unset_lock(&worker.lock);
+			}
 			cout << "Solver finished. "<< endl;
 			return;
 		}
 
-		if (idle > 0) {
+		if (idle > 0 && false) { // do not ask nodes from workers.
 			// some workers are idle, get nodes from busy workers.
 			for_each(solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
-				scoped_lock l{worker.lock};
-				auto st = worker.payloadStatus.load(memory_order::relaxed);
-				if (st == Payload::WORKER_WORKING)
-					worker.payloadStatus.store(Payload::MASTER_NEEDS_NODES, memory_order::relaxed);
-				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES)
-					worker.payloadStatus.store(Payload::WORKER_WORKING, memory_order::relaxed);
+				omp_set_lock(&worker.lock);
+				if (worker.payloadStatus == Payload::WORKER_WORKING)
+					worker.payloadStatus = Payload::MASTER_NEEDS_NODES;
+				else if (worker.payloadStatus == Payload::NOT_ENOUGH_NODES_TO_SHARE ||
+						worker.payloadStatus == Payload::MASTER_RECEIVED_NODES)
+					worker.payloadStatus = Payload::WORKER_WORKING;
 					// either this worker don't have enough nodes to share or it shared earlier.
 			});
 		}
 
 		// thread sleep?
-
 		// update local cuts to global.
 		auto p = make_pair(feasibilityCuts, optimalityCuts);
 		addCutsToGlobal(solver, p);
 
+		sleep(2);
 		// process some nodes from local queue?
 		// nProcessed += processNodes(solver, explorer, 4);
 	}
@@ -731,32 +727,29 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	payload.id = id;
 	// auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n"; cout << str <<  endl;
 	NodeQueue localQueue;
-	double zOpt = solver->optimal.load(memory_order::relaxed);
+	double zOpt = solver->optimal;
 
 	uint8_t done = 0; // flag to indicate solver is finished.
 	size_t nProcessed = 0; // # nodes processed so far.
 	size_t counter = 0;
 	uint prevCount = 0; // # newly generated cuts since last shared with global.
 
-	/* Operations on same variable by a single thread with relaxed-order will obey the happens-before relationships.
-	 * The access to a single atomic variable from  the same thread can't be reordered. Once a given thread see a
-	 * particular value of atomic variable, any subsequent read by that thread is guaranteed to retrieve same value or
-	 * latest value since the last read operation.
-	 */
 
-	/* Still don't know how the atomic store is implemented at the hardware level. Does it directly write to memory ?
-	 * or does it store in caches in case of relaxed ordering?
-	 */
-	while (!solver->isCompleted.load(memory_order::relaxed)) {
+	while (!solver->isSolverFinsished()) {
 
 		if (localQueue.empty()) {
 			// indicate master for nodes. wait until master responds.
 			auto nodes = payload.getNodes(done);
-			if (done) { break;} // solver is finished. isFinished flag has been set?
+			if (done) { cout << "finished flag received"  << endl;break;} // solver is finished. isFinished flag has been set?
 			localQueue.pushNodes(nodes);
 		}
 
 		while (!localQueue.empty()) {
+			if (omp_get_thread_num() == 1) {
+				if (zOpt >= -2190) {
+					cout << "# nodes in queue : " << localQueue.size() << endl;
+				}
+			}
 			// cout << "worker: " << id << " processing " << endl;
 
 			// get updated cuts from global space.
@@ -776,14 +769,12 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			if (result.status) {
 				//
 				if (result.lb > zOpt) {
-					/* short-circuit operation. If the store is successful, exit the loop, else keep trying until
-					 * either one of holds (1) store successful, (2) another best optimal found.
-					 * Can be replaced with compare_exchange_strong, but might need additional check. */
-					while (!solver->optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)
-						&& (zOpt < result.lb)) {}
-
-					// zOpt is not updated after CAS operation.
-					if (solver->optimal.load(memory_order::relaxed) == result.lb) zOpt = result.lb;
+					// porting to OpenMP.
+					omp_set_lock(&solver->optimal_lock);
+					if (result.lb > solver->optimal)
+						solver->optimal = result.lb;
+					zOpt = solver->optimal;
+					omp_unset_lock(&solver->optimal_lock);
 
 					 if (result.lb == zOpt) {
 					 	const auto now = std::chrono::system_clock::now();
@@ -794,7 +785,9 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 					counter = 0;
 				}
 				else if (is_poll_time(counter)) { // check periodically for latest optimal value.
-					zOpt = solver->optimal.load(memory_order::relaxed);
+					omp_set_lock(&solver->optimal_lock);
+					zOpt = solver->optimal;
+					omp_unset_lock(&solver->optimal_lock);
 				}
 				if (result.ub > zOpt && !result.nodes.empty())
 					localQueue.pushNodes(result.nodes);
@@ -812,21 +805,23 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 
             // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
 			// TODO: instead of checking in every iteration, check periodically
-			scoped_lock l{payload.lock};
-            auto payloadStatus = payload.payloadStatus.load(memory_order::relaxed);
-            if (payload.payloadStatus.load(memory_order::relaxed) == Payload::MASTER_NEEDS_NODES) {
-                uint n = localQueue.size();
-                auto sz = static_cast<size_t> (ceil(n*0.4));
-                auto nodes = localQueue.popNodes(sz);
-            	/* Do not share cuts with master. */
-            	// auto [fst, snd] = f_shareCuts(explorer);
-                // scoped_lock l{payload.lock};
-                payload.nodes = std::move(nodes);
-                payload.payloadStatus.store(Payload::WORKER_SHARED_NODES, memory_order::relaxed);
-            	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
-            	// if (fst) payload.fCuts = move(fst.value());
-            	// if (snd) payload.oCuts = move(snd.value());
-            }
+			// porting to OpenMP
+			// omp_set_lock(&payload.lock);
+   //          if (payload.payloadStatus == Payload::MASTER_NEEDS_NODES) {
+   //              uint n = localQueue.size();
+   //              auto sz = static_cast<size_t> (ceil(n*0.4));
+   //              auto nodes = localQueue.popNodes(sz);
+   //          	/* Do not share cuts with master. */
+   //          	// auto [fst, snd] = f_shareCuts(explorer);
+   //              // scoped_lock l{payload.lock};
+   //              payload.nodes = std::move(nodes);
+   //          	cout << "thread sent nodes to master" << endl;
+   //              payload.payloadStatus = Payload::WORKER_SHARED_NODES;
+   //          	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
+   //          	// if (fst) payload.fCuts = move(fst.value());
+   //          	// if (snd) payload.oCuts = move(snd.value());
+   //          }
+			// omp_unset_lock(&payload.lock);
 		}
 	}
 
@@ -852,40 +847,71 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 
 	/* Acquire lock and get already existing nodes (if any) from the payload. This is possible when
 	 * the worker recently shared nodes with master, and master yet to take the nodes shared by this worker.
-	 *
-	 * NOTE: unique_lock is a type of lock that unlocks the acquired mutex when the code reaches out-of-scope,
-	 * thus eliminating explicit unlocking of the acquired locks.
 	 */
 
-	unique_lock l {lock};
-	if (!nodes.empty()) {
-		auto temp = std::move(nodes);
-		payloadStatus.store(WORKER_WORKING, memory_order::relaxed);
+	if (omp_get_thread_num() ==1 && false) {
+
+		cout << "Thread 1 reached here" << endl;
+		if (omp_test_lock(&lock)) {
+			cout << "test lock returned true" << endl;
+			omp_unset_lock(&lock);
+		}
+		// there's a bug in the code if the test returns false, it should'nt happen.
+		else cout << "test lock returned false" <<endl;
+		// omp_unset_lock(&lock);
+	}
+
+	omp_set_lock(&this->lock);
+	if (omp_get_thread_num() ==1)cout << "Thread 1 also reached here" << endl;
+	if (!payloadNodes.empty()) {
+		auto temp = std::move(payloadNodes);
+		payloadStatus = WORKER_WORKING;
+		omp_unset_lock(&this->lock);
 		return temp;
 	}
-	payloadStatus.store(WORKER_NEEDS_NODES, memory_order::relaxed);
-	uint st;
+	payloadStatus = WORKER_NEEDS_NODES;
+
+	int id = omp_get_thread_num();
 
 	// cout << "Thread" << this_thread::get_id() << " Node Queue is empty. Indicating Master. " << endl;
-	// std::string message = "Thread " + std::to_string(id) + ": Queue is empty. Indicating Master."; cout << message << endl;
+	std::string message = "Thread " + std::to_string(id) + ": Queue is empty. Indicating Master."; cout << message << endl;
 	// for now, set the status to finished
 	// status = status | 1; return {};
 
-	/* Conditionally wait for the nodes until master wakes (signals) this worker. The master can also set the
-	 * status as finished when all the other threads are waiting for the nodes and the master's queue is empty.
-	 *
-	 * NOTE: While waiting, the worker gives-up the acquired lock on the payload, and so that master can acquire
-	 * it in the future. unique_lock can be re-locked again, thus particularly useful in conditional waiting.
+	/* since openmp doesn't have conditional variables, I will create a spin lock manually.
+	 * At this point, this thread still holds the lock.
 	 */
-	cv.wait(l, [&] {
-		st = payloadStatus.load(memory_order::relaxed);
-		return (st == MASTER_ASSIGNED_NODES || st == SOLVER_FINISHED);
-	});
-	if (st == SOLVER_FINISHED) {status = 1; return {};}
-	auto temp = std::move(nodes);
+	uint8_t st;
+
+	int iteration = 0;
+
+	// if (omp_get_thread_num() == 1) cout << "Iteration: ";
+	while (true) {
+		// sleep
+		if (omp_get_thread_num() == 1) {
+			// cout << iteration++ << " ";
+		}
+
+		st = this->payloadStatus;
+		// omp_unset_lock(&this->lock); // if status changed?
+		if (st == MASTER_ASSIGNED_NODES ||
+			st == SOLVER_FINISHED)
+			break;
+		omp_unset_lock(&this->lock);;
+		sleep(2);
+		omp_set_lock(&this->lock);
+	}
+	// still holding lock
+	if (st == SOLVER_FINISHED) {
+		status = 1;
+		omp_unset_lock(&this->lock);
+		return {};
+	}
+	auto temp = std::move(payloadNodes);
 	auto msg = "Thread " + std::to_string(id) + ": received " + std::to_string(temp.size()) + " nodes"; cout << msg << endl;
 	status = 0;
-	payloadStatus.store(WORKER_WORKING, memory_order::relaxed);
+	payloadStatus = WORKER_WORKING;
+	omp_unset_lock(&this->lock);
 	return temp;
 }
 
@@ -899,45 +925,89 @@ void Inavap::DDSolver::startSolver() {
 	Node root;
 	auto cutset = restrictedDD.buildTree(root);
 
-	if (cutset) cout << "Number of nodes from teh first tree: " << cutset.value().size() << endl;
+	if (cutset) cout << "Number of nodes from the first tree: " << cutset.value().size() << endl;
 
 	vector<Node> cutsetNodes = cutset.value();
 	// assume nodes is a vector of nodes.
 	// divide the nodes to all workers.
 	uint current = 0;
-	payloads = vector<Payload>(N_WORKERS);
+	// payloads = vector<Payload>(N_WORKERS);
+	for (int x = 0; x < N_WORKERS; x++) {
+		Payload p;
+		p.id = x; // lock is initialized
+		payloads.push_back(p);
+	}
 	for (const auto& node : cutsetNodes) {
 		// round robin.
-		payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
+		auto index = (current++)%N_WORKERS;
+		// omp_init_lock(&payloads[index].lock);
+		payloads[index].payloadNodes.emplace_back(node);
 	}
 
+	// shared variables.
+	#pragma omp parallel num_threads(N_WORKERS+1)
+	{
+		// #pragma omp single
+		{
+			// for (uint i = 0; i < N_WORKERS; i++) {
+			//
+			// 	// get paylaod init loc
+			// 	omp_init_lock(&payloads[i].lock);
+			// 	Worker worker {i, networkPtr};
+			// 	workersGroup.push_back(worker);
+			// 	// #pragma omp task untied
+			// 	// worker.startWorker(this);
+			// }
+			//
+			// cout << "all workers started" << endl;
+			// // start master
+			// Master m {networkPtr};
+			// #pragma omp task untied
+			// m.startMaster(*this);
+			// cout << "Master finished" << endl;
+		}
 
-	// static assert
-	// assert(0 == 1);
-	// for (const auto& payload: payloads) {
-	// 	assertm("Payload is empty.", !payload.nodes.empty());
-	// }
+		#pragma omp single
+		{
+			// initialize payloads here.
+			for (uint j = 0; j < N_WORKERS; j++) {
+				omp_init_lock(&payloads[j].lock);
+				Worker worker {j, networkPtr};
+				workersGroup.push_back(worker);
+			}
+		}
 
-	// all payloads are ready. launch threads.
-	// workers = vector<thread>();
-	for (uint i = 0; i < N_WORKERS; i++) {
-		Worker worker{i, networkPtr};
-		workersGroup.push_back(worker);
-		workers.push_back(thread{&Worker::startWorker, &workersGroup[i], this});
-		// workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
+		int thread_id = omp_get_thread_num();
+		if (thread_id == N_WORKERS)
+		{
+			Master m {networkPtr};
+			m.startMaster(*this);
+			cout << "Master Finished" << endl;
+		}
+		else
+			workersGroup[thread_id].startWorker(this);
 	}
-	// start master
-	Master m{networkPtr};
-	m.startMaster(std::ref(*this));
-	// std::thread master (&Master::startMaster, &m, std::ref(*this));
-	// if (master.joinable()) master.join();
-	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
-	for (unsigned int i = 0; i < N_WORKERS; i++) {
-		if (workers[i].joinable()) workers[i].join();
-	}
+// 	for (uint i = 0; i < N_WORKERS; i++) {
+// #pragma omp task untied
+// 		{
+// 			Worker worker {i, networkPtr};
+// 			workersGroup.push_back(worker);
+// 			worker.startWorker(this);
+// 		}
+// 	}
+// 	// start master
+// 	Master m{networkPtr};
+// 	m.startMaster(std::ref(*this));
+// 	// std::thread master (&Master::startMaster, &m, std::ref(*this));
+// 	// if (master.joinable()) master.join();
+// 	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
+// 	for (unsigned int i = 0; i < N_WORKERS; i++) {
+// 		if (workers[i].joinable()) workers[i].join();
+// 	}
 
 	// destruct global cuts?
-	cout << "Optimal Solution: " << optimal.load() << endl;
+	cout << "Optimal Solution: " << optimal << endl;
+	std::cout << std::flush;
 
 }
 

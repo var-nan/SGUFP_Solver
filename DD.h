@@ -58,7 +58,7 @@
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 
-#define private public
+// #define private public
 
 using namespace std;
 

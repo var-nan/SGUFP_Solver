@@ -11,7 +11,7 @@
 #include <tuple>
 #include <memory>
 #include <utility>
-#define private public
+// #define private public
 
 using namespace std;
 

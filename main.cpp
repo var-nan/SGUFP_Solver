@@ -11,7 +11,7 @@ using namespace std;
 
 int main() {
 	cout << "C++ version: " << __cplusplus << endl;
-	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_95_20_5.txt";
+	string fileName ="/home/nandgate/CLionProjects/SGUFP_Solver/40_91_20_1.txt";
 	Network network{fileName};
 
 	SolveOriginalProblem(network);
@@ -34,7 +34,7 @@ int main() {
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	// DDSolver solver{networkPtr};
-	Inavap::DDSolver solver{networkPtr, 1};
+	Inavap::DDSolver solver{networkPtr, 3};
 	// solver.startSolver();
 	// solver.initialize();
 

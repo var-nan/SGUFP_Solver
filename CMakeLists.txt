@@ -51,8 +51,15 @@ if (UNIX)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
     add_compile_definitions(SOLVER_STATS)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g -pthread) # add -O3 flag in final phase. -Wunused
-    target_link_options(SGUFP_Solver PRIVATE -pg -g -pthread)
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g ) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -g )
+    find_package(OpenMP)
+    if (OpenMP_CXX_FOUND)
+        target_link_libraries(SGUFP_Solver PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+
+    target_compile_options(SGUFP_Solver PRIVATE -fopenmp )
+#    target_link_options(SGUFP_Solver PRIVATE -fopenmp )
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)

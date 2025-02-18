@@ -5,10 +5,7 @@
 #ifndef DDSOLVER_H
 #define DDSOLVER_H
 
-#include <thread>
-#include <condition_variable>
-#include <mutex>
-#include <atomic>
+#include <omp.h>
 #include "DD.h"
 #include "grb.h"
 #include "NodeExplorer.h"
@@ -274,15 +271,18 @@ namespace Inavap {
                 MASTER_RECEIVED_NODES = 0X40,
                 SOLVER_FINISHED = 0X80
             };
-            vector<Node> nodes;
+            vector<Node> payloadNodes;
             uint id = 0;
-            std::mutex lock;
-            std::condition_variable cv;
-            std::atomic<uint> payloadStatus;
+            omp_lock_t lock; // lock entire payload.
+            uint payloadStatus;
             CutContainer fCuts;
             CutContainer oCuts;
 
-            Payload() = default;
+            // Payload() = default;
+            Payload() {
+                omp_init_lock(&lock);
+                payloadStatus = WORKER_WORKING;
+            }
             vector<Node> getNodes(uint8_t &done);
             void addCuts(optional<CutContainer> feasCuts, optional<CutContainer> optCuts);
 
@@ -354,18 +354,30 @@ namespace Inavap {
         vector<Payload> payloads; // individual payloads for worker threads.
         CutResource CutResources;
         shared_ptr<Network> networkPtr;
-        std::atomic_bool isCompleted{false};
+        bool isCompleted{false};
         const uint16_t N_WORKERS;
         vector<Worker> workersGroup;
-        vector<thread> workers; // worker threads.
+        // vector<thread> workers; // worker threads.
 
-        atomic<double> optimal = std::atomic<double>(std::numeric_limits<double>::lowest());
+        double optimal = std::numeric_limits<double>::lowest();
+        omp_lock_t optimal_lock; // TODO Initialize this lock.
+        omp_lock_t bool_lock;
+
+        bool isSolverFinsished() {
+            bool ans = false;
+            omp_set_lock(&bool_lock);
+            ans = isCompleted;
+            omp_unset_lock(&bool_lock);
+            return ans;
+        }
 
 
     public:
         explicit DDSolver(const shared_ptr<Network> &networkPtr_, uint16_t nWorkers):
             networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers} {
-            workers.reserve(N_WORKERS);
+            // workers.reserve(N_WORKERS);
+            omp_init_lock(&optimal_lock);
+            omp_init_lock(&bool_lock);
             workersGroup.reserve(N_WORKERS);
             cout << "Number of workers: " << N_WORKERS << endl;
         }
