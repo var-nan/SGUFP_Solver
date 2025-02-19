@@ -4,6 +4,8 @@ project(SGUFP_Solver)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
+# set(CMAKE_GENERATOR "Ninja")
+# message("generator is set to ${CMAKE_GENERATOR}")
 
 set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h)
 #set(SOURCES Network.cpp DD.cpp NodeExplorer.cpp grb.cpp)
@@ -13,12 +15,12 @@ add_executable(SGUFP_Solver main.cpp ${SOURCES})
 add_compile_definitions(MAX_WIDTH=32)
 
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+if(CMAKE_BUILD_TYPE STREQUAL "Debugss")
     message(STATUS "Fetching google test")
     # google test dependency
     include(FetchContent)
     FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.15.2
+        GIT_TAG v1.16.0
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
@@ -40,7 +42,7 @@ if (UNIX)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 
     # gurobi libraries
-    set(GUROBI_HOME "/opt/gurobi1102/linux64/")
+    set(GUROBI_HOME "/opt/gurobi1103/linux64/")
     set(GUROBI_LIB "${GUROBI_HOME}lib/")
     set(GUROBI_INCLUDE "${GUROBI_HOME}include/")
 
@@ -51,14 +53,14 @@ if (UNIX)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
     add_compile_definitions(SOLVER_STATS)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g ) # add -O3 flag in final phase. -Wunused
-    target_link_options(SGUFP_Solver PRIVATE -pg -g )
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -ggdb3 ) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -ggdb3 )
     find_package(OpenMP)
     if (OpenMP_CXX_FOUND)
         target_link_libraries(SGUFP_Solver PRIVATE OpenMP::OpenMP_CXX)
     endif()
 
-    target_compile_options(SGUFP_Solver PRIVATE -fopenmp )
+#    target_compile_options(SGUFP_Solver PRIVATE -fopenmp )
 #    target_link_options(SGUFP_Solver PRIVATE -fopenmp )
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
@@ -80,7 +82,7 @@ if (UNIX)
 
 
     # test targets
-    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debugss")
         add_executable(tests2 tests/tests.cpp ${SOURCES}
                 tests/test_utils.h)
         target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)

@@ -677,23 +677,29 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 			return;
 		}
 
-		if (idle > 0 && false) { // do not ask nodes from workers.
+		if (idle > 0) { // do not ask nodes from workers.
 			// some workers are idle, get nodes from busy workers.
-			for_each(solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
+			for (auto &worker: solver.payloads) {
 				omp_set_lock(&worker.lock);
 				if (worker.payloadStatus == Payload::WORKER_WORKING)
 					worker.payloadStatus = Payload::MASTER_NEEDS_NODES;
-				else if (worker.payloadStatus == Payload::NOT_ENOUGH_NODES_TO_SHARE ||
-						worker.payloadStatus == Payload::MASTER_RECEIVED_NODES)
-					worker.payloadStatus = Payload::WORKER_WORKING;
-					// either this worker don't have enough nodes to share or it shared earlier.
-			});
+				omp_unset_lock(&worker.lock);
+			}
+			// for_each(solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
+			// 	omp_set_lock(&worker.lock);
+			// 	if (worker.payloadStatus == Payload::WORKER_WORKING)
+			// 		worker.payloadStatus = Payload::MASTER_NEEDS_NODES;
+			// 	else if (worker.payloadStatus == Payload::NOT_ENOUGH_NODES_TO_SHARE ||
+			// 			worker.payloadStatus == Payload::MASTER_RECEIVED_NODES)
+			// 		worker.payloadStatus = Payload::WORKER_WORKING;
+			// 		// either this worker don't have enough nodes to share or it shared earlier.
+			// });
 		}
 
 		// thread sleep?
 		// update local cuts to global.
-		auto p = make_pair(feasibilityCuts, optimalityCuts);
-		addCutsToGlobal(solver, p);
+		// auto p = make_pair(feasibilityCuts, optimalityCuts);
+		// addCutsToGlobal(solver, p);
 
 		sleep(2);
 		// process some nodes from local queue?
@@ -745,12 +751,6 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		}
 
 		while (!localQueue.empty()) {
-			if (omp_get_thread_num() == 1) {
-				if (zOpt >= -2190) {
-					cout << "# nodes in queue : " << localQueue.size() << endl;
-				}
-			}
-			// cout << "worker: " << id << " processing " << endl;
 
 			// get updated cuts from global space.
 			// if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
@@ -806,22 +806,22 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
             // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
 			// TODO: instead of checking in every iteration, check periodically
 			// porting to OpenMP
-			// omp_set_lock(&payload.lock);
-   //          if (payload.payloadStatus == Payload::MASTER_NEEDS_NODES) {
-   //              uint n = localQueue.size();
-   //              auto sz = static_cast<size_t> (ceil(n*0.4));
-   //              auto nodes = localQueue.popNodes(sz);
-   //          	/* Do not share cuts with master. */
-   //          	// auto [fst, snd] = f_shareCuts(explorer);
-   //              // scoped_lock l{payload.lock};
-   //              payload.nodes = std::move(nodes);
-   //          	cout << "thread sent nodes to master" << endl;
-   //              payload.payloadStatus = Payload::WORKER_SHARED_NODES;
-   //          	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
-   //          	// if (fst) payload.fCuts = move(fst.value());
-   //          	// if (snd) payload.oCuts = move(snd.value());
-   //          }
-			// omp_unset_lock(&payload.lock);
+			omp_set_lock(&payload.lock);
+            if (payload.payloadStatus == Payload::MASTER_NEEDS_NODES) {
+                uint n = localQueue.size();
+                auto sz = static_cast<size_t> (ceil(n*0.4)); // share 40% of nodes.
+                auto nodes = localQueue.popNodes(sz);
+            	/* Do not share cuts with master. */
+            	// auto [fst, snd] = f_shareCuts(explorer);
+                // scoped_lock l{payload.lock};
+                payload.payloadNodes = std::move(nodes);
+            	cout << "thread sent nodes to master" << endl;
+                payload.payloadStatus = Payload::WORKER_SHARED_NODES;
+            	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
+            	// if (fst) payload.fCuts = move(fst.value());
+            	// if (snd) payload.oCuts = move(snd.value());
+            } // other values are irrelevant.
+			omp_unset_lock(&payload.lock);
 		}
 	}
 
@@ -947,26 +947,6 @@ void Inavap::DDSolver::startSolver() {
 	// shared variables.
 	#pragma omp parallel num_threads(N_WORKERS+1)
 	{
-		// #pragma omp single
-		{
-			// for (uint i = 0; i < N_WORKERS; i++) {
-			//
-			// 	// get paylaod init loc
-			// 	omp_init_lock(&payloads[i].lock);
-			// 	Worker worker {i, networkPtr};
-			// 	workersGroup.push_back(worker);
-			// 	// #pragma omp task untied
-			// 	// worker.startWorker(this);
-			// }
-			//
-			// cout << "all workers started" << endl;
-			// // start master
-			// Master m {networkPtr};
-			// #pragma omp task untied
-			// m.startMaster(*this);
-			// cout << "Master finished" << endl;
-		}
-
 		#pragma omp single
 		{
 			// initialize payloads here.
@@ -987,23 +967,6 @@ void Inavap::DDSolver::startSolver() {
 		else
 			workersGroup[thread_id].startWorker(this);
 	}
-// 	for (uint i = 0; i < N_WORKERS; i++) {
-// #pragma omp task untied
-// 		{
-// 			Worker worker {i, networkPtr};
-// 			workersGroup.push_back(worker);
-// 			worker.startWorker(this);
-// 		}
-// 	}
-// 	// start master
-// 	Master m{networkPtr};
-// 	m.startMaster(std::ref(*this));
-// 	// std::thread master (&Master::startMaster, &m, std::ref(*this));
-// 	// if (master.joinable()) master.join();
-// 	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
-// 	for (unsigned int i = 0; i < N_WORKERS; i++) {
-// 		if (workers[i].joinable()) workers[i].join();
-// 	}
 
 	// destruct global cuts?
 	cout << "Optimal Solution: " << optimal << endl;
