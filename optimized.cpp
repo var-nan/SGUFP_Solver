@@ -14,16 +14,11 @@
  */
 void Inavap::CutResource::add(pair<vector<CutContainer *>, vector<CutContainer *>> cuts) {
    // get pointer somehow? store them in heap. only master can update the structures.
-   {
-      WriterLock l{m};
-      if (!cuts.first.empty()) fCutContainers.insert(fCutContainers.end(), cuts.first.begin(), cuts.first.end());
-      if (!cuts.second.empty()) oCutContainers.insert(oCutContainers.end(), cuts.second.begin(), cuts.second.end());
-      count.store(fCutContainers.size() + oCutContainers.size(), memory_order::relaxed);
-   }
-   /* TODO: Some reader threads may observe large container than the count. Either handle this case from reader thread,
-    * or move the store operation of count in the mutex block (might hit performance). */
-   // assuming the optimizer/hardware scheduler DOESN'T change this order. TODO: change to relaxed store.
-   // count.store(fCutContainers.size() + oCutContainers.size(), memory_order::release);
+   omp_set_lock(&lock);
+   if (!cuts.first.empty()) fCutContainers.insert(fCutContainers.end(), cuts.first.begin(), cuts.first.end());
+   if (!cuts.second.empty()) oCutContainers.insert(oCutContainers.end(), cuts.second.begin(), cuts.second.end());
+   count = fCutContainers.size() + oCutContainers.size();
+   omp_unset_lock(&lock);
 }
 
 /**
@@ -35,12 +30,10 @@ void Inavap::CutResource::add(pair<vector<CutContainer *>, vector<CutContainer *
  * @param nO - number of optimality cut containers the calling worker aware of.
  */
 pair<vector<Inavap::CutContainer *>, vector<Inavap::CutContainer *>> Inavap::CutResource::get(uint nF, uint nO){
-   vector<Inavap::CutContainer *> feas, opti;
-   // reserve later.
-   {
-      ReaderLock l{m};
-      while (nF < fCutContainers.size()) feas.push_back(fCutContainers[nF++]);
-      while (nO < oCutContainers.size()) opti.push_back(oCutContainers[nO++]);
-   }
+   vector<Inavap::CutContainer *> feas, opti; // default initialize with null pointers.
+   omp_set_lock(&lock);
+   while (nF < fCutContainers.size()) feas.push_back(fCutContainers[nF++]);
+   while (nO < oCutContainers.size()) opti.push_back(oCutContainers[nO++]);
+   omp_unset_lock(&lock);
    return {feas, opti};
 }

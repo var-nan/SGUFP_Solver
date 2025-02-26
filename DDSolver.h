@@ -15,21 +15,23 @@
 #include <bit>
 
 #ifndef POLL_FREQUENCY
-#define POLL_FREQUENCY 512
+#define POLL_FREQUENCY 256
 #endif
 
 #ifndef LOCAL_CUTS_LIMIT
-#define LOCAL_CUTS_LIMIT 1024
+#define LOCAL_CUTS_LIMIT 16
 #endif
 
 const unsigned int NUM_WORKERS = 3;
 //const uint8_t SHIFT = 5;
 // const uint16_t POLL_FREQUENC;
 
-#define CUT_CONTAINER_CAPACITY 128
-#define FEASIBILITY_CONTAINER_LIMIT 50
-#define OPTIMALITY_CONTAINER_LIMIT 100
+#define CUT_CONTAINER_CAPACITY 64
+#define F_CUT_CACHE_SIZE 8
+#define O_CUT_CACHE_SIZE 8
 #define PROPORTION_OF_SHARE 0.4
+
+#define PAYLOAD_CHECK_TICKS 10
 
 
 //
@@ -332,6 +334,11 @@ namespace Inavap {
         public:
             explicit Worker(uint id_, const shared_ptr<Network>& networkPtr_): id{id_}, networkPtr{networkPtr_}{}
             void startWorker(DDSolver *solver);
+            void printStats() const noexcept {
+                auto str = "Worker: " + to_string(id) +" . FCC: " + to_string(feasCutsGlobal.size())
+                    + ". OCC: " + to_string(optCutsGlobal.size()) + "\n";
+                cout << str;
+            }
         };
 
         class Master {

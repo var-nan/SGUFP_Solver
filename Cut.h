@@ -352,6 +352,7 @@ namespace Inavap {
 
 	class CutContainer {
 		vector<Cut> cuts;
+
 	public:
 		explicit CutContainer(size_t N = 128) {
 			cuts.reserve(N);
@@ -370,7 +371,7 @@ namespace Inavap {
 		// TODO: define 'new' operator (efficient, without copying).
 		void insertCut(const Cut &cut) {
 			// do not insert duplicate cuts.
-			for (const auto& c: cuts) { if (c == cut) return;}
+			// for (const auto& c: cuts) { if (c == cut) return;} // update: cuts are not repeated.
 			cuts.push_back(cut);
 		}
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
@@ -378,8 +379,24 @@ namespace Inavap {
 		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
 		void clearContainer() noexcept { cuts.clear();}
 
+		void addContainer(CutContainer cc) {
+			// add
+			cuts.insert(cuts.end(), cc.cuts.begin(), cc.cuts.end());
+		}
+
 		auto begin() noexcept {return cuts.begin();}
 		auto end() noexcept {return cuts.end();}
+
+		[[nodiscard]] CutContainer seek(size_t pos) {
+			// return a cut container containing cuts starting from pos index.
+			size_t n = cuts.size() - pos;
+			CutContainer c{n};
+
+			for (const  auto & cut : cuts) {
+				c.insertCut(cut);
+			}
+			return c;
+		}
 	};
 
 
