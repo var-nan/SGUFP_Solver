@@ -148,8 +148,7 @@ class CutContainer {
 public:
 	vector<Cut> cuts;
 	CutType cutType;
-
-public:
+	// Cut scpecialCut;
 
 	 // begin(){ return cuts.begin();};
 	 void doSomething() {

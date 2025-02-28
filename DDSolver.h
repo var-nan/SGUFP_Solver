@@ -133,7 +133,12 @@ class DDSolver {
         struct comparator {
             bool operator() (const Node_t& node1, const Node_t& node2) const {
                 // return (node1.ub + node2.lb) < (node2.ub + node2.lb); // need to optimize this with ints
-                return node1.globalLayer > node2.globalLayer;
+                // return 10* (50 - node1.globalLayer) + node1.ub > 10* (50-node2.globalLayer) + node2.ub; // birth first
+                // return node1.ub -  node1.globalLayer  < node2.ub - node2.globalLayer ;
+                // return node1.ub  < node2.ub  ;
+                // return node1.globalLayer > node2.globalLayer; // birth first
+                return node1.globalLayer < node2.globalLayer; // depth first
+                // return node1.ub + 200 * node1.globalLayer < node2.ub + 200 * node2.globalLayer;
             }
         };
         // use either queue or vector or priority queue.
@@ -195,12 +200,13 @@ public:
     [[nodiscard]] double getOptimalLB() const;
     void setLB(double lb);
 
-    void initialize();
+    void initialize(double opt);
     void start();
     void startSolve(optional<pair<CutContainer, CutContainer>> initialCuts);
     pair<CutContainer, CutContainer> initializeCuts();
     pair<CutContainer, CutContainer> initializeCuts2(size_t n = 50);
-
+    pair<CutContainer, CutContainer> initializeCuts3();
+    pair<CutContainer, CutContainer> initializeCuts4();
 	void startPThreadSolver();
 };
 

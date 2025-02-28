@@ -49,9 +49,11 @@ public:
 
 	Cut solveSubProblem(const vector<vector<vector<shi>>> &y_bar);
 
-	Cut solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar, int scenario);
+	Cut solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar);
 
-	void addConstraints(const Network& network, int scenario);
+	double solvepartialProblem(vector<int> partialSol,Network network);
+
+	// void addConstraints(const Network& network);
 
 	void setObjectiveFunction(const Network &network, const vector<vector<vector<shi>>> &y, int scenario);
 

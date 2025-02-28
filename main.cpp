@@ -4,6 +4,8 @@
 #include "DD.h"
 #include <chrono>
 #include "OriginalProblem.h"
+#include "scBasedMadel.h"
+#include "grbTest.h"
 
 #define NODEEXPLORERPARAMETER 0
 #include "newCGO.h"
@@ -252,7 +254,7 @@ int main() {
 
 	cout << "C++ version: " << __cplusplus << endl;
 
-	string fileName ="C:/Users/erfank/CLionProjects/SGUFP_Solver/newversion/40_87_20_3.txt";
+	string fileName ="C:/Users/erfank/CLionProjects/SGUFP_Solver/newversion/newData/50s/40_107_50_7.txt";
 	Network network{fileName};
 
 
@@ -263,21 +265,36 @@ int main() {
 	// }
 
 
-	#ifdef DEBUG
-	cout << "A4 size: " << network.A4.size() << endl;
+	auto optimalValue =  sc_SolveOriginalProblem(network);
 
-	for (auto id : network.Vbar) {
-		auto node = network.networkNodes[id];
-		// cout << "Node : " << id << " inc size: " << node.incomingArcs.size() << " , outsize : " << node.outgoingArcs.size() << endl;
-	}
-	#endif
 
-	SolveOriginalProblem(network);
 
-	cout << "Solved Original problem " <<endl;
-	cout << endl;
-	cout << endl;
 
+
+
+
+
+	// SolveOriginalProblem(network);
+
+	// sc_SolveOrigi nalProblem(network);
+
+	// cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << endl;
+	// cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << endl;
+	// cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << endl;
+	//
+	//
+	// objChangeTest();
+	//
+	//
+	// cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << endl;
+	// cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << endl;
+	// cout << "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%" << endl;
+
+
+// 	cout << "Solved Original problem" <<endl;
+// 	cout << endl;
+// 	cout << endl;
+//
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 	cout << "Vbar order: "; for (auto id : networkPtr->Vbar) cout << id << " "; cout << endl;
 	cout << "Max Width : " << MAX_WIDTH << endl;
@@ -290,19 +307,23 @@ int main() {
 	auto t1 = high_resolution_clock::now();
 	const auto now = std::chrono::system_clock::now();
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
-	cout << endl << "Starting solver at " << std::ctime(&t_c);
+	// cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver{networkPtr};
-	solver.initialize();
-//	int n_initial_cuts = 25;
-//	auto cuts = solver.initializeCuts2(n_initial_cuts);
+	solver.initialize(optimalValue);
+	// solver.initialize(0);
+	// solver.initialize(optimalValue - 1000);
+	// int n_initial_cuts = 50;
+	// auto cuts = solver.initializeCuts3();
+	// auto cuts = solver.initializeCuts4();
 //	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
 //		" , Feasibility: " << cuts.first.cuts.size() << endl;
 	cout << "**********************************************************************************************************\n\n\n" << endl;
 
+	// solver.startSolve(cuts);
 	solver.startSolve({});
 	// solver.startPThreadSolver();
 	auto t2 = high_resolution_clock::now();
-	// cout << "Node queue strategy: LIFO" << endl;
+	cout << "Node queue strategy: LIFO" << endl;
 	auto ms_int = duration_cast<seconds>(t2-t1);
 	duration<double> ms_double = t2-t1;
 	std::cout <<"program took " << ms_int.count() << " seconds" << endl;

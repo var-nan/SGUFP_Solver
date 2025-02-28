@@ -22,11 +22,12 @@ public:
     vector<Node_t> nodes;
     bool success;
 
+
     OutObject(double lb_, double ub_, vector<Node_t> nodes_, bool s) :
         lb{lb_}, ub{ub_}, nodes{std::move(nodes_)}, success{s}{}
 };
 
-class NodeExplorer {
+    class NodeExplorer {
 
     //shared_ptr<Network> networkPtr;
 
@@ -37,34 +38,44 @@ class NodeExplorer {
     const shared_ptr<Network> networkPtr;
 
 public:
+        vector<vi> allSolutions;
+        explicit NodeExplorer(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}, feasibilityCuts{FEASIBILITY}, optimalityCuts{OPTIMALITY} {
+            // env = GRBEnv();
+            env.set(GRB_IntParam_OutputFlag,0);
+            env.set(GRB_IntParam_Threads,1);
+        }
 
-    explicit NodeExplorer(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}, feasibilityCuts{FEASIBILITY}, optimalityCuts{OPTIMALITY} {
-        // env = GRBEnv();
-        env.set(GRB_IntParam_OutputFlag,0);
-        env.set(GRB_IntParam_Threads,1);
-    }
+        NodeExplorer(const shared_ptr<Network>& networkPtr_, pair<CutContainer, CutContainer> cuts): networkPtr{networkPtr_}, feasibilityCuts{cuts.first}, optimalityCuts{cuts.second} {
+            env.set(GRB_IntParam_OutputFlag,0);
+            env.set(GRB_IntParam_Threads,1);
+        }
 
-    NodeExplorer(const shared_ptr<Network>& networkPtr_, pair<CutContainer, CutContainer> cuts): networkPtr{networkPtr_}, feasibilityCuts{cuts.first}, optimalityCuts{cuts.second} {
-        env.set(GRB_IntParam_OutputFlag,0);
-        env.set(GRB_IntParam_Threads,1);
-    }
-
-	pair<CutContainer, CutContainer> getCuts() noexcept { return {feasibilityCuts, optimalityCuts};}
+        pair<CutContainer, CutContainer> getCuts() noexcept { return {feasibilityCuts, optimalityCuts};}
 
 
-    OutObject process(Node_t node, double optimalLB);
-    OutObject process2(Node_t node, double optimalLB);
-    OutObject process3(Node_t node, double optimalLB);
-    OutObject process4(Node_t node, double optimalLB);
-    OutObject process5(Node_t node, double optimalLB);
-    void clearCuts();
+        OutObject process(Node_t node, double optimalLB);
+        OutObject process2(Node_t node, double optimalLB);
+        OutObject process3(Node_t node, double optimalLB);
+        OutObject process4(Node_t node, double optimalLB);
+        OutObject process5(Node_t node, double optimalLB);
+        OutObject process6(Node_t node, double optimalLB);
+        OutObject process7(Node_t node, double optimalLB);
+        OutObject process8(Node_t node, double optimalLB);
+        OutObject process10(Node_t node, double optimalLB);
+        OutObject processX1(Node_t node, double optimalLB);
+        OutObject processX2(Node_t node, double optimalLB);
 
-    #ifdef SOLVER_STATS
-    void displayCutStats() const noexcept {
-        cout << "Number of feasibility cuts in the container " << feasibilityCuts.cuts.size() << endl;
-        cout << "Number of optimality cuts in the container: " << optimalityCuts.cuts.size() << endl;
-    }
-    #endif
+
+        OutObject processX3(Node_t node, double optimalLB);
+        OutObject processX4(Node_t node, double optimalLB);
+        void clearCuts();
+
+#ifdef SOLVER_STATS
+        void displayCutStats() const noexcept {
+            cout << "Number of feasibility cuts in the container " << feasibilityCuts.cuts.size() << endl;
+            cout << "Number of optimality cuts in the container: " << optimalityCuts.cuts.size() << endl;
+        }
+#endif
 
 };
 

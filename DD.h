@@ -20,14 +20,14 @@
 	#define RESTRICTED_STRATEGY 1
 #endif
 #ifndef RELAXED_STRATEGY
-	#define RELAXED_STRATEGY 1
+	#define RELAXED_STRATEGY 2
 #endif
 #ifndef EXACT_STRATEGY
-	#define EXACT_STRATEGY 1
+	#define EXACT_STRATEGY 5
 #endif
 
 #ifndef MAX_WIDTH
-	#define MAX_WIDTH 128
+	#define MAX_WIDTH 300
 #endif
 
 #ifndef NUMBERS_RESERVE
@@ -75,6 +75,27 @@ public:
         lb{lb_}, ub{ub_}, globalLayer{globalLayer_}{}
 } ;
 
+
+
+
+class Node_tp {
+public:
+	std::set<int> states;
+	vi solutionVector;
+	double lb; // change to ints?
+	double ub;
+	uint globalLayer;
+
+	Node_tp() = default;
+
+	Node_tp(set<int> states_, vi solutionVector_, double lb_, double ub_, uint globalLayer_):
+		states{states_}, solutionVector{std::move(solutionVector_)},
+		lb{lb_}, ub{ub_}, globalLayer{globalLayer_}{}
+} ;
+
+
+
+
 /*
  * INFO Ids of DDArc and DDNode are unsigned long ints.
  */
@@ -86,6 +107,8 @@ public:
 	ulint tail; // id of the incoming node.
 	int decision; // decision of the variable
 	double weight; // weight
+	double minFeasResourceLeft = 500000000;
+	double minoptResourceLeft = 500000000;
 
 	DDArc(): id{0}, head{0}, tail{0}, decision{0}, weight{0}{}
 
@@ -102,6 +125,7 @@ public:
 	vector<ulint> outgoingArcs;
 	set<int> states;
 	double state2;
+	double state3;
 	vector<int> solutionVector;
 	int objVal = INT32_MAX;
 
@@ -157,6 +181,7 @@ private:
 	bool isInFeasible = false;
 	bool isTreeDeleted = false; // true if the entire tree is deleted while refinement.
 	vector<Node_t> cutSet;
+	vector<Node_tp> cutSet2;
 	// info below two variables should be updated during tree compilation.
 	uint startTree = 0; // the start position of the subtree in the global tree.
 	int exactLayer = 0; // the position of exact layer with respect to root of subtree.
@@ -166,25 +191,30 @@ private:
 	[[nodiscard]] vi computePathForExactNode(ulint nodeId) const;
 	[[nodiscard]] vector<Node_t> generateExactCutSet() const;
 
-	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext,int type_param);
+	bool buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, bool stateChangesNext);
+	bool buildNextLayerX1(vector<ulint> &currentLayer, vector<ulint> &nextLayer);
 	ulint createChild(DDNode& parent, int decision);
 	void buildNextLayer2(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 	void buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 	void buildNextLayer4(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 	void buildNextLayer5(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 	void buildNextLayer6(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
+	void buildNextLayer7(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 
 public:
 
+	bool RelaxedisExact = 1;
+
 	unordered_map<ulint,DDNode> nodes;
 	unordered_map<ulint, DDArc> arcs;
+	unordered_map<ulint, set<int>> arcTracker;
 	vector<vector<ulint>> tree; // layer corresponds to vector of node ids.
 
 	explicit DD(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_}, type{RESTRICTED}{}
 	explicit DD(const shared_ptr<Network>& networkPtr_, const Type type_): networkPtr{networkPtr_}, type{type_}{}
 
-	optional<vector<Node_t>> build(DDNode &node,int type_param);
-
+	optional<vector<Node_t>> build(DDNode &node);
+	void RelaxedBuild(DDNode &node);
 	/// refinement helper functions ///
 
 	void reduceLayer(vector<ulint> &currentLayer);
@@ -205,7 +235,7 @@ public:
 
 	double applyOptimalityCutRestrictedLatest(const Cut &cut);
 	bool applyFeasibilityCutRestrictedLatest(const Cut &cut);
-	double applyOptimalityCutHeuristic(const Cut &cut);
+	double applyOptimalityCutHeuristic(const Cut &cut ,double inputedOpt , double upperbound);
 	bool applyFeasibilityCutHeuristic(const Cut &cut);
 
 	/// node deletion functions ///
@@ -220,10 +250,16 @@ public:
 	void deleteArc(DDNode& parentNode, DDArc& arc, DDNode& childNode);
 
 	/// getter functions ///
+	///
+	///
+	vector<Node_t> getExactCutsetRelaxed(double ub);
+
 	int getExactLayer() const { return exactLayer;}
 	int getGlobalPosition() const { return startTree; }
 	[[nodiscard]] vector<Node_t> getExactCutSet();
+
 	vi solution();
+	vector<vi> solution2();
 	bool isTreeExact() const {return isExact;}
 
 

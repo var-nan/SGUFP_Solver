@@ -70,10 +70,10 @@ public:
 	uint32_t edges;
 	vector<NetworkNode> networkNodes;
 	vector<NetworkArc> networkArcs;
-
+	int totalLayers;
 	//vector<std::vector<uint>> adjacencyList{n};
 	vector<uint> Vbar; /* list of vertices that are in Vbar */
-	uint nScenarios;
+	int nScenarios;
 	// arc processing order
 	vector<pair<int, int>> processingOrder; // should contain list of arcs in some order.
 	// each element in the processing order corresponds to a layer in the DD.
@@ -91,6 +91,7 @@ public:
 	vector<uint8_t> troubleMaker; // contains zero if layer is not a trouble maker.
 
 	vector<uint> getTroubleNodes() const noexcept;
+	void vbarReOrder(bool Change);
 
 	[[nodiscard]] int getBestArc(const set<int>& states) const noexcept{
 

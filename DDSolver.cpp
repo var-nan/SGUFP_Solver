@@ -39,14 +39,14 @@ Node_t DDSolver::getNode() {
     return nodeQueue.getNode();
 }
 
-void DDSolver::initialize() {
+void DDSolver::initialize(double opt) {
     // place root node to queue
     Node_t node;
 
     node.lb = std::numeric_limits<int64_t>::min();
-    node.ub = std::numeric_limits<int64_t>::max();
+	node.ub = 5000000;
     node.globalLayer = 0;
-
+	setLB(opt);
     nodeQueue.pushNode(node);
 }
 
@@ -72,7 +72,7 @@ void DDSolver::process(NodeExplorer explorer) {
      */
 
     // NodeExplorer explorer{networkPtr, initialCuts.value()};
-
+	int counter = 0;
     while (!nodeQueue.empty()) { // conditional wait in parallel version
 
         Node_t node = nodeQueue.getNode();
@@ -81,7 +81,7 @@ void DDSolver::process(NodeExplorer explorer) {
         // cout << "Processing node from layer: " << node.globalLayer << " lb: " << node.lb << " , ub: " << node.ub;
         cout << " . global lower bound: " << getOptimalLB() << endl;
         #endif
-        if (node.ub < getOptimalLB()) {
+        if (node.ub <= getOptimalLB()) {
             #ifdef SOLVER_STATS
             numPrunedByBound++;
             // cout << "Pruned by bound." << endl;
@@ -90,8 +90,22 @@ void DDSolver::process(NodeExplorer explorer) {
         }
 
         // start node processor
-    	// cout << "process 4 started"<< endl;
-        auto result = explorer.process5(node, getOptimalLB()); // use co-routines to update globalLB in between.
+    	// cout << "process 4 stared"<< endl;
+    	OutObject result = {0,0,{},0};
+
+    	// if (counter >= node.globalLayer ) {
+    	// 	counter =0;
+    	// 	// cout << "_4_";
+    	// 	result = explorer.process4(node, (getOptimalLB() )); // use co-routines to update globalLB in between.
+    	// }else {
+    	// 	counter += 1;
+    	// 	// cout << "_5_";
+    	// 	result = explorer.process5(node, (getOptimalLB() )); // use co-routines to update globalLB in between.
+    	// }
+    	// cout << "zart" << endl;
+    	result = explorer.processX4(node, getOptimalLB() ); // use co-routines to update globalLB in between.
+    	cout << "new UB:  " << result.ub << "   ";
+    	cout << result.nodes.size() << endl;
     	// cout << "process 4 finished"<< endl;
         #ifdef SOLVER_STATS
         numNodesExplored++;
@@ -152,10 +166,22 @@ DDNode node2DDdfsNode(Node_t node) {
 }
 
 pair<CutContainer, CutContainer> DDSolver::initializeCuts2(size_t n) {
-
+	// cout << "zart1" << endl;
+	// auto vecc = networkPtr->Vbar;
+	// for(auto item:vecc) {
+	// 	cout << item << "*" ;
+	// }
+	// cout << endl;
+	// std::reverse(vecc.begin(), vecc.end());
+	// for(auto item:vecc) {
+	// 	cout << item << "*" ;
+	// }
+	// cout << endl;
+	// networkPtr->Vbar = vecc;
+	// cout << "zart1" << endl;
     DD dd{networkPtr, EXACT};
     DDNode root{0};
-    dd.build(root,1);
+    dd.build(root);
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -193,19 +219,145 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts2(size_t n) {
             if (sol == solution) isExist = true; break;
         }
         if (isExist) continue;
-        cout << "Solution selected: "; for (auto s: solution) cout << s <<" "; cout <<endl;
+        // cout << "Solution selected: "; for (auto s: solution) cout << s <<" "; cout <<endl;
         solutions.push_back(solution);
         // cout << "Solution: "; for (auto sol: solution) cout << sol << " "; cout << endl;
         // get cut
         GuroSolver solver{networkPtr, env};
         const auto& y_bar = w2y(solution, networkPtr);
-        auto cut = solver.solveSubProblemInstance(y_bar, 0); // LATER set random scenario.
+        auto cut = solver.solveSubProblemInstance(y_bar); // LATER set random scenario.
         if (cut.cutType == FEASIBILITY) {
             fCuts.insertCut(cut);
+        	cout << "feas cut: " << endl;
         }
         else oCuts.insertCut(cut);
+    		cout << "opt cut" << endl;
         n--;
     }
+    return make_pair(fCuts, oCuts);
+}
+
+pair<CutContainer, CutContainer> DDSolver::initializeCuts3() {
+
+    // start with root and find random paths to terminal.
+    vector<vi> solutions;
+    CutContainer fCuts{FEASIBILITY};
+    CutContainer oCuts{OPTIMALITY};
+    GRBEnv env = GRBEnv();
+    env.set(GRB_IntParam_OutputFlag, 0);
+
+    // solutions.reserve(n);
+	for (auto item : networkPtr->Vbar) {
+		cout << item << " * " ;
+	}
+	cout << endl;
+	int ct = 0;
+	reverse(networkPtr->Vbar.begin(), networkPtr->Vbar.end());
+	for (auto item : networkPtr->Vbar) {
+		cout << item << " * ";
+	}
+	cout << endl;
+    while (ct < networkPtr->Vbar.size()) {
+    	cout << "first node:" <<networkPtr->Vbar[0]<< endl;
+
+    	ct += 1;
+    	DD restrictedDD{networkPtr, RESTRICTED};
+    	DDNode root{0};
+    	restrictedDD.build(root);
+
+
+    	auto lowerBound = std::numeric_limits<int64_t>::min();
+
+
+    	double previousLowerBound;
+    	vi previousSolution;
+    	while (true) {
+    		vi solution = restrictedDD.solution();
+    		if (previousSolution == solution) {
+    			if (previousLowerBound == lowerBound) {
+    				break;
+    			}
+    			previousLowerBound=lowerBound;
+    		}else {
+    			previousSolution = solution;
+    			previousLowerBound = lowerBound;
+    		}
+    		auto y_bar = w2y(solution , networkPtr);
+    		GuroSolver solver{networkPtr, env};
+    		auto cut = solver.solveSubProblemInstance(y_bar);
+    		if (cut.cutType == FEASIBILITY) {
+    			fCuts.insertCut(cut);
+    			if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+    				// cout << "exact tree pruned by feas actual ref!" << endl;
+    				break;
+    			}
+    		}else {
+    			oCuts.insertCut(cut);
+    			lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+    			if (lowerBound <= optimalLB) {
+    				// cout << "exact tree pruned by opt actual ref!" << endl;
+    				break;
+    			}
+    		}
+    	}
+    	networkPtr->vbarReOrder(1);
+    	cout << "fCuts: " << fCuts.cuts.size() << endl;
+    	cout << "oCuts: " << oCuts.cuts.size() << endl;
+    }
+	reverse(networkPtr->Vbar.begin(), networkPtr->Vbar.end());
+	networkPtr->vbarReOrder(0);
+	for (auto item : networkPtr->Vbar) {
+		cout << item << " * ";
+	}
+	cout << endl;
+    return make_pair(fCuts, oCuts);
+}
+
+pair<CutContainer, CutContainer> DDSolver::initializeCuts4() {
+
+    // start with root and find random paths to terminal.
+    vector<vi> solutions;
+    CutContainer fCuts{FEASIBILITY};
+    CutContainer oCuts{OPTIMALITY};
+    GRBEnv env = GRBEnv();
+    env.set(GRB_IntParam_OutputFlag, 0);
+
+	int ct = 0;
+    while (ct == 0) {
+    	ct += 1;
+    	DD restrictedDD{networkPtr, RESTRICTED};
+    	DDNode root{0};
+    	restrictedDD.build(root);
+    	auto lowerBound = std::numeric_limits<int64_t>::min();
+    	double previousLowerBound;
+    	vi previousSolution;
+    	while (true) {
+    		vi solution = restrictedDD.solution();
+    		if (previousSolution == solution) {
+    			if (previousLowerBound == lowerBound) {
+    				break;
+    			}
+    			previousLowerBound=lowerBound;
+    		}else {
+    			previousSolution = solution;
+    			previousLowerBound = lowerBound;
+    		}
+    		auto y_bar = w2y(solution , networkPtr);
+    		GuroSolver solver{networkPtr, env};
+    		auto cut = solver.solveSubProblemInstance(y_bar);
+    		if (cut.cutType == FEASIBILITY) {
+    			fCuts.insertCut(cut);
+    			if (!restrictedDD.applyFeasibilityCutRestrictedLatest(cut)) {
+    				break;
+    			}
+    		}else {
+    			oCuts.insertCut(cut);
+    			lowerBound = restrictedDD.applyOptimalityCutRestrictedLatest(cut);
+    		}
+    	}
+
+    }
+	// reverse(networkPtr->Vbar.begin(), networkPtr->Vbar.end());
     return make_pair(fCuts, oCuts);
 }
 
@@ -226,9 +378,9 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
     root.globalLayer = 0;
     DD relaxed{networkPtr, EXACT};
     DDNode newRoot{0};
-    relaxed.build(newRoot,1);
+    relaxed.build(newRoot);
     DD restricted {networkPtr,RESTRICTED};
-    auto cutset = restricted.build(root,1);
+    auto cutset = restricted.build(root);
     cout << "Cutset size " << cutset.value().size() << endl;
 
     CutContainer fCuts{FEASIBILITY};
@@ -241,14 +393,14 @@ pair<CutContainer, CutContainer> DDSolver::initializeCuts() {
         for (const auto& node: cutset.value()) {
             DDNode ddNode = node2DDNode(node);
             DD subTree{networkPtr,RESTRICTED};
-            auto _ = subTree.build(ddNode,1);
+            auto _ = subTree.build(ddNode);
 
             // get solution
             auto sol = subTree.solution();
             // solve sub problem
             GuroSolver solver{networkPtr,env};
             auto y_bar = w2y(sol, networkPtr);
-            auto cut = solver.solveSubProblemInstance(y_bar, 0);
+            auto cut = solver.solveSubProblemInstance(y_bar);
             // add cut to containers
             if (cut.cutType == FEASIBILITY) {
                 if (!fCuts.isCutExists(cut))

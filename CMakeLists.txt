@@ -5,11 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-set(SOURCES Network.cpp DD.cpp grb.cpp DDSolver.cpp NodeExplorer.cpp OriginalProblem.h)
+set(SOURCES Network.cpp DD.cpp grb.cpp DDSolver.cpp NodeExplorer.cpp OriginalProblem.h scBasedMadel.h grbTest.h)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
-add_compile_definitions(MAX_WIDTH=300)
+add_compile_definitions(MAX_WIDTH=2000)
 
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -43,10 +43,23 @@ if (UNIX)
     set(GUROBI_LIB "${GUROBI_HOME}lib/")
     set(GUROBI_INCLUDE "${GUROBI_HOME}include/")
 
-    add_library(gurobi_c++ STATIC IMPORTED)
+    add_library(gurobi_c++ STATIC IMPORTED
+            NodeExplorer.cpp
+            main.cpp
+            DD.cpp)
     set_property(TARGET gurobi_c++ PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi_c++.a")
 
-    add_library(gurobi110 SHARED IMPORTED)
+    add_library(gurobi110 SHARED IMPORTED
+            NodeExplorer.cpp
+            NodeExplorer.cpp
+            main.cpp
+            main.cpp
+            main.cpp
+            main.cpp
+            Network.cpp
+            DD.cpp
+            DD.cpp
+            grbTest.h)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
     add_compile_definitions(SOLVER_STATS)
@@ -74,11 +87,15 @@ if (UNIX)
     # test targets
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_executable(tests2 tests/tests.cpp ${SOURCES}
-                tests/test_utils.h)
+                tests/test_utils.h
+                NodeExplorer.cpp
+                DD.cpp)
         target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
         target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
 
-        add_executable(testmain testmain.cpp ${SOURCES})
+        add_executable(testmain testmain.cpp ${SOURCES}
+                NodeExplorer.cpp
+                DD.cpp)
         target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
         target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
 
@@ -143,10 +160,14 @@ elseif(WIN32)
     endif()
 
     if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_executable(testmain testmain.cpp ${SOURCES})
+        add_executable(testmain testmain.cpp ${SOURCES}
+                NodeExplorer.cpp
+                DD.cpp)
         target_link_libraries(testmain GTest::gtest_main)
 
-        add_executable(tests2 tests/tests.cpp ${SOURCES} tests/test_utils.h)
+        add_executable(tests2 tests/tests.cpp ${SOURCES} tests/test_utils.h
+                NodeExplorer.cpp
+                DD.cpp)
         target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
                 debug ${GUROBI_CXX_DEBUG_LIBRARY})
         target_link_libraries(tests2 ${GUROBI_LIBRARY})
