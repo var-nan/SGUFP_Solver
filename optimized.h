@@ -12,11 +12,11 @@
 #include <shared_mutex>
 
 #ifndef FEASIBILITY_CONTAINER_CAPACITY
-    #define FEASIBILITY_CONTAINER_CAPACITY 128
+    #define FEASIBILITY_CONTAINER_CAPACITY 12
 #endif
 
 #ifndef OPTIMALITY_CONTAINER_CAPACITY
-    #define OPTIMALITY_CONTAINER_CAPACITY 128
+    #define OPTIMALITY_CONTAINER_CAPACITY 12
 #endif
 
 namespace Inavap {
@@ -48,6 +48,11 @@ namespace Inavap {
         CutResource(CutResource &&other) = delete;
         CutResource& operator=(const CutResource &other) = delete;
         CutResource& operator=(CutResource &&other) = delete;
+
+        void printStatistics() const noexcept {
+            cout << "Number of Feasibility Cut containers " << fCutContainers.size() << endl;
+            cout << "Number of Optimality Cut container " << oCutContainers.size() << endl;
+        }
 
         /* TODO: create destructor that frees all the cut containers */
         ~CutResource() {

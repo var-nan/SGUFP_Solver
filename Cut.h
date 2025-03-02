@@ -11,7 +11,7 @@
 #include <tuple>
 #include <memory>
 #include <utility>
-#define private public
+// #define private public
 
 using namespace std;
 
@@ -370,7 +370,7 @@ namespace Inavap {
 		// TODO: define 'new' operator (efficient, without copying).
 		void insertCut(const Cut &cut) {
 			// do not insert duplicate cuts.
-			for (const auto& c: cuts) { if (c == cut) return;}
+			// for (const auto& c: cuts) { if (c == cut) return;}
 			cuts.push_back(cut);
 		}
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
@@ -380,6 +380,20 @@ namespace Inavap {
 
 		auto begin() noexcept {return cuts.begin();}
 		auto end() noexcept {return cuts.end();}
+
+		[[nodiscard]] CutContainer seek(size_t pos) {
+			size_t n = cuts.size() - pos;
+			CutContainer c{n};
+
+			for (const auto& cut : cuts) {
+				c.insertCut(cut);
+			}
+			return c;
+		}
+
+		void addContainer(CutContainer cc) {
+			cuts.insert(cuts.end(), cc.cuts.begin(), cc.cuts.end());
+		}
 	};
 
 

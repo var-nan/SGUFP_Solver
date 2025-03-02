@@ -40,7 +40,7 @@ if (UNIX)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
 
     # gurobi libraries
-    set(GUROBI_HOME "/opt/gurobi1102/linux64/")
+    set(GUROBI_HOME "/opt/gurobi1103/linux64/")
     set(GUROBI_LIB "${GUROBI_HOME}lib/")
     set(GUROBI_INCLUDE "${GUROBI_HOME}include/")
 
