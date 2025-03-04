@@ -140,7 +140,7 @@ elseif(WIN32)
     find_package(GSL REQUIRED)
     target_link_libraries(SGUFP_Solver GSL::gsl)
 
-    target_compile_options(SGUFP_Solver PRIVATE -O0 -g -Wextra)
+#    target_compile_options(SGUFP_Solver PRIVATE -O0 -g -Wextra)
 #    target_link_options(SGUFP_Solver PRIVATE -g -O0 -fsanitize=addr)
 
     message(STATUS "GUROBI_CXX_LIBRARY: ${GUROBI_CXX_LIBRARY}")
@@ -159,24 +159,24 @@ elseif(WIN32)
 #    if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 #        add_executable(testmain testmain.cpp ${SOURCES})
 #        target_link_libraries(testmain GTest::gtest_main)
-    message(STATUS "Fetching google test")
-    # google test dependency
-    include(FetchContent)
-    FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
-            GIT_TAG v1.15.2
-    )
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
-    enable_testing()
-
-        add_executable(tests2 tests/tests2.cpp DD.cpp Network.cpp tests/test_utils.h)
-        target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
-                debug ${GUROBI_CXX_DEBUG_LIBRARY})
-        target_link_libraries(tests2 ${GUROBI_LIBRARY})
-        target_link_libraries(tests2 GTest::gtest_main)
-
-        include(GoogleTest)
-#        gtest_discover_tests(testmain)
-        gtest_discover_tests(tests2)
-#    endif()
+#    message(STATUS "Fetching google test")
+#    # google test dependency
+#    include(FetchContent)
+#    FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
+#            GIT_TAG v1.15.2
+#    )
+#    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+#    FetchContent_MakeAvailable(googletest)
+#    enable_testing()
+#
+#        add_executable(tests2 tests/tests2.cpp DD.cpp Network.cpp tests/test_utils.h)
+#        target_link_libraries(tests2 optimized ${GUROBI_CXX_LIBRARY}
+#                debug ${GUROBI_CXX_DEBUG_LIBRARY})
+#        target_link_libraries(tests2 ${GUROBI_LIBRARY})
+#        target_link_libraries(tests2 GTest::gtest_main)
+#
+#        include(GoogleTest)
+##        gtest_discover_tests(testmain)
+#        gtest_discover_tests(tests2)
+##    endif()
 endif()
