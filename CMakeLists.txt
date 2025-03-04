@@ -53,6 +53,9 @@ if (UNIX)
     add_compile_definitions(SOLVER_STATS)
     target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g -pthread) # add -O3 flag in final phase. -Wunused
     target_link_options(SGUFP_Solver PRIVATE -pg -g -pthread)
+
+    find_package(GSL REQUIRED)
+    target_link_libraries(SGUFP_Solver PRIVATE GSL::gsl)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
@@ -133,6 +136,9 @@ elseif(WIN32)
 
 #    add_compile_definitions(DEBUG)
     add_compile_definitions(SOLVER_STATS)
+
+    find_package(GSL REQUIRED)
+    target_link_libraries(SGUFP_Solver GSL::gsl)
 
     target_compile_options(SGUFP_Solver PRIVATE -O0 -g -Wextra)
 #    target_link_options(SGUFP_Solver PRIVATE -g -O0 -fsanitize=addr)
