@@ -387,21 +387,29 @@ namespace Inavap {
         void printWorkerStats() const noexcept {
             vector<double> processed;
             processed.reserve(N_WORKERS);
-            cout << "***************************************************************************" <<endl;
+
+            size_t n = processed.size() * 12 +32;
+            n = std::max(n, static_cast<size_t>(72));
+            std::string asterisk(n,'-');
+            cout << asterisk <<endl;
+            
             cout << "Processed: ";
             for (const auto& worker : workersGroup) {
                 processed.push_back(static_cast<double>(worker.nProcessed));
                 cout << worker.nProcessed << "\t";
             }
             cout << endl;
-            double mean = gsl_stats_mean(processed.data(), sizeof(double), processed.size());
-            double absdev = gsl_stats_absdev(processed.data(), sizeof(double), processed.size());
-            double min_val= gsl_stats_min(processed.data(), sizeof(double), processed.size());
-            double max_val = gsl_stats_max(processed.data(), sizeof(double), processed.size());
-            cout << "Mean: " << mean << "\t Deviation: " << absdev
+            double mean = gsl_stats_mean(processed.data(), 1, processed.size());
+            double absdev = gsl_stats_absdev(processed.data(), 1, processed.size());
+            double min_val= gsl_stats_min(processed.data(),1 , processed.size());
+            double max_val = gsl_stats_max(processed.data(), 1, processed.size());
+
+            double total = std::accumulate(processed.begin(), processed.end(), 0.0);
+
+            cout << "Total: " << total << "\t Mean: " << mean << "\t Deviation: " << absdev
                         <<"\t Min: " << min_val <<"\t Max: " << max_val
                         << endl;
-            cout << "***************************************************************************" << endl;
+            cout << asterisk << endl;
         }
     };
 }
