@@ -656,13 +656,13 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		}
 
 		if (idle == solver.N_WORKERS && nodeQueue.empty()) {
-			cout << "Indicating all workers" << endl;
+			// cout << "Indicating all workers" << endl;
 			solver.isCompleted.store(true, std::memory_order::release);
 			for (auto& worker : solver.payloads) {
 				worker.payloadStatus.store(Payload::SOLVER_FINISHED, memory_order::relaxed);
 				worker.cv.notify_one();
 			}
-			cout << "Solver finished. "<< endl;
+			// cout << "Solver finished. "<< endl;
 			break;
 		}
 
@@ -689,7 +689,7 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		// nProcessed += processNodes(solver, explorer, 4);
 	}
 	// post-completion tasks by master?
-	solver.CutResources.printStatistics();
+	// solver.CutResources.printStatistics();
 }
 
 void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
@@ -728,7 +728,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	double zOpt = solver->optimal.load(memory_order::relaxed);
 
 	uint8_t done = 0; // flag to indicate solver is finished.
-	size_t nProcessed = 0; // # nodes processed so far.
+	// size_t nProcessed = 0; // # nodes processed so far.
 	size_t counter = 0;
 	uint nOptShared = 0;
 	uint nFeasShared = 0;
@@ -833,9 +833,9 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	}
 
 	// display cut statistics. append to global string instead of printing.
-	std::string msg = "Worker: " + std::to_string(id) + " processed " + std::to_string(nProcessed) + " nodes";
-	cout << msg << endl;
-	printStats();
+	// std::string msg = "Worker: " + std::to_string(id) + " processed " + std::to_string(nProcessed) + " nodes";
+	// cout << msg << endl;
+	// printStats();
 }
 
 void Inavap::DDSolver::Worker::shareCutsWithMaster(NodeExplorer &explorer, Inavap::DDSolver::Payload &payload) {

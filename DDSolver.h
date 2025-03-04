@@ -16,6 +16,7 @@
 #include <stack>
 #include "optimized.h"
 #include <bit>
+#include <gsl/gsl_statistics_double.h>
 
 #ifndef POLL_FREQUENCY
 #define POLL_FREQUENCY 512
@@ -338,6 +339,10 @@ namespace Inavap {
                     + ". OCC: " + std::to_string(optCutsGlobal.size()) +"\n";
                 cout << str;
             }
+
+            size_t nProcessed = 0; // number of nodes processed successfully.
+            size_t nReceived = 0; // number of nodes received from the master.
+            size_t nFalseProcessed = 0; // node is infeasible.
         };
 
         class Master {
@@ -379,6 +384,25 @@ namespace Inavap {
 
         void startSolver();
 
+        void printWorkerStats() const noexcept {
+            vector<double> processed;
+            processed.reserve(N_WORKERS);
+            cout << "***************************************************************************" <<endl;
+            cout << "Processed: ";
+            for (const auto& worker : workersGroup) {
+                processed.push_back(static_cast<double>(worker.nProcessed));
+                cout << worker.nProcessed << "\t";
+            }
+            cout << endl;
+            double mean = gsl_stats_mean(processed.data(), sizeof(double), processed.size());
+            double absdev = gsl_stats_absdev(processed.data(), sizeof(double), processed.size());
+            double min_val= gsl_stats_min(processed.data(), sizeof(double), processed.size());
+            double max_val = gsl_stats_max(processed.data(), sizeof(double), processed.size());
+            cout << "Mean: " << mean << "\t Deviation: " << absdev
+                        <<"\t Min: " << min_val <<"\t Max: " << max_val
+                        << endl;
+            cout << "***************************************************************************" << endl;
+        }
     };
 }
 
