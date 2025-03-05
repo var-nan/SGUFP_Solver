@@ -112,12 +112,11 @@ optional<vector<Node_t>> DD::build(DDNode &node) {
 		if(tree[layer].size() == 1) {
 			const auto& node = nodes[tree[layer][0]];
 			for (const auto& id: node.incomingArcs) {
-				map<int,int> tempDict;
 				arcTracker.insert(make_pair(id, SpecificLayer));
 			}
 		}
 	}
-
+	lastLayerInitialLength = tree[tree.size()-2].size();
 	return {};
 }
 
@@ -602,7 +601,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 		#elif EXACT_STRATEGY == 5
 		{
 			// if (currentLayer.size() > (startTree*50) + 50 ){//&& nodes[currentLayer[0]].globalLayer < 40) {
-			if (currentLayer.size() > 500  && nodes[currentLayer[0]].globalLayer < networkPtr->totalLayers - 5 ){//&& nodes[currentLayer[0]].globalLayer < 40) {
+			if (currentLayer.size() > 100  && nodes[currentLayer[0]].globalLayer < networkPtr->totalLayers - 5 ){//&& nodes[currentLayer[0]].globalLayer < 40) {
 				isExact = false;
 				RelaxedisExact = 0;
 				vector<DDNode> nodesVector={};
@@ -1206,9 +1205,10 @@ DDNode copyNode(const DDNode& node) {
 ////////////////////////////////////////////////////////////
 vector<Node_t> DD::getExactCutsetRelaxed(double ub) {
 	int mergeLayerNum;
-	for(int i = 0; i < tree.size(); i++) {
-		if (tree[i].size() > tree[i+1].size()) {
-			mergeLayerNum = i;
+	for(int i = 3; i < tree.size(); i++) {
+		if (tree[i].size() > tree[i+1].size()){
+		// if (tree[i].size() == 1 ) {
+			mergeLayerNum = i+1;
 			break;
 		}
 	}
@@ -1232,7 +1232,6 @@ vector<Node_t> DD::getExactCutsetRelaxed(double ub) {
 		for(auto nodeID : tree[mergeLayerNum-1]) {
 			for (auto arcId : nodes[nodeID].outgoingArcs) {
 				auto decision = arcs[arcId].decision;
-				// auto partialSol = nodes[nodeID].solutionVector;
 				auto partialSol = computePathForExactNode(nodeID);
 				partialSol.push_back(decision);
 				auto newGlobalLayer = nodes[nodeID].globalLayer + 1 ;
@@ -2072,58 +2071,116 @@ double DD::applyOptimalityCutHeuristic(const Cut &cut, double inputedOpt , doubl
 		inArc.weight = min(inArc.weight, parentNode.state2);
 		terminalState = std::max(terminalState, inArc.weight);
 	}
-
 	terminalNode.state2 = terminalState;
-
-
-	// if( !RelaxedisExact ){
-	// cout << " exact ";
-	// cout << "big zart" << endl;
-	double maxLastLayerState = std::numeric_limits<double>::lowest();
-	for (auto nodeId : tree[tree.size()-2]) {
-		if (nodes[nodeId].state2 > maxLastLayerState) {
-			maxLastLayerState = nodes[nodeId].state2;
-		}
+	if (terminalState <= inputedOpt) {
+		return terminalState;
 	}
-	//// maxLastLayerState = min(maxLastLayerState,upperbound);
-	//// maxLastLayerState = terminalState;
-	// maxLastLayerState = min(terminalState,upperbound);
-	vector<ulint> arcsToBeRemoved ={};
-	for (size_t layer = 3; layer < tree.size() - 3; layer++) {
-		if (tree[layer].size() == 1) {
-			// cout << "happened" << endl;
-			double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
-			for (auto nodeId : tree[layer-1]) {
-				auto& node = nodes[nodeId];
-				for (auto outArcId : node.outgoingArcs) {
-					auto& outArc = arcs[outArcId];
-					const auto& parentNode = nodes[outArc.tail];
-					if(parentNode.state2 + outArc.weight + maxGainForward < inputedOpt ) {
-						arcsToBeRemoved.push_back(outArc.id);
+
+
+	if (!RelaxedisExact) {
+		for (size_t layer = 3; layer < tree.size() - 3; layer++) {
+			if (tree[layer].size() == 1) {
+				auto& mergeNode = nodes[tree[layer][0]];
+				for (auto nodeId : tree[layer-1]) {
+					auto& node = nodes[nodeId];
+					for (auto outArcId : node.outgoingArcs) {
+						auto& outArc = arcs[outArcId];
+						const auto& parentNode = nodes[outArc.tail];
+						for (auto nodeID2 : tree[tree.size()-2]) {
+							if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - mergeNode.state2 <= inputedOpt - 0.001 ) {
+								arcTracker[outArcId].insert(nodeID2);
+							}
+						}
 					}
 				}
 			}
 		}
+
+		vector<ulint> arcsToBeRemoved ={};
+		for (auto item : arcTracker) {
+			if (item.second.size() == lastLayerInitialLength) {
+				arcsToBeRemoved.push_back(item.first);
+			}
+		}
+
+		if (arcsToBeRemoved.size() > 0) {
+			cout << "oATBR: " << arcsToBeRemoved.size() << " ";
+			for( auto item : arcsToBeRemoved ) {
+				deleteArcById(item);
+				arcTracker.erase(item);
+			}
+		}
 	}
+
+
+
+
+
+	// if (!RelaxedisExact) {
+	// 	double maxLastLayerState = std::numeric_limits<double>::lowest();
+	//
+	// 	for (auto nodeId : tree[tree.size()-2]) {
+	// 		if (nodes[nodeId].state2 > maxLastLayerState) {
+	// 			maxLastLayerState = nodes[nodeId].state2;
+	// 		}
+	// 	}
+	//
+	// 	vector<ulint> arcsToBeRemoved ={};
+	// 	for (size_t layer = 3; layer < tree.size() - 3; layer++) {
+	// 		if (tree[layer].size() == 1) {
+	// 			double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
+	// 			for (auto nodeId : tree[layer-1]) {
+	// 				auto& node = nodes[nodeId];
+	// 				for (auto outArcId : node.outgoingArcs) {
+	// 					auto& outArc = arcs[outArcId];
+	// 					const auto& parentNode = nodes[outArc.tail];
+	// 					if(parentNode.state2 + outArc.weight + maxGainForward < inputedOpt+ 0.1) {
+	// 						arcsToBeRemoved.push_back(outArc.id);
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	//
+	//
+	// 	if (arcsToBeRemoved.size() > 0) {
+	// 		cout << "oATBR: " << arcsToBeRemoved.size() << " ";
+	// 		for( auto item : arcsToBeRemoved ) {
+	// 			deleteArcById(item);
+	// 		}
+	// 	}
+	// }
+
+
 	// for (size_t layer = 3; layer < tree.size() - 3; layer++) {
-	// 	if (nodes[tree[layer][0]].incomingArcs.size() > 1) {
-	// 		for( auto nodeID : tree[layer] ) {
-	// 			auto& node = nodes[nodeID];
-	// 			double maxGainForward = maxLastLayerState - node.state2;
-	// 			for (auto inArcId : node.incomingArcs) {
-	// 				auto& inArc = arcs[inArcId];
-	// 				const auto& parentNode = nodes[inArc.tail];
-	// 				if(parentNode.state2 + inArc.weight + maxGainForward < inputedOpt + 0.1 ) {
-	// 					arcsToBeRemoved.push_back(inArc.id);
+	// 	if (tree[layer].size() == 1) {
+	// 		for (auto nodeId : tree[layer-1]) {
+	// 			auto& node = nodes[nodeId];
+	// 			for (auto outArcId : node.outgoingArcs) {
+	// 				auto& outArc = arcs[outArcId];
+	// 				const auto& parentNode = nodes[outArc.tail];
+	// 				for (auto nodeID2 : tree[tree.size()-2]) {
+	// 					if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - node.state2 < inputedOpt) {
+	// 						arcTracker[outArcId].insert(nodeID2);
+	// 					}
 	// 				}
 	// 			}
 	// 		}
 	// 	}
 	// }
-	for( auto item : arcsToBeRemoved ) {
-		deleteArcById(item);
-	}
-
+	//
+	// vector<ulint> arcsToBeRemoved ={};
+	// for (auto item : arcTracker) {
+	// 	if (item.second.size() == lastLayerInitialLength) {
+	// 		// cout << "zart !!" << endl;
+	// 		arcsToBeRemoved.push_back(item.first);
+	// 	}
+	// }
+	// cout << "arcsToBeRemoved.size(): " << arcsToBeRemoved.size() << endl;
+	// for( auto item : arcsToBeRemoved ) {
+	// 	deleteArcById(item);
+	// 	arcTracker.erase(item);
+	// }
 	return terminalState;
 }
 
@@ -2158,31 +2215,18 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size() -1; layer++) {
-		// cout <<"3-"<< endl;
 		auto theArc = processingOrder[startTree+layer-1].second;
-		// cout << " theArc: " << theArc << endl;
 		const auto& iNetNode = netArcs[theArc].tailId;
 		const auto& qNetNode = netArcs[theArc].headId;
 		for (auto nodeId : tree[layer]) {
-			// cout <<"4-";
 			double newState = std::numeric_limits<double>::lowest();
-			// cout <<"4.5-";
 			auto& node = nodes[nodeId];
-
 			for (auto inArcId : node.incomingArcs) {
-				// cout <<"5-"<< endl;
 				auto& inArc = arcs[inArcId];
-				// cout << "the decision: " << inArc.decision << " ** "  << networkPtr->networkArcs[inArc.decision].tailId << " --> " << networkPtr->networkArcs[inArc.decision].headId <<endl;
-
 				const auto& parentNode = nodes[inArc.tail];
 				const auto& jNetNode = (inArc.decision != -1) ? netArcs[inArc.decision].headId : 0;
-				// cout <<"6-" << endl;
-				// cout << " head: "<< netArcs[inArc.decision].headId << " tail:" << netArcs[inArc.decision].tailId <<endl;
-				// cout << " * " << iNetNode << " - " << qNetNode << " - " << jNetNode << " - " ;
 				inArc.weight = (inArc.decision != -1) ? cut.get(iNetNode, qNetNode, jNetNode) : 0;
-				// cout <<"6.5-";
 				newState = (inArc.weight + parentNode.state2 > newState) ? inArc.weight + parentNode.state2 : newState;
-				// cout <<"7-";
 			}
 			node.state2 = newState;
 		}
@@ -2190,63 +2234,122 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 	// cout <<"3-";
 	vector<ulint> nodesToRemove; // remove nodes that have negative state.
 	for (auto nodeId : tree[tree.size()-2]) {
-		if (nodes[nodeId].state2 < -0.1) {
+		if (nodes[nodeId].state2 < -0.01) {
 			nodesToRemove.push_back(nodeId);
 			for (auto item : arcTracker) {
 				item.second.insert(nodeId);
 			}
 		}
-
 	}
-	// cout <<"4-";
-	// cout << endl;
 	if (nodesToRemove.size() == tree[tree.size()-2].size()) return false;
-	if (!nodesToRemove.empty())batchRemoveNodes(nodesToRemove);
-	// cout <<"5-";
-	// if(!RelaxedisExact){
-	double maxLastLayerState = std::numeric_limits<double>::lowest();
-
-	for (auto nodeId : tree[tree.size()-2]) {
-		if (nodes[nodeId].state2 > maxLastLayerState) {
-			maxLastLayerState = nodes[nodeId].state2;
+	if (!nodesToRemove.empty()) {
+		for (auto item : arcTracker) {
+			for (auto nodeId : nodesToRemove) {
+				item.second.insert(nodeId);
+			}
 		}
+		batchRemoveNodes(nodesToRemove);
 	}
-	// cout <<"6-";
-	vector<ulint> arcsToBeRemoved ={};
-	for (size_t layer = 1; layer < tree.size() - 2; layer++) {
-		if (tree[layer].size() == 1) {
-			double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
-			for (auto nodeId : tree[layer-1]) {
-				auto& node = nodes[nodeId];
-				for (auto outArcId : node.outgoingArcs) {
-					auto& outArc = arcs[outArcId];
-					const auto& parentNode = nodes[outArc.tail];
-					if(parentNode.state2 + outArc.weight + maxGainForward < 0) {
-						arcsToBeRemoved.push_back(outArc.id);
+///////////////////////////////////////////
+
+	if (!RelaxedisExact) {
+		for (size_t layer = 3; layer < tree.size() - 3; layer++) {
+			if (tree[layer].size() == 1) {
+				auto& mergeNode = nodes[tree[layer][0]];
+				for (auto nodeId1 : tree[layer-1]) {
+					auto& node = nodes[nodeId1];
+					for (auto outArcId : node.outgoingArcs) {
+						auto& outArc = arcs[outArcId];
+						const auto& parentNode = nodes[outArc.tail];
+						for (auto nodeID2 : tree[tree.size()-2]) {
+							if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - mergeNode.state2 < 0) {
+								arcTracker[outArc.id].insert(nodeID2);
+							}
+						}
 					}
 				}
 			}
 		}
+
+		vector<ulint> arcsToBeRemoved ={};
+		for (auto item : arcTracker) {
+			if (item.second.size() == lastLayerInitialLength) {
+				arcsToBeRemoved.push_back(item.first);
+			}
+		}
+		if (arcsToBeRemoved.size() > 0) {
+			cout << "fATBR: " << arcsToBeRemoved.size() << " ";
+			for( auto item : arcsToBeRemoved ) {
+				deleteArcById(item);
+				arcTracker.erase(item);
+			}
+		}
 	}
+
+
+
+	// if (!RelaxedisExact) {
+	// 	double maxLastLayerState = std::numeric_limits<double>::lowest();
+	// 	for (auto nodeId : tree[tree.size()-2]) {
+	// 		if (nodes[nodeId].state2 > maxLastLayerState) {
+	// 			maxLastLayerState = nodes[nodeId].state2;
+	// 		}
+	// 	}
+	// 	vector<ulint> arcsToBeRemoved ={};
+	// 	for (size_t layer = 1; layer < tree.size() - 2; layer++) {
+	// 		if (tree[layer].size() == 1) {
+	// 			double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
+	// 			for (auto nodeId : tree[layer-1]) {
+	// 				auto& node = nodes[nodeId];
+	// 				for (auto outArcId : node.outgoingArcs) {
+	// 					auto& outArc = arcs[outArcId];
+	// 					const auto& parentNode = nodes[outArc.tail];
+	// 					if(parentNode.state2 + outArc.weight + maxGainForward < -0.1) {
+	// 						arcsToBeRemoved.push_back(outArc.id);
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	//
+	// 	if (arcsToBeRemoved.size() > 0) {
+	// 		cout << "fATBR: " << arcsToBeRemoved.size() << " ";
+	// 		for( auto item : arcsToBeRemoved ) {
+	// 			deleteArcById(item);
+	// 		}
+	// 	}
+	// }
+
+	// //////////////////////////////////////////////////////////////
+	// // double maxLastLayerState = std::numeric_limits<double>::lowest();
 	// for (size_t layer = 1; layer < tree.size() - 2; layer++) {
-	// 	if (nodes[tree[layer][0]].incomingArcs.size() > 1) {
-	// 		for (auto nodeId : tree[layer]) {
-	// 			auto& node = nodes[nodeId];
-	// 			double maxGainForward = maxLastLayerState - node.state2;
-	// 			for (auto inArcId : node.incomingArcs) {
-	// 				auto& inArc = arcs[inArcId];
-	// 				const auto& parentNode = nodes[inArc.tail];
-	// 				if(parentNode.state2 + inArc.weight + maxGainForward < -0.1) {
-	// 					arcsToBeRemoved.push_back(inArc.id);
+	// 	if (tree[layer].size() == 1) {
+	// 		for (auto nodeId1 : tree[layer-1]) {
+	// 			auto& node = nodes[nodeId1];
+	// 			for (auto outArcId : node.outgoingArcs) {
+	// 				auto& outArc = arcs[outArcId];
+	// 				const auto& parentNode = nodes[outArc.tail];
+	// 				for (auto nodeID2 : tree[tree.size()-2]) {
+	// 					if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - node.state2 < 0) {
+	// 						arcTracker[outArc.id].insert(nodeID2);
+	// 					}
 	// 				}
 	// 			}
 	// 		}
 	// 	}
 	// }
-	for( auto item : arcsToBeRemoved ) {
-		deleteArcById(item);
-	}
-
+	//
+	// vector<ulint> arcsToBeRemoved ={};
+	// for (auto item : arcTracker) {
+	// 	if (item.second.size() == lastLayerInitialLength) {
+	// 		arcsToBeRemoved.push_back(item.first);
+	// 	}
+	// }
+	// cout << "arcsToBeRemoved.size(): " << arcsToBeRemoved.size() << endl;
+	// for( auto item : arcsToBeRemoved ) {
+	// 	deleteArcById(item);
+	// 	arcTracker.erase(item);
+	// }
 	return true;
 }
 
@@ -2439,7 +2542,6 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 // 			maxLastLayerState = nodes[nodeId].state2;
 // 		}
 // 	}
-// 	// cout <<"6-";
 // 	vector<ulint> arcsToBeRemoved ={};
 // 	for (size_t layer = 1; layer < tree.size() - 2; layer++) {
 // 		if (tree[layer].size() == 1) {
