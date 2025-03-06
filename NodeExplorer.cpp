@@ -678,7 +678,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             GuroSolver solver{networkPtr, env};
             // auto cut = cutToCut(solver.solveSubProblemInstance(y_bar, 0));
             // find out the cut type and create Inavap::Cut.
-            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+            auto temp = solver.solveSubProblem(y_bar);
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
                 feasibilityCuts.insertCut(cut); // do not move cut.
@@ -770,7 +770,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             vector<int> intSolution; for (auto s: solution) intSolution.push_back(s);
             GuroSolver solver{networkPtr, env};
             auto y_bar = w2y(intSolution, networkPtr);
-            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+            auto temp = solver.solveSubProblem(y_bar);
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
                 feasibilityCuts.insertCut(cut);

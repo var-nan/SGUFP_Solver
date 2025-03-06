@@ -325,13 +325,14 @@ namespace Inavap {
 
         class Worker {
             const uint id;
+        public:
             vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
             vector<CutContainer *> feasCutsGlobal; // pointers to global feasibility cut containers.
             shared_ptr<Network> networkPtr;
 
             void shareCutsWithMaster(NodeExplorer& explorer, Inavap::DDSolver::Payload& payload);
 
-        public:
+        // public:
             explicit Worker(uint id_, const shared_ptr<Network>& networkPtr_): id{id_}, networkPtr{networkPtr_}{}
             void startWorker(DDSolver *solver);
             void printStats() const noexcept {
@@ -392,11 +393,11 @@ namespace Inavap {
             n = std::max(n, static_cast<size_t>(72));
             std::string asterisk(n,'-');
             cout << asterisk <<endl;
-            
+
             cout << "Processed: ";
             for (const auto& worker : workersGroup) {
                 processed.push_back(static_cast<double>(worker.nProcessed));
-                cout << worker.nProcessed << "\t";
+                cout << worker.nProcessed << "  ";
             }
             cout << endl;
             double mean = gsl_stats_mean(processed.data(), 1, processed.size());
@@ -409,6 +410,15 @@ namespace Inavap {
             cout << "Total: " << total << "\t Mean: " << mean << "\t Deviation: " << absdev
                         <<"\t Min: " << min_val <<"\t Max: " << max_val
                         << endl;
+            cout << asterisk << endl;
+
+            cout << endl;
+            // print cuts information.
+            for (const auto& worker : workersGroup) {
+                cout << "(" << worker.feasCutsGlobal.size() << ", " << worker.optCutsGlobal.size() << ")" << "  ";
+            }
+            cout << endl;
+
             cout << asterisk << endl;
         }
     };
