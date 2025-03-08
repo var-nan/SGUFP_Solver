@@ -383,7 +383,7 @@ namespace Inavap {
         }
 
 
-        void startSolver();
+        void startSolver(double optimal);
 
         void printWorkerStats() const noexcept {
             vector<double> processed;

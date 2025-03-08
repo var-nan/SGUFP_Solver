@@ -15,7 +15,7 @@ void test_single(const std::string& fileName) {
 	cout << "Testing " << fileName << endl;
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 
-	SolveOriginalProblem(*networkPtr);
+	double solution = solveStochasticModel(networkPtr.get());
 
 	using std::chrono::high_resolution_clock;
 	using std::chrono::duration_cast;
@@ -29,7 +29,7 @@ void test_single(const std::string& fileName) {
 		cout << endl << "Starting solver with " << i <<" threads at" << std::ctime(&t_c);
 		auto t1 = high_resolution_clock::now();
 		Inavap::DDSolver solver{networkPtr, i};
-		solver.startSolver();
+		solver.startSolver(solution);
 		auto t2 = high_resolution_clock::now();
 		auto ms_int = duration_cast<seconds>(t2-t1);
 		duration<double> ms_double = t2-t1;
@@ -40,10 +40,11 @@ void test_single(const std::string& fileName) {
 
 int main() {
 
-	// std::vector<std::string> files = {
-	//
-	// };
-	//
+
+	// vector<string> files = {};
+	// for (const auto file : files) {
+	// 	test_single(file);
+	// }
 	// return 0;
 	cout << "C++ version: " << __cplusplus << endl;
 	string fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_93_20_2.txt";
@@ -101,7 +102,7 @@ int main() {
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
 	Inavap::DDSolver solver{networkPtr, 3};
-	solver.startSolver();
+	solver.startSolver(optimal);
 	auto t2 = high_resolution_clock::now();
 	auto ms_int = duration_cast<seconds>(t2-t1);
 	duration<double> ms_double = t2-t1;

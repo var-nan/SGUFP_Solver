@@ -573,7 +573,6 @@ size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::
 }
 
 void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
-	cout << "Starting Master thread" << endl;
 
 	NodeExplorer explorer{networkPtr};
 	size_t nProcessed = 0;
@@ -892,9 +891,11 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 	return temp;
 }
 
-void Inavap::DDSolver::startSolver() {
+void Inavap::DDSolver::startSolver(double known_optimal) {
 
-	cout << "Starting DD Solver." << endl;
+	optimal.store(known_optimal, memory_order::relaxed);
+
+	cout << "Starting solver, Optimal: " << known_optimal  << endl;
 
 	// create initial restricted tree and get cutset with desired max width.
 
