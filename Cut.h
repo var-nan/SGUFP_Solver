@@ -378,8 +378,8 @@ namespace Inavap {
 		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
 		void clearContainer() noexcept { cuts.clear();}
 
-		auto begin() noexcept {return cuts.begin();}
-		auto end() noexcept {return cuts.end();}
+		auto begin() noexcept {return cuts.rbegin();}
+		auto end() noexcept {return cuts.rend();}
 
 		[[nodiscard]] CutContainer seek(size_t pos) {
 			size_t n = cuts.size() - pos;
