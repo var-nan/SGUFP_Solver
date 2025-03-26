@@ -602,7 +602,7 @@ void printBothCuts(const ::Cut& oldCut, const Inavap::Cut& newCut) {
     else newCut.printCut(0);
 }
 
-Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
+Inavap::OutObject Inavap::NodeExplorer::processX3(Node node, double optimalLB,
         const vector<CutContainer *>& globalFCuts, const vector<CutContainer *>& globalOCuts) {
 
     // copied from Node Explorer 5.
@@ -910,4 +910,116 @@ Inavap::OutObject Inavap::NodeExplorer::process2(Node node, double optimalLB) {
             }
         }
     }
+}
+
+Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
+    const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts) {
+
+    cout << "layer: " << node.globalLayer << " ,ub: " << node.ub  << " ,cur opt: " << optimalLB << "    " << endl;
+
+    double lowerBound = DOUBLE_MIN;
+    double upperBound = node.ub;
+
+    RelaxedDDNew relaxedDD{networkPtr.get()};
+    relaxedDD.buildTree(node);
+
+    if (relaxedDD.isTreeExact()) {
+        // cout << "Exact tree is built" << endl;
+
+        /* apply local feasibility cuts, global feasibility cuts, local optimality cuts,
+         * and global optimality cuts. The cuts are iterated in reverse order of the
+         * container.
+         */
+
+        for (const auto& cut : feasibilityCuts) {
+            if (!relaxedDD.applyFeasibilityCut(cut)) {
+                // cout << "pr.b.feas" <<endl;
+                return PRUNED_BY_FEASIBILITY_CUT;
+            }
+
+        }
+
+        for (const auto& contPtr : globalFCuts) {
+            for (const auto& cut : *contPtr) {
+                if (!relaxedDD.applyFeasibilityCut(cut))
+                    return PRUNED_BY_FEASIBILITY_CUT;
+            }
+        }
+
+        for (const auto& cut: optimalityCuts) {
+            upperBound = relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound);
+            if (upperBound <= optimalLB)
+                return PRUNED_BY_OPTIMALITY_CUT;
+        }
+
+        for (const auto& contPtr : globalOCuts) {
+            for (const auto& cut : *contPtr) {
+                upperBound = relaxedDD.applyOptimalityCut(cut,optimalLB, upperBound);
+                if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
+            }
+        }
+
+        /* solve sub-problem and refine tree */
+
+        vector<Path> allSolutions;
+        // cout << "Doing actual branch and bound " << endl;
+
+        while (true) {
+            auto path = relaxedDD.getSolution();
+            if (std::find(allSolutions.begin(), allSolutions.end(), path) != allSolutions.end()) {
+
+                return {lowerBound, upperBound, {}, OutObj::STATUS_OP::SUCCESS};
+            }
+
+            allSolutions.push_back(path);
+
+            GuroSolver solver{networkPtr, env};
+            auto [cutType, cut] = solver.solveSubProblem(path);
+            cout <<"Cut generated" << endl;
+            if (cutType == FEASIBILITY) {
+                feasibilityCuts.insertCut(cut);
+                if (!relaxedDD.applyFeasibilityCut(cut))
+                    return PRUNED_BY_FEASIBILITY_CUT;
+            }
+            else {
+                optimalityCuts.insertCut(cut);
+                upperBound = relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound);
+                if (upperBound <= optimalLB)
+                    return PRUNED_BY_OPTIMALITY_CUT;
+            }
+        }
+    }
+
+    // non-exact tree.
+
+    /* apply local feasibility, global feasibility cuts, local optimality cuts,
+     * and global optimality cuts. The cuts are applied in reverse order of the
+     * container
+     */
+
+    for (const auto& cut: feasibilityCuts) {
+        if (!relaxedDD.applyFeasibilityCut(cut))
+            return PRUNED_BY_FEASIBILITY_CUT;
+    }
+
+    for (const auto& containerPtr : globalFCuts) {
+        for (const auto& cut : *containerPtr) {
+            if (!relaxedDD.applyFeasibilityCut(cut))
+                return PRUNED_BY_FEASIBILITY_CUT;
+        }
+    }
+
+    for (const auto& cut: optimalityCuts) {
+        upperBound = min(relaxedDD.applyOptimalityCut(cut,optimalLB, upperBound), upperBound);
+        if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
+    }
+
+    for (const auto& contPtr : globalOCuts) {
+        for (const auto& cut : *contPtr) {
+            upperBound = min(relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound), upperBound);
+            if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
+        }
+    }
+
+    return {lowerBound, upperBound, relaxedDD.getCutset(upperBound), OutObj::STATUS_OP::SUCCESS};
 }
