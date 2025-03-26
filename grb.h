@@ -49,6 +49,8 @@ public:
 
 	Cut solveSubProblem(const vector<vector<vector<shi>>> &y_bar);
 
+	std::pair<CutType, Inavap::Cut> solveSubProblem(const vector<int16_t>& path);
+
 	Cut solveSubProblemInstance(const vector<vector<vector<shi>>> &y_bar, int scenario);
 
 	void addConstraints(const Network& network, int scenario);

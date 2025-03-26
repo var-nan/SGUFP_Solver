@@ -184,6 +184,30 @@ void GuroSolver::setObjectiveFunction(const Network &network, const vector<vecto
 	// model.update();
 }
 
+std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t> &path) {
+	// call w2y code
+	vector<shi> y_1 (networkPtr->n,0);
+	vector<vector<shi>> y_2(networkPtr->n, y_1);
+	vector<vector<vector<shi>>> y_bar(networkPtr->n, y_2);
+
+	for (uint a = 0; a < path.size(); a++){
+		if (path[a] != -1){
+			auto arcId = networkPtr->processingOrder[a].second;
+			auto q = networkPtr->networkArcs[arcId].headId;
+			auto i = networkPtr->networkArcs[arcId].tailId;
+			auto j = networkPtr->networkArcs[path[a]].headId;
+			y_bar[i][q][j] = 1;
+		}
+	}
+
+	auto cut = solveSubProblem(y_bar);
+	if (cut.cutType == FEASIBILITY) {
+		return {FEASIBILITY, Inavap::cutToCut(cut, networkPtr.get())};
+	}
+	return {OPTIMALITY, Inavap::cutToCut(cut, networkPtr.get())};
+}
+
+
 Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
 	// scenario based model.
 
