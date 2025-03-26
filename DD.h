@@ -727,4 +727,81 @@ namespace Inavap {
 		}
 
 	};
+
+#define RELAXED_MAX_WIDTH 120
+
+	class RelaxedDDNew {
+
+		enum DDStatus {
+			FEASIBLE = 0x03,
+			INFEASIBLE = 0x2,
+			EXACT = 0x00,
+			NON_EXACT = 0x01,
+		};
+
+		class LDDNode {
+		public:
+			uint id;
+			uint16_t nodeLayer;
+			uint16_t globalLayer;
+			vector<uint> outgoingArcs;
+			vector<uint> incomingArcs;
+			vector<int16_t> states;
+			double state2;
+
+			LDDNode() : id{0}, nodeLayer{0}, globalLayer{0}, state2{DOUBLE_MIN}{}
+			explicit LDDNode(uint id_): id{id_}, nodeLayer{0}, globalLayer{0}, state2{DOUBLE_MIN}{}
+			explicit LDDNode(Node_t node_): id{0}, nodeLayer{0},
+						globalLayer{static_cast<uint16_t>(node_.globalLayer)}, state2{DOUBLE_MIN} {
+				for (auto s : node_.states)
+					states.emplace_back(static_cast<int16_t>(s));
+			}
+			explicit LDDNode(Node node): id {0}, nodeLayer{0}, globalLayer{node.globalLayer},
+					states{std::move(node.states)}, state2 {DOUBLE_MIN}{}
+
+		};
+
+	public:
+		const Network *networkPtr;
+		unordered_map<uint, LDDNode> nodes;
+		unordered_map<uint, DDArc> arcs;
+
+		vector<vector<uint>> tree;
+		uint16_t startTree = 0;
+		vector<int16_t> rootSolution; // use pointers later.
+		uint lastInserted = 0;
+		uint terminalId = 0;
+		vector<uint> deletedNodeIds;
+
+		uint status = DDStatus::EXACT;
+
+		void buildNextLayer(uint current, uint &nextLayerSize, uint8_t stateChangesNext);
+		// void updateStates(uint current, const vector<int16_t>& newStates);
+
+		void batchRemoveNodes(const vui& nodeIds);
+		void batchRemoveArcs(const vui& arcIds);
+		void removeNode(uint nodeId, bool isBatch = true);
+		void deleteArc(LDDNode &parent, DDArc &arc, LDDNode &child);
+		void deleteNode(LDDNode &node);
+		void bottomUpDelete(uint nodeId);
+
+		void updateTree();
+
+		Path getPathForNode(uint id) const;
+
+	public:
+		explicit RelaxedDDNew(const Network *pointer) : networkPtr{pointer}{}
+
+		void buildTree(Node root);
+
+		Path getSolution() const;
+
+		bool isTreeExact() const noexcept {return status == EXACT;}
+
+		uint8_t applyFeasibilityCut(const Inavap::Cut& cut);
+		double applyOptimalityCut(const Inavap::Cut& cut, double optimal, double upperbound);
+
+		vector<Node> getCutset(double ub) const;
+
+	};
 }
