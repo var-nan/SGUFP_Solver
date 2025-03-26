@@ -305,7 +305,7 @@ namespace Inavap {
 
             struct comparator {
                 bool operator() (const Node &node1, const Node &node2) const {
-                    return node1.globalLayer > node2.globalLayer;
+                    return node1.globalLayer < node2.globalLayer; // DEPTH_FIRST_SEARCH
                 }
             };
 
@@ -344,6 +344,8 @@ namespace Inavap {
             size_t nProcessed = 0; // number of nodes processed successfully.
             size_t nReceived = 0; // number of nodes received from the master.
             size_t nFalseProcessed = 0; // node is infeasible.
+            size_t nFeasibilityPruned = 0;
+            size_t nOptimalityPruned = 0;
         };
 
         class Master {
@@ -419,6 +421,11 @@ namespace Inavap {
             }
             cout << endl;
 
+            cout << asterisk << endl;
+
+            for (const auto&  worker: workersGroup) {
+                cout << "[" << worker.nFeasibilityPruned << " , " << worker.nOptimalityPruned << "]" << endl;
+            }
             cout << asterisk << endl;
         }
     };

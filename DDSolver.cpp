@@ -749,7 +749,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		if (localQueue.empty()) {
 			// indicate master for nodes. wait until master responds.
 			auto nodes = payload.getNodes(done);
-			if (done) { break;} // solver is finished. isFinished flag has been set?
+			if (done) { cout << "nf: " << explorer.feasibilityCuts.size() << " " << " nO: " << explorer.optimalityCuts.size() << endl; break;} // solver is finished. isFinished flag has been set?
 			localQueue.pushNodes(nodes);
 		}
 
@@ -767,10 +767,11 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			Node node = localQueue.popNode();
 			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
 			// auto result = explorer.process2(localQueue.popNode(), zOpt);
-			nProcessed++;
+			nProcessed += (result.status == OutObject::STATUS_OP::SUCCESS);
 			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
-
-			if (result.status) {
+			nFeasibilityPruned += (result.status == OutObject::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT);
+			nOptimalityPruned += (result.status == OutObject::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT);
+			if (result.status == OutObject::STATUS_OP::SUCCESS) {
 				//
 				if (result.lb > zOpt) {
 					/* short-circuit operation. If the store is successful, exit the loop, else keep trying until
@@ -899,13 +900,15 @@ void Inavap::DDSolver::startSolver(double known_optimal) {
 
 	// create initial restricted tree and get cutset with desired max width.
 
-	RestrictedDDNew restrictedDD{networkPtr, 128};
+	// RestrictedDDNew restrictedDD{networkPtr, 128};
+	RelaxedDDNew relaxedDD{networkPtr.get()};
 	Node root;
-	auto cutset = restrictedDD.buildTree(root);
+	relaxedDD.buildTree(root);
+	auto cutset = relaxedDD.getCutset(DOUBLE_MAX);
 
-	if (cutset) cout << "Number of nodes from teh first tree: " << cutset.value().size() << endl;
+	if (!cutset.empty()) cout << "Number of nodes from teh first tree: " << cutset.size() << endl;
 
-	vector<Node> cutsetNodes = cutset.value();
+	vector<Node> cutsetNodes = cutset;
 	// assume nodes is a vector of nodes.
 	// divide the nodes to all workers.
 	uint current = 0;
