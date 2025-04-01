@@ -129,6 +129,7 @@ public:
 	vector<int> solutionVector;
 	int objVal = INT32_MAX;
 
+
 	DDNode():id{0}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{} {};
 	explicit DDNode(ulint a): id{a}, incomingArcs{}, outgoingArcs{}, states{}, state2{0}, solutionVector{}{}
 	DDNode(ulint id, uint layer, vi states_, vi solutionVector_): id{0}, incomingArcs{}, outgoingArcs{}, globalLayer{layer},
@@ -202,7 +203,7 @@ private:
 	void buildNextLayer7(vector<ulint>& currentLayer, vector<ulint>& nextLayer);
 
 public:
-
+	int lastLayerInitialLength;
 	bool RelaxedisExact = 1;
 
 	unordered_map<ulint,DDNode> nodes;

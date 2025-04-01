@@ -16,22 +16,22 @@
 
 
 
-void DD::RelaxedBuild(DDNode &node) {
-	const auto& arcOrder = networkPtr->processingOrder;
-	const auto& stateUpdateMap = networkPtr->stateUpdateMap;
-	vector<ulint> currentLayer = {};
-	startTree = node.globalLayer;
-	node.incomingArcs.clear();
-	node.outgoingArcs.clear();
-	node.id = 0;
-	node.nodeLayer = 0;
-	nodes.insert(std::make_pair(node.id, node));
-	currentLayer.push_back(node.id);
-	tree.push_back(currentLayer);
-	for (auto layer = startTree; layer != node.globalLayer; layer++ ) {
-
-	}
-}
+// void DD::RelaxedBuild(DDNode &node) {
+// 	const auto& arcOrder = networkPtr->processingOrder;
+// 	const auto& stateUpdateMap = networkPtr->stateUpdateMap;
+// 	vector<ulint> currentLayer = {};
+// 	startTree = node.globalLayer;
+// 	node.incomingArcs.clear();
+// 	node.outgoingArcs.clear();
+// 	node.id = 0;
+// 	node.nodeLayer = 0;
+// 	nodes.insert(std::make_pair(node.id, node));
+// 	currentLayer.push_back(node.id);
+// 	tree.push_back(currentLayer);
+// 	for (auto layer = startTree; layer != node.globalLayer; layer++ ) {
+//
+// 	}
+// }
 
 
 
@@ -145,47 +145,47 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 	bool isExact = true;
 
 	if (type == RESTRICTED) {
-
-		#if RESTRICTED_STRATEGY == 1
-		{
-			if (currentLayer.size() >= MAX_WIDTH) { // new strategy after tree becomes non-exact.
-				buildNextLayer6(currentLayer, nextLayer);
-				return false;
-			}
-			uint count = 0;
-			for (const auto id: currentLayer) {
-				DDNode &parentNode = nodes[id];
-				const auto parentStates = parentNode.states;
-				// INFO; states should contain -1.
-				for (auto start = parentNode.states.rbegin(); start != parentNode.states.rend(); ++start){
-					auto decision = *start; // iterate reverse order.
-					// if(stateChangesNext && parentNode.states.size()>1 && decision==-1 ) {
-					// 	continue;
-					// }
-					if (count >= MAX_WIDTH) {isExact = false; break; } // jump with goto, instead of this.
-					// if (count >= 5 * nodes[currentLayer[0]].globalLayer + 10) {isExact = false; break; } // jump with goto, instead of this.
-					auto lastInserted = number.getNext();
-					DDNode node{lastInserted};
-					DDArc arc{lastInserted, parentNode.id, node.id, decision};
-					node.states = parentStates;
-					if (decision != -1) node.states.erase(decision);
-					node.incomingArcs.emplace_back(arc.id);
-					node.nodeLayer = parentNode.nodeLayer+1;
-					node.globalLayer = parentNode.globalLayer+1;
-					parentNode.outgoingArcs.push_back(arc.id);
-					// insert node and arc to map
-					nodes.insert(std::make_pair(node.id, node));
-					arcs.insert(std::make_pair(arc.id, arc));
-					count++;
-
-					nextLayer.emplace_back(node.id);
-				}
-			}
-		}
-
-		#elif RESTRICTED_STRATEGY == 2
-
-		#endif
+		cout << "Zart" << endl;
+		// #if RESTRICTED_STRATEGY == 1
+		// {
+		// 	if (currentLayer.size() >= MAX_WIDTH) { // new strategy after tree becomes non-exact.
+		// 		buildNextLayer6(currentLayer, nextLayer);
+		// 		return false;
+		// 	}
+		// 	uint count = 0;
+		// 	for (const auto id: currentLayer) {
+		// 		DDNode &parentNode = nodes[id];
+		// 		const auto parentStates = parentNode.states;
+		// 		// INFO; states should contain -1.
+		// 		for (auto start = parentNode.states.rbegin(); start != parentNode.states.rend(); ++start){
+		// 			auto decision = *start; // iterate reverse order.
+		// 			// if(stateChangesNext && parentNode.states.size()>1 && decision==-1 ) {
+		// 			// 	continue;
+		// 			// }
+		// 			if (count >= MAX_WIDTH) {isExact = false; break; } // jump with goto, instead of this.
+		// 			// if (count >= 5 * nodes[currentLayer[0]].globalLayer + 10) {isExact = false; break; } // jump with goto, instead of this.
+		// 			auto lastInserted = number.getNext();
+		// 			DDNode node{lastInserted};
+		// 			DDArc arc{lastInserted, parentNode.id, node.id, decision};
+		// 			node.states = parentStates;
+		// 			if (decision != -1) node.states.erase(decision);
+		// 			node.incomingArcs.emplace_back(arc.id);
+		// 			node.nodeLayer = parentNode.nodeLayer+1;
+		// 			node.globalLayer = parentNode.globalLayer+1;
+		// 			parentNode.outgoingArcs.push_back(arc.id);
+		// 			// insert node and arc to map
+		// 			nodes.insert(std::make_pair(node.id, node));
+		// 			arcs.insert(std::make_pair(arc.id, arc));
+		// 			count++;
+		//
+		// 			nextLayer.emplace_back(node.id);
+		// 		}
+		// 	}
+		// }
+		//
+		// #elif RESTRICTED_STRATEGY == 2
+		//
+		// #endif
 
 	}
 	else if(type == RELAXED){
@@ -601,7 +601,7 @@ bool DD::buildNextLayer(vector<ulint> &currentLayer, vector<ulint> &nextLayer, b
 		#elif EXACT_STRATEGY == 5
 		{
 			// if (currentLayer.size() > (startTree*50) + 50 ){//&& nodes[currentLayer[0]].globalLayer < 40) {
-			if (currentLayer.size() > 100  && nodes[currentLayer[0]].globalLayer < networkPtr->totalLayers - 5 ){//&& nodes[currentLayer[0]].globalLayer < 40) {
+			if (currentLayer.size() > 120  && nodes[currentLayer[0]].globalLayer < networkPtr->totalLayers - 5 ){//&& nodes[currentLayer[0]].globalLayer < 40) {
 				isExact = false;
 				RelaxedisExact = 0;
 				vector<DDNode> nodesVector={};
@@ -699,197 +699,197 @@ ulint DD::createChild(DDNode& parent, int decision) {
  * @param currentLayer
  * @param nextLayer
  */
-void DD::buildNextLayer2(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
-	uint count = 0;
-
-	for (const auto id: currentLayer) {
-		auto& node = nodes[id];
-		if (node.states.size() > 1) {
-			for (auto decision: node.states) {
-				if (decision == -1) continue;
-				auto childId = createChild(node, decision);
-				nextLayer.push_back(childId);
-				if (count++ >= MAX_WIDTH) return;
-			}
-		}
-		else {
-			auto childId = createChild(node, -1);
-			nextLayer.push_back(childId);
-			if (count++ >= MAX_WIDTH) return;
-		}
-	}
-}
-
-
-void DD::buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer) {
-	uint count = 0;
-
-	// for each node, create only one child
-	for (const auto id: currentLayer) {
-		auto& node = nodes[id];
-		if (node.states.size() > 1) {
-			for (auto state: node.states) {
-				if (state == -1) continue;
-				// create child
-				auto childId = createChild(node, state);
-				nextLayer.push_back(childId);
-				break;
-			}
-		}
-		else {
-			auto childId = createChild(node, -1);
-			nextLayer.push_back(childId);
-		}
-		count++;
-		if (count >= MAX_WIDTH) return;
-	}
-}
-
-void DD::buildNextLayer4(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
-	// select arc with maximum reward. for each parent create single child
-
-	for (const auto id: currentLayer) {
-		auto& node = nodes[id];
-		int decision = -1;
-		if (node.states.size() > 1) // select arc with maximum reward.
-			decision = networkPtr->getBestArc(node.states);
-		auto childId = createChild(node, decision);
-		nextLayer.push_back(childId);
-	}
-}
-
-void DD::buildNextLayer5(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
-	// match out arc that has max reward to the current incoming arc.
-
-	for (const auto id: currentLayer) {
-		auto& node = nodes[id];
-		// get layer number
-		auto inArcReward = networkPtr->layerRewards[node.globalLayer];
-		// get best arc
-		auto bestState = networkPtr->getBestArc(node.states);
-		int decision = -1;
-		if (bestState != -1 && networkPtr->networkArcs[bestState].rewards[0] + inArcReward >= 0) {
-			// match this out arc with in arc.
-			decision = bestState;
-		}
-		auto childId = createChild(node, decision);
-		nextLayer.push_back(childId);
-	}
-}
-
-void DD::buildNextLayer6(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
-	// if current layer is trouble maker, then handle troublemaker node.
-	const auto& layerNumber = nodes[currentLayer.front()].globalLayer;
-	// bool res = (networkPtr->troubleMaker[layerNumber] == 1);
-	// if (networkPtr->troubleMaker[layerNumber] == 1) {
-	if (networkPtr->hasStateChanged[layerNumber+1]){ // state changes in next layer, thus remove -1 arcs from this layer.
-		// for all the nodes, remove paths that contains all -1's for this node.
-		// for all the nodes, remove paths that contains all -1's for this node.
-		for (const auto id: currentLayer) {
-			auto& node = nodes[id];
-			int decision = -1;
-			// int random_index = std::rand() % node.states.size();
-			// auto it = node.states.begin();
-			// std::advance(it, random_index);
-			// decision = *it;
-			for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
-				auto state = *start;
-				if (state > decision) decision = state;
-			}
-			// if (decision == -1 && node.states.size() > 1){
-			// 	for (auto state: node.states) {
-			// 		if (state > decision) decision = state;
-			// 	}
-			// }
-			auto childId = createChild(node, decision);
-			nextLayer.push_back(childId);
-		}
-
-		// for (const auto id: currentLayer) {
-		// 	auto& node = nodes[id];
-		// 	int decision = -1;
-		// 	std::srand(std::time(0));  // Use current time to seed the random number generator
-		// 	int random_index = std::rand() % node.states.size();
-		// 	auto it = node.states.begin();
-		// 	std::advance(it, random_index);
-		// 	decision = *it;
-		//
-		// 	// while(decision == -1 && node.states.size() >1) {
-		// 	// 	int random_index = std::rand() % node.states.size();
-		// 	// 	auto it = node.states.begin();
-		// 	// 	std::advance(it, random_index);
-		// 	//
-		// 	// 	decision = *it;
-		// 	//
-		// 	// 	for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
-		// 	// 		auto state = *start;
-		// 	// 		if (state > decision) decision = state;
-		// 	// 	}
-		// 	// }
-		//
-		// 	// if (decision == -1 && std::rand() % 2 ==1) {
-		// 	// 	for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
-		// 	// 		auto state = *start;
-		// 	// 		if (state > decision) decision = state;
-		// 	// 	}
-		// 	// }
-		// 	///
-		// 	///
-		// 	// for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
-		// 	// 	auto state = *start;
-		// 	// 	if (state > decision) decision = state;
-		// 	// }
-		// 	// for (auto state: node.states){ if (state > decision) decision = state;}
-		// 	auto childId = createChild(node, decision);
-		// 	nextLayer.push_back(childId);
-		// }
-		return;
-	}
-	// select one state from states at random
-	srand(time(nullptr));
-	for (const auto id: currentLayer) {
-		auto& node = nodes[id];
-		vi states{node.states.begin(), node.states.end()};
-		// auto s = rand()%states.size();
-		auto it = node.states.begin();
-		int random_index = std::rand() % node.states.size();
-		std::advance(it, random_index);
-		auto decision = *it;
-		auto childId = createChild(node, decision);
-		nextLayer.push_back(childId);
-	}
-}
-
-void DD::buildNextLayer7(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
-	// if current layer is trouble maker, then handle troublemaker node.
-	const auto& layerNumber = nodes[currentLayer.front()].globalLayer;
-	// bool res = (networkPtr->troubleMaker[layerNumber] == 1);
-	// if (networkPtr->troubleMaker[layerNumber] == 1) {
-	if (networkPtr->hasStateChanged[layerNumber+1]){ // state changes in next layer, thus remove -1 arcs from this layer.
-		// for all the nodes, remove paths that contains all -1's for this node.
-		int ct = 0;
-		while (nextLayer.size() < MAX_WIDTH) {
-			auto& node = nodes[ct];
-			ct+=1;
-			for (const auto decision : nodes[ct].states) {
-				auto childId = createChild(node, decision);
-				nextLayer.push_back(childId);
-			}
-		}
-		return;
-	}
-	// select one state from states at random
-	int ct = 0;
-	while (nextLayer.size() < MAX_WIDTH) {
-		auto& node = nodes[ct];
-		ct+=1;
-		for (const auto decision : nodes[ct].states) {
-			auto childId = createChild(node, decision);
-			nextLayer.push_back(childId);
-		}
-	}
-
-}
+// void DD::buildNextLayer2(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+// 	uint count = 0;
+//
+// 	for (const auto id: currentLayer) {
+// 		auto& node = nodes[id];
+// 		if (node.states.size() > 1) {
+// 			for (auto decision: node.states) {
+// 				if (decision == -1) continue;
+// 				auto childId = createChild(node, decision);
+// 				nextLayer.push_back(childId);
+// 				if (count++ >= MAX_WIDTH) return;
+// 			}
+// 		}
+// 		else {
+// 			auto childId = createChild(node, -1);
+// 			nextLayer.push_back(childId);
+// 			if (count++ >= MAX_WIDTH) return;
+// 		}
+// 	}
+// }
+//
+//
+// void DD::buildNextLayer3(vector<ulint>& currentLayer, vector<ulint>& nextLayer) {
+// 	uint count = 0;
+//
+// 	// for each node, create only one child
+// 	for (const auto id: currentLayer) {
+// 		auto& node = nodes[id];
+// 		if (node.states.size() > 1) {
+// 			for (auto state: node.states) {
+// 				if (state == -1) continue;
+// 				// create child
+// 				auto childId = createChild(node, state);
+// 				nextLayer.push_back(childId);
+// 				break;
+// 			}
+// 		}
+// 		else {
+// 			auto childId = createChild(node, -1);
+// 			nextLayer.push_back(childId);
+// 		}
+// 		count++;
+// 		if (count >= MAX_WIDTH) return;
+// 	}
+// }
+//
+// void DD::buildNextLayer4(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+// 	// select arc with maximum reward. for each parent create single child
+//
+// 	for (const auto id: currentLayer) {
+// 		auto& node = nodes[id];
+// 		int decision = -1;
+// 		if (node.states.size() > 1) // select arc with maximum reward.
+// 			decision = networkPtr->getBestArc(node.states);
+// 		auto childId = createChild(node, decision);
+// 		nextLayer.push_back(childId);
+// 	}
+// }
+//
+// void DD::buildNextLayer5(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+// 	// match out arc that has max reward to the current incoming arc.
+//
+// 	for (const auto id: currentLayer) {
+// 		auto& node = nodes[id];
+// 		// get layer number
+// 		auto inArcReward = networkPtr->layerRewards[node.globalLayer];
+// 		// get best arc
+// 		auto bestState = networkPtr->getBestArc(node.states);
+// 		int decision = -1;
+// 		if (bestState != -1 && networkPtr->networkArcs[bestState].rewards[0] + inArcReward >= 0) {
+// 			// match this out arc with in arc.
+// 			decision = bestState;
+// 		}
+// 		auto childId = createChild(node, decision);
+// 		nextLayer.push_back(childId);
+// 	}
+// }
+//
+// void DD::buildNextLayer6(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+// 	// if current layer is trouble maker, then handle troublemaker node.
+// 	const auto& layerNumber = nodes[currentLayer.front()].globalLayer;
+// 	// bool res = (networkPtr->troubleMaker[layerNumber] == 1);
+// 	// if (networkPtr->troubleMaker[layerNumber] == 1) {
+// 	if (networkPtr->hasStateChanged[layerNumber+1]){ // state changes in next layer, thus remove -1 arcs from this layer.
+// 		// for all the nodes, remove paths that contains all -1's for this node.
+// 		// for all the nodes, remove paths that contains all -1's for this node.
+// 		for (const auto id: currentLayer) {
+// 			auto& node = nodes[id];
+// 			int decision = -1;
+// 			// int random_index = std::rand() % node.states.size();
+// 			// auto it = node.states.begin();
+// 			// std::advance(it, random_index);
+// 			// decision = *it;
+// 			for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
+// 				auto state = *start;
+// 				if (state > decision) decision = state;
+// 			}
+// 			// if (decision == -1 && node.states.size() > 1){
+// 			// 	for (auto state: node.states) {
+// 			// 		if (state > decision) decision = state;
+// 			// 	}
+// 			// }
+// 			auto childId = createChild(node, decision);
+// 			nextLayer.push_back(childId);
+// 		}
+//
+// 		// for (const auto id: currentLayer) {
+// 		// 	auto& node = nodes[id];
+// 		// 	int decision = -1;
+// 		// 	std::srand(std::time(0));  // Use current time to seed the random number generator
+// 		// 	int random_index = std::rand() % node.states.size();
+// 		// 	auto it = node.states.begin();
+// 		// 	std::advance(it, random_index);
+// 		// 	decision = *it;
+// 		//
+// 		// 	// while(decision == -1 && node.states.size() >1) {
+// 		// 	// 	int random_index = std::rand() % node.states.size();
+// 		// 	// 	auto it = node.states.begin();
+// 		// 	// 	std::advance(it, random_index);
+// 		// 	//
+// 		// 	// 	decision = *it;
+// 		// 	//
+// 		// 	// 	for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
+// 		// 	// 		auto state = *start;
+// 		// 	// 		if (state > decision) decision = state;
+// 		// 	// 	}
+// 		// 	// }
+// 		//
+// 		// 	// if (decision == -1 && std::rand() % 2 ==1) {
+// 		// 	// 	for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
+// 		// 	// 		auto state = *start;
+// 		// 	// 		if (state > decision) decision = state;
+// 		// 	// 	}
+// 		// 	// }
+// 		// 	///
+// 		// 	///
+// 		// 	// for (auto start = node.states.rbegin(); start != node.states.rend(); ++start) {
+// 		// 	// 	auto state = *start;
+// 		// 	// 	if (state > decision) decision = state;
+// 		// 	// }
+// 		// 	// for (auto state: node.states){ if (state > decision) decision = state;}
+// 		// 	auto childId = createChild(node, decision);
+// 		// 	nextLayer.push_back(childId);
+// 		// }
+// 		return;
+// 	}
+// 	// select one state from states at random
+// 	srand(time(nullptr));
+// 	for (const auto id: currentLayer) {
+// 		auto& node = nodes[id];
+// 		vi states{node.states.begin(), node.states.end()};
+// 		// auto s = rand()%states.size();
+// 		auto it = node.states.begin();
+// 		int random_index = std::rand() % node.states.size();
+// 		std::advance(it, random_index);
+// 		auto decision = *it;
+// 		auto childId = createChild(node, decision);
+// 		nextLayer.push_back(childId);
+// 	}
+// }
+//
+// void DD::buildNextLayer7(vector<ulint> &currentLayer, vector<ulint> &nextLayer) {
+// 	// if current layer is trouble maker, then handle troublemaker node.
+// 	const auto& layerNumber = nodes[currentLayer.front()].globalLayer;
+// 	// bool res = (networkPtr->troubleMaker[layerNumber] == 1);
+// 	// if (networkPtr->troubleMaker[layerNumber] == 1) {
+// 	if (networkPtr->hasStateChanged[layerNumber+1]){ // state changes in next layer, thus remove -1 arcs from this layer.
+// 		// for all the nodes, remove paths that contains all -1's for this node.
+// 		int ct = 0;
+// 		while (nextLayer.size() < MAX_WIDTH) {
+// 			auto& node = nodes[ct];
+// 			ct+=1;
+// 			for (const auto decision : nodes[ct].states) {
+// 				auto childId = createChild(node, decision);
+// 				nextLayer.push_back(childId);
+// 			}
+// 		}
+// 		return;
+// 	}
+// 	// select one state from states at random
+// 	int ct = 0;
+// 	while (nextLayer.size() < MAX_WIDTH) {
+// 		auto& node = nodes[ct];
+// 		ct+=1;
+// 		for (const auto decision : nodes[ct].states) {
+// 			auto childId = createChild(node, decision);
+// 			nextLayer.push_back(childId);
+// 		}
+// 	}
+//
+// }
 
 /**
  * Merges the second DDNode into the first DDNode.
@@ -1168,17 +1168,30 @@ vector<vi> DD::solution2() {
  * @return - vector of solutions from root to the given node.
  */
 vi DD::computePathForExactNode(ulint nodeId) const{
+	// DDNode node = nodes.at(nodeId);
+	// vi solutionVector;
+	// // iterate through all nodes from current node till root.
+	// while (!node.incomingArcs.empty()) {
+	// 	const auto& inArc = arcs.at(node.incomingArcs[0]);
+	// 	solutionVector.push_back(inArc.decision);
+	// 	node = nodes.at(inArc.tail);
+	// }
+	// // add root's solution.
+	// vi result(node.solutionVector);
+	// result.insert(result.end(), solutionVector.rbegin(), solutionVector.rend());
+	// return result;
 	DDNode node = nodes.at(nodeId);
-	vi solutionVector;
-	// iterate through all nodes from current node till root.
-	while (!node.incomingArcs.empty()) {
-		const auto& inArc = arcs.at(node.incomingArcs[0]);
-		solutionVector.push_back(inArc.decision);
-		node = nodes.at(inArc.tail);
+	vi result = nodes.at(0).solutionVector;
+	vi partial_sol = {};
+	while (node.id != 0 ) {
+		auto inarc = arcs.at(node.incomingArcs[0]);
+		partial_sol.push_back(inarc.decision);
+		node = nodes.at(inarc.tail);
 	}
-	// add root's solution.
-	vi result(node.solutionVector);
-	result.insert(result.end(), solutionVector.rbegin(), solutionVector.rend());
+	reverse(partial_sol.begin(), partial_sol.end());
+	for (const auto item: partial_sol) {
+		result.push_back(item);
+	}
 	return result;
 }
 
@@ -2077,79 +2090,82 @@ double DD::applyOptimalityCutHeuristic(const Cut &cut, double inputedOpt , doubl
 	}
 
 
-	if (!RelaxedisExact) {
-		for (size_t layer = 3; layer < tree.size() - 3; layer++) {
-			if (tree[layer].size() == 1) {
-				auto& mergeNode = nodes[tree[layer][0]];
-				for (auto nodeId : tree[layer-1]) {
-					auto& node = nodes[nodeId];
-					for (auto outArcId : node.outgoingArcs) {
-						auto& outArc = arcs[outArcId];
-						const auto& parentNode = nodes[outArc.tail];
-						for (auto nodeID2 : tree[tree.size()-2]) {
-							if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - mergeNode.state2 <= inputedOpt - 0.001 ) {
-								arcTracker[outArcId].insert(nodeID2);
-							}
-						}
-					}
-				}
-			}
-		}
-
-		vector<ulint> arcsToBeRemoved ={};
-		for (auto item : arcTracker) {
-			if (item.second.size() == lastLayerInitialLength) {
-				arcsToBeRemoved.push_back(item.first);
-			}
-		}
-
-		if (arcsToBeRemoved.size() > 0) {
-			cout << "oATBR: " << arcsToBeRemoved.size() << " ";
-			for( auto item : arcsToBeRemoved ) {
-				deleteArcById(item);
-				arcTracker.erase(item);
-			}
-		}
-	}
-
-
-
-
-
 	// if (!RelaxedisExact) {
-	// 	double maxLastLayerState = std::numeric_limits<double>::lowest();
-	//
-	// 	for (auto nodeId : tree[tree.size()-2]) {
-	// 		if (nodes[nodeId].state2 > maxLastLayerState) {
-	// 			maxLastLayerState = nodes[nodeId].state2;
-	// 		}
-	// 	}
-	//
-	// 	vector<ulint> arcsToBeRemoved ={};
 	// 	for (size_t layer = 3; layer < tree.size() - 3; layer++) {
 	// 		if (tree[layer].size() == 1) {
-	// 			double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
+	// 			auto& mergeNode = nodes[tree[layer][0]];
 	// 			for (auto nodeId : tree[layer-1]) {
 	// 				auto& node = nodes[nodeId];
 	// 				for (auto outArcId : node.outgoingArcs) {
 	// 					auto& outArc = arcs[outArcId];
 	// 					const auto& parentNode = nodes[outArc.tail];
-	// 					if(parentNode.state2 + outArc.weight + maxGainForward < inputedOpt+ 0.1) {
-	// 						arcsToBeRemoved.push_back(outArc.id);
+	// 					for (auto nodeID2 : tree[tree.size()-2]) {
+	// 						if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - mergeNode.state2 <= inputedOpt - 0.001 ) {
+	// 							arcTracker[outArcId].insert(nodeID2);
+	// 						}
 	// 					}
 	// 				}
 	// 			}
 	// 		}
 	// 	}
 	//
+	// 	vector<ulint> arcsToBeRemoved ={};
+	// 	for (auto item : arcTracker) {
+	// 		if (item.second.size() == lastLayerInitialLength) {
+	// 			arcsToBeRemoved.push_back(item.first);
+	// 		}
+	// 	}
 	//
 	// 	if (arcsToBeRemoved.size() > 0) {
 	// 		cout << "oATBR: " << arcsToBeRemoved.size() << " ";
 	// 		for( auto item : arcsToBeRemoved ) {
 	// 			deleteArcById(item);
+	// 			arcTracker.erase(item);
 	// 		}
 	// 	}
 	// }
+
+
+
+
+
+	if (!RelaxedisExact) {
+		double maxLastLayerState = std::numeric_limits<double>::lowest();
+
+		for (auto nodeId : tree[tree.size()-2]) {
+			if (nodes[nodeId].state2 > maxLastLayerState) {
+				maxLastLayerState = nodes[nodeId].state2;
+			}
+		}
+
+		vector<ulint> arcsToBeRemoved ={};
+		for (size_t layer = 3; layer < tree.size() - 3; layer++) {
+			if (tree[layer].size() == 1) {
+				if (nodes[tree[layer][0]].incomingArcs.size() == 0) {
+					return std::numeric_limits<double>::lowest();
+				}
+				double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
+				for (auto nodeId : tree[layer-1]) {
+					auto& node = nodes[nodeId];
+					for (auto outArcId : node.outgoingArcs) {
+						auto& outArc = arcs[outArcId];
+						const auto& parentNode = nodes[outArc.tail];
+						if(parentNode.state2 + outArc.weight + maxGainForward <= inputedOpt - 0.01 ) {
+							arcsToBeRemoved.push_back(outArc.id);
+						}
+					}
+				}
+			}
+		}
+
+
+		if (arcsToBeRemoved.size() > 0) {
+			cout << "oATBR: " << arcsToBeRemoved.size() << " ";
+			for( auto item : arcsToBeRemoved ) {
+				deleteArcById(item);
+			}
+		}
+	}
 
 
 	// for (size_t layer = 3; layer < tree.size() - 3; layer++) {
@@ -2211,7 +2227,7 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 			justifiedRHS += cut.cutCoeff.at(make_tuple(iNetId, qNetId, jNetId));
 		}
 	}
-	// cout <<"2-";
+
 	rootNode.state2 = justifiedRHS;
 
 	for (size_t layer = 1; layer < tree.size() -1; layer++) {
@@ -2236,89 +2252,92 @@ bool DD::applyFeasibilityCutHeuristic(const Cut &cut) {
 	for (auto nodeId : tree[tree.size()-2]) {
 		if (nodes[nodeId].state2 < -0.01) {
 			nodesToRemove.push_back(nodeId);
-			for (auto item : arcTracker) {
-				item.second.insert(nodeId);
-			}
+			// for (auto item : arcTracker) {
+			// 	item.second.insert(nodeId);
+			// }
 		}
 	}
 	if (nodesToRemove.size() == tree[tree.size()-2].size()) return false;
 	if (!nodesToRemove.empty()) {
-		for (auto item : arcTracker) {
-			for (auto nodeId : nodesToRemove) {
-				item.second.insert(nodeId);
-			}
-		}
+		// for (auto item : arcTracker) {
+		// 	for (auto nodeId : nodesToRemove) {
+		// 		item.second.insert(nodeId);
+		// 	}
+		// }
 		batchRemoveNodes(nodesToRemove);
 	}
 ///////////////////////////////////////////
 
-	if (!RelaxedisExact) {
-		for (size_t layer = 3; layer < tree.size() - 3; layer++) {
-			if (tree[layer].size() == 1) {
-				auto& mergeNode = nodes[tree[layer][0]];
-				for (auto nodeId1 : tree[layer-1]) {
-					auto& node = nodes[nodeId1];
-					for (auto outArcId : node.outgoingArcs) {
-						auto& outArc = arcs[outArcId];
-						const auto& parentNode = nodes[outArc.tail];
-						for (auto nodeID2 : tree[tree.size()-2]) {
-							if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - mergeNode.state2 < 0) {
-								arcTracker[outArc.id].insert(nodeID2);
-							}
-						}
-					}
-				}
-			}
-		}
-
-		vector<ulint> arcsToBeRemoved ={};
-		for (auto item : arcTracker) {
-			if (item.second.size() == lastLayerInitialLength) {
-				arcsToBeRemoved.push_back(item.first);
-			}
-		}
-		if (arcsToBeRemoved.size() > 0) {
-			cout << "fATBR: " << arcsToBeRemoved.size() << " ";
-			for( auto item : arcsToBeRemoved ) {
-				deleteArcById(item);
-				arcTracker.erase(item);
-			}
-		}
-	}
-
-
-
 	// if (!RelaxedisExact) {
-	// 	double maxLastLayerState = std::numeric_limits<double>::lowest();
-	// 	for (auto nodeId : tree[tree.size()-2]) {
-	// 		if (nodes[nodeId].state2 > maxLastLayerState) {
-	// 			maxLastLayerState = nodes[nodeId].state2;
-	// 		}
-	// 	}
-	// 	vector<ulint> arcsToBeRemoved ={};
-	// 	for (size_t layer = 1; layer < tree.size() - 2; layer++) {
+	// 	for (size_t layer = 3; layer < tree.size() - 3; layer++) {
 	// 		if (tree[layer].size() == 1) {
-	// 			double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
-	// 			for (auto nodeId : tree[layer-1]) {
-	// 				auto& node = nodes[nodeId];
+	// 			auto& mergeNode = nodes[tree[layer][0]];
+	// 			for (auto nodeId1 : tree[layer-1]) {
+	// 				auto& node = nodes[nodeId1];
 	// 				for (auto outArcId : node.outgoingArcs) {
 	// 					auto& outArc = arcs[outArcId];
 	// 					const auto& parentNode = nodes[outArc.tail];
-	// 					if(parentNode.state2 + outArc.weight + maxGainForward < -0.1) {
-	// 						arcsToBeRemoved.push_back(outArc.id);
+	// 					for (auto nodeID2 : tree[tree.size()-2]) {
+	// 						if(parentNode.state2 + outArc.weight + nodes[nodeID2].state2 - mergeNode.state2 < 0) {
+	// 							arcTracker[outArc.id].insert(nodeID2);
+	// 						}
 	// 					}
 	// 				}
 	// 			}
 	// 		}
 	// 	}
 	//
+	// 	vector<ulint> arcsToBeRemoved ={};
+	// 	for (auto item : arcTracker) {
+	// 		if (item.second.size() == lastLayerInitialLength) {
+	// 			arcsToBeRemoved.push_back(item.first);
+	// 		}
+	// 	}
 	// 	if (arcsToBeRemoved.size() > 0) {
 	// 		cout << "fATBR: " << arcsToBeRemoved.size() << " ";
 	// 		for( auto item : arcsToBeRemoved ) {
 	// 			deleteArcById(item);
+	// 			arcTracker.erase(item);
 	// 		}
 	// 	}
 	// }
+
+
+
+	if (!RelaxedisExact) {
+		double maxLastLayerState = std::numeric_limits<double>::lowest();
+		for (auto nodeId : tree[tree.size()-2]) {
+			if (nodes[nodeId].state2 > maxLastLayerState) {
+				maxLastLayerState = nodes[nodeId].state2;
+			}
+		}
+		vector<ulint> arcsToBeRemoved ={};
+		for (size_t layer = 1; layer < tree.size() - 2; layer++) {
+			if (tree[layer].size() == 1) {
+				if (nodes[tree[layer][0]].incomingArcs.size() == 0) {
+					return false;
+				}
+				double maxGainForward = maxLastLayerState - nodes[tree[layer][0]].state2;
+				for (auto nodeId : tree[layer-1]) {
+					auto& node = nodes[nodeId];
+					for (auto outArcId : node.outgoingArcs) {
+						auto& outArc = arcs[outArcId];
+						const auto& parentNode = nodes[outArc.tail];
+						if(parentNode.state2 + outArc.weight + maxGainForward <= 0.01) {
+							arcsToBeRemoved.push_back(outArc.id);
+						}
+					}
+				}
+			}
+		}
+
+		if (arcsToBeRemoved.size() > 0) {
+			cout << "fATBR: " << arcsToBeRemoved.size() << " ";
+			for( auto item : arcsToBeRemoved ) {
+				deleteArcById(item);
+			}
+		}
+	}
 
 	// //////////////////////////////////////////////////////////////
 	// // double maxLastLayerState = std::numeric_limits<double>::lowest();

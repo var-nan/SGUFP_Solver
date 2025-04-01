@@ -309,9 +309,9 @@ int main() {
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	// cout << endl << "Starting solver at " << std::ctime(&t_c);
 	DDSolver solver{networkPtr};
-	solver.initialize(optimalValue);
+	// solver.initialize(optimalValue);
 	// solver.initialize(0);
-	// solver.initialize(optimalValue - 1000);
+	solver.initialize(optimalValue);
 	// int n_initial_cuts = 50;
 	// auto cuts = solver.initializeCuts3();
 	// auto cuts = solver.initializeCuts4();

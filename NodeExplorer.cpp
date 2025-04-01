@@ -2905,6 +2905,8 @@ OutObject NodeExplorer::processX4(const Node_t node, const double optimalLB) {
             upperBound =  min(relaxedDD.applyOptimalityCutHeuristic(verySpecialCut, optimalLB,upperBound),upperBound);
             if (upperBound <= optimalLB) {return {node.lb,upperBound,{}, false};}
         }
+
+        cout << " sec tm " ;
         start = feasibilityCuts.cuts.rbegin();
         end = feasibilityCuts.cuts.rend();
         for (; start != end; ++start) {

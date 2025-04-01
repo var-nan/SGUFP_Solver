@@ -416,9 +416,9 @@ void Network::vbarReOrder(bool Change) {
 		// another way of doing state update map.
 		auto& node = networkNodes[id];
 		set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
-		states.insert(-1);
+		// states.insert(-1);
 		// if (!(node.incomingArcs.size() ==1 && node.outgoingArcs.size() ==1) && (node.outgoingArcs.size() < node.incomingArcs.size())) states.insert(-1); // add -1 to states.
-		// if (node.outgoingArcs.size() < node.incomingArcs.size()) states.insert(-1);
+		if (node.outgoingArcs.size() < node.incomingArcs.size()) states.insert(-1);
 		stateUpdateMap.insert({i, states});
 		bool first = true;
 		// sort incoming arcs based in decreasing order of reward
@@ -541,18 +541,18 @@ NetworkArc Network::getArc(uint32_t i, uint32_t j) const {
 }
 
 
-vector<uint> Network::getTroubleNodes() const noexcept {
-
-	vector<uint> troubleMakers;
-	auto terminalNode = networkNodes.back().nodeId; // last node is terminal node.
-	for (const auto id: Vbar) {
-		// if node has arc to terminal node, trouble maker.
-		const auto& node = networkNodes[id];
-		// assuming trouble maker nodes have one outgoing edge and its connected to terminal.
-		if (node.outNodeIds.size() == 1 && node.outNodeIds[0] == terminalNode) {
-			troubleMakers.push_back(id);
-		}
-	}
-	cout << "Trouble Maker nodes: "; for (auto id: troubleMakers) {cout << id << ", ";} cout << endl;
-	return troubleMakers;
-}
+// vector<uint> Network::getTroubleNodes() const noexcept {
+//
+// 	vector<uint> troubleMakers;
+// 	auto terminalNode = networkNodes.back().nodeId; // last node is terminal node.
+// 	for (const auto id: Vbar) {
+// 		// if node has arc to terminal node, trouble maker.
+// 		const auto& node = networkNodes[id];
+// 		// assuming trouble maker nodes have one outgoing edge and its connected to terminal.
+// 		if (node.outNodeIds.size() == 1 && node.outNodeIds[0] == terminalNode) {
+// 			troubleMakers.push_back(id);
+// 		}
+// 	}
+// 	cout << "Trouble Maker nodes: "; for (auto id: troubleMakers) {cout << id << ", ";} cout << endl;
+// 	return troubleMakers;
+// }
