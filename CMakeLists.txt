@@ -5,25 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h)
-#set(SOURCES Network.cpp DD.cpp NodeExplorer.cpp grb.cpp)
+set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h include/statistics.h)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
 add_compile_definitions(MAX_WIDTH=32)
-
-
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message(STATUS "Fetching google test")
-    # google test dependency
-    include(FetchContent)
-    FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.15.2
-    )
-    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(googletest)
-    enable_testing()
-endif()
+#add_compile_definitions(REAPPLY_CUT)
 
 if (UNIX)
     message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
@@ -77,23 +64,48 @@ if (UNIX)
 
     # test targets
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_executable(tests2 tests/tests.cpp ${SOURCES}
-                tests/test_utils.h)
-        target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
-        target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
+        add_compile_definitions(DEBUG)
+        message(STATUS "Fetching google test")
+        # google test dependency
+        include(FetchContent)
+        FetchContent_Declare(googletest GIT_REPOSITORY https://github.com/google/googletest.git
+                GIT_TAG v1.15.2
+        )
 
-        add_executable(testmain testmain.cpp ${SOURCES})
-        target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
-        target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
+        FetchContent_Declare(googlebenchmark GIT_REPOSITORY https://github.com/google/benchmark.git
+                GIT_TAG main
+        )
+        set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(googletest)
+        FetchContent_MakeAvailable(googlebenchmark)
+        enable_testing()
 
+#        add_executable(tests2 tests/tests.cpp ${SOURCES} tests/test_utils.h)
+#        target_link_libraries(tests2 gurobi_c++ gurobi110 GTest::gtest_main)
+#        target_include_directories(tests2 PRIVATE ${GUROBI_INCLUDE})
+#
+#        add_executable(testmain testmain.cpp ${SOURCES})
+#        target_link_libraries(testmain gurobi_c++ gurobi110 GTest::gtest_main)
+#        target_include_directories(testmain PRIVATE ${GUROBI_INCLUDE})
+
+        add_executable(RelaxedDDTest tests/RelaxedDDTest.cpp ${SOURCES} tests/test_utils.h)
+        target_link_libraries(RelaxedDDTest gurobi_c++  gurobi110 GTest::gtest_main)
+        target_include_directories(RelaxedDDTest PRIVATE ${GUROBI_INCLUDE})
+
+        add_executable(testCut tests/testCuts.cpp)
+        target_link_libraries(testCut GTest::gtest_main benchmark::benchmark GSL::gsl)
+
+        add_executable(benchCut benchmarks/cut.cpp )
+        target_link_libraries(benchCut benchmark::benchmark)
 
     #    if (CMAKE_BUILD_TYPE STREQUAL "Release")
     #        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
     #        set_target_properties(tests2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
     #    endif()
         include(GoogleTest)
-        gtest_discover_tests(testmain)
-        gtest_discover_tests(tests2)
+#        gtest_discover_tests(testmain)
+#        gtest_discover_tests(tests2)
+        gtest_discover_tests(RelaxedDDTest)
     endif()
 
 elseif(WIN32)
