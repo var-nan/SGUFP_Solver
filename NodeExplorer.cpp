@@ -915,28 +915,23 @@ Inavap::OutObject Inavap::NodeExplorer::process2(Node node, double optimalLB) {
 Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
     const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts) {
 
-    cout << "layer: " << node.globalLayer << " ,ub: " << node.ub  << " ,cur opt: " << optimalLB << "    " << endl;
-
-    double lowerBound = DOUBLE_MIN;
     double upperBound = node.ub;
 
     RelaxedDDNew relaxedDD{networkPtr.get()};
     relaxedDD.buildTree(node);
 
-    if (relaxedDD.isTreeExact()) {
-        // cout << "Exact tree is built" << endl;
+    /* The cut refinement occurs in the following manner: apply local feasibility cuts, global
+     * feasibility cuts, local optimality cuts and global optimality cuts. The container cuts
+     * are iterated in reverse order of the container. If any of the cuts prunes the entire tree,
+     * the node explorer gets a new node to explore.
+     */
 
-        /* apply local feasibility cuts, global feasibility cuts, local optimality cuts,
-         * and global optimality cuts. The cuts are iterated in reverse order of the
-         * container.
-         */
+    if (relaxedDD.isTreeExact()) {
 
         for (const auto& cut : feasibilityCuts) {
             if (!relaxedDD.applyFeasibilityCut(cut)) {
-                // cout << "pr.b.feas" <<endl;
                 return PRUNED_BY_FEASIBILITY_CUT;
             }
-
         }
 
         for (const auto& contPtr : globalFCuts) {
@@ -959,23 +954,19 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             }
         }
 
-        /* solve sub-problem and refine tree */
+        /* New cuts are generated only when the tree is exact. */
 
         vector<Path> allSolutions;
-        // cout << "Doing actual branch and bound " << endl;
-
         while (true) {
             auto path = relaxedDD.getSolution();
             if (std::find(allSolutions.begin(), allSolutions.end(), path) != allSolutions.end()) {
-
-                return {lowerBound, upperBound, {}, OutObj::STATUS_OP::SUCCESS};
+                return {upperBound, upperBound, {}, OutObj::STATUS_OP::SUCCESS};
             }
 
             allSolutions.push_back(path);
 
             GuroSolver solver{networkPtr, env};
             auto [cutType, cut] = solver.solveSubProblem(path);
-            cout <<"Cut generated" << endl;
             if (cutType == FEASIBILITY) {
                 feasibilityCuts.insertCut(cut);
                 if (!relaxedDD.applyFeasibilityCut(cut))
@@ -990,12 +981,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
         }
     }
 
-    // non-exact tree.
-
-    /* apply local feasibility, global feasibility cuts, local optimality cuts,
-     * and global optimality cuts. The cuts are applied in reverse order of the
-     * container
-     */
+    /* Non-Exact Tree */
 
     for (const auto& cut: feasibilityCuts) {
         if (!relaxedDD.applyFeasibilityCut(cut))
@@ -1021,5 +1007,5 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
         }
     }
 
-    return {lowerBound, upperBound, relaxedDD.getCutset(upperBound), OutObj::STATUS_OP::SUCCESS};
+    return {DOUBLE_MIN, upperBound, relaxedDD.getCutset(upperBound), OutObj::STATUS_OP::SUCCESS};
 }

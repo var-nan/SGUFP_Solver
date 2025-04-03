@@ -801,7 +801,7 @@ namespace Inavap {
 		uint8_t applyFeasibilityCut(const Inavap::Cut& cut);
 		double applyOptimalityCut(const Inavap::Cut& cut, double optimal, double upperbound);
 
-		vector<Node> getCutset(double ub) const;
+		vector<Node> getCutset(double ub);
 
 	};
 }

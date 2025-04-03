@@ -3585,6 +3585,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 	 *
 	 * Otherwise, create nodes as usual (new node for every outgoing arc from current layer).
 	 */
+	// if (nextLayerSize >= RELAXED_MAX_WIDTH );
 	if (nextLayerSize >= RELAXED_MAX_WIDTH) {
 		status = NON_EXACT; // set DD status flag to non-exact.
 
@@ -3804,9 +3805,9 @@ uint8_t Inavap::RelaxedDDNew::applyFeasibilityCut(const Inavap::Cut &cut) {
 	const auto& processingOrder = networkPtr->processingOrder;
 	const auto& netArcs = networkPtr->networkArcs;
 
-	auto& root = nodes[0];
+	// compute justified RHS for root node.
 	size_t i = 0;
-	root.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
+	nodes[0].state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
 	[&processingOrder, &netArcs, &i, &cut](double val , int decision) {
                 if (decision == -1) {i++; return val; } // might not
                 auto netArcId = processingOrder[i++].second;
@@ -3868,7 +3869,7 @@ uint8_t Inavap::RelaxedDDNew::applyFeasibilityCut(const Inavap::Cut &cut) {
 					for (auto outArcId : node.outgoingArcs) {
 						auto& outArc = arcs[outArcId];
 						const auto& parentNode = nodes[outArc.tail];
-						if ((parentNode.state2 + outArc.weight + maxGain) < -0.1) {
+						if ((parentNode.state2 + outArc.weight + maxGain) <= 0.01) {
 							arcsToRemoved.push_back(outArcId);
 						}
 					}
@@ -3887,9 +3888,9 @@ double Inavap::RelaxedDDNew::applyOptimalityCut(const Inavap::Cut &cut, double o
 	const auto& processingOrder = networkPtr->processingOrder;
 	const auto& netArcs = networkPtr->networkArcs;
 
-	auto& root = nodes[0];
+	// compute justified RHS for root node.
 	size_t i = 0;
-	root.state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
+	nodes[0].state2 = std::accumulate(rootSolution.begin(), rootSolution.end(), cut.getRHS(),
 	[&processingOrder, &netArcs, &i, &cut](double val , int decision) {
                 if (decision == -1) {i++; return val; } // might not
                 auto netArcId = processingOrder[i++].second;
@@ -3953,7 +3954,7 @@ double Inavap::RelaxedDDNew::applyOptimalityCut(const Inavap::Cut &cut, double o
 					for (auto outArcId : node.outgoingArcs) {
 						auto& outArc = arcs[outArcId];
 						const auto& parentNode = nodes[outArc.tail];
-						if ((parentNode.state2 + outArc.weight + maxGain) < (optimal + 0.1)) {
+						if ((parentNode.state2 + outArc.weight + maxGain) <= (optimal - 0.01)) {
 							arcsToRemoved.push_back(outArcId);
 						}
 					}
@@ -4101,17 +4102,18 @@ void Inavap::RelaxedDDNew::batchRemoveArcs(const vui &arcIds) {
 	}
 }
 
-vector<Inavap::Node> Inavap::RelaxedDDNew::getCutset(double ub) const {
+vector<Inavap::Node> Inavap::RelaxedDDNew::getCutset(double ub) {
 
 	uint layer = 3;
 	while (tree[layer].size() != 1) layer++; // advance to first non-exact layer.
 
-	// this layer should have size of 1.
+	assertm(tree[layer].size() ==1, "This should not be cutset layer.");
+
 	uint globalLayerNumber = nodes.at(tree[layer][0]).globalLayer;
 	vector<Node> cutsetNodes;
-	// if state change occurs at this layer. get new states and.
-	if (networkPtr->hasStateChanged[layer]) {
-		const auto newStates = networkPtr->stateUpdateMap.at(layer);
+
+	if (networkPtr->hasStateChanged[globalLayerNumber]) { // if state changes, get new states.
+		const auto newStates = networkPtr->stateUpdateMap.at(globalLayerNumber);
 		const vector<int16_t> statesVector (newStates.begin(), newStates.end());
 		for (auto nodeId : tree[layer-1]) {
 			const auto& node = nodes.at(nodeId);
@@ -4133,7 +4135,7 @@ vector<Inavap::Node> Inavap::RelaxedDDNew::getCutset(double ub) const {
 				auto solution = partialSol;
 				solution.push_back(decision);
 				auto states = node.states;
-				if (decision != -1) std::erase(solution, decision);
+				if (decision != -1) std::erase(states, decision);
 				cutsetNodes.emplace_back(std::move(states), std::move(solution), DOUBLE_MIN, ub, globalLayerNumber);
 			}
 		}
