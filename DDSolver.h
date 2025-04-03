@@ -16,7 +16,7 @@
 #include <stack>
 #include "optimized.h"
 #include <bit>
-#include <gsl/gsl_statistics_double.h>
+#include "include/statistics.h"
 
 #ifndef POLL_FREQUENCY
 #define POLL_FREQUENCY 512
@@ -402,10 +402,10 @@ namespace Inavap {
                 cout << worker.nProcessed << "  ";
             }
             cout << endl;
-            double mean = gsl_stats_mean(processed.data(), 1, processed.size());
-            double absdev = gsl_stats_absdev(processed.data(), 1, processed.size());
-            double min_val= gsl_stats_min(processed.data(),1 , processed.size());
-            double max_val = gsl_stats_max(processed.data(), 1, processed.size());
+            double mean = stats_mean(processed.data(), processed.size());
+            double absdev = stats_absdev(processed.data(), processed.size());
+            double min_val= stats_min(processed.data(), processed.size());
+            double max_val = stats_max(processed.data(), processed.size());
 
             double total = std::accumulate(processed.begin(), processed.end(), 0.0);
 
@@ -416,6 +416,7 @@ namespace Inavap {
 
             cout << endl;
             // print cuts information.
+            cout << "Cuts : " << endl;
             for (const auto& worker : workersGroup) {
                 cout << "(" << worker.feasCutsGlobal.size() << ", " << worker.optCutsGlobal.size() << ")" << "  ";
             }

@@ -692,7 +692,6 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 }
 
 void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
-	// change to pointer of DDSolver.
 
 	/* function: returns true if it is time to read the atomic variable of global optimal, else increases counter. */
 	auto is_poll_time = [](size_t &counter) { // resets counter when reaches limit.
@@ -708,15 +707,6 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		counter++;
 		return false;
 	};
-	/* function: returns cuts from the node explorer */
-    // auto f_shareCuts = [](NodeExplorer &explorer) { // share cuts with master if exceeds limit.
-    //     pair<optional<CutContainer>, optional<CutContainer>> cuts;
-    //     if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT )
-    //         cuts.first.value() = move(explorer.feasibilityCuts);
-    //     if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT)
-    //         cuts.second.value() = move(explorer.optimalityCuts);
-    //     return cuts;
-    // };
 
 
 	NodeExplorer explorer{networkPtr};
@@ -729,11 +719,11 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	uint8_t done = 0; // flag to indicate solver is finished.
 	// size_t nProcessed = 0; // # nodes processed so far.
 	size_t counter = 0;
-	uint nOptShared = 0;
-	uint nFeasShared = 0;
-	uint prevLocalCount = 0;
-	uint prevCount = 0; // # newly generated cuts since last shared with global.
-	uint payloadCheckTick = 0;
+	uint nOptShared = 0;		// # local optimality cuts shared with master so far.
+	uint nFeasShared = 0;		// # local feasibility cuts shared with master so far.
+	uint prevLocalCount = 0;	//
+	uint prevCount = 0;			// # newly generated cuts since last shared with global.
+	uint payloadCheckTick = 0;	//
 
 	/* Operations on same variable by a single thread with relaxed-order will obey the happens-before relationships.
 	 * The access to a single atomic variable from  the same thread can't be reordered. Once a given thread see a
@@ -745,9 +735,10 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	 * or does it store in caches in case of relaxed ordering?
 	 */
 	while (!solver->isCompleted.load(memory_order::relaxed)) {
+		// TODO: remove `isCompleted` flag. Only way to exit from current loop is when the master sends signal.
 
 		if (localQueue.empty()) {
-			// indicate master for nodes. wait until master responds.
+			// get nodes from master. This is a blocking call.
 			auto nodes = payload.getNodes(done);
 			if (done) { cout << "nf: " << explorer.feasibilityCuts.size() << " " << " nO: " << explorer.optimalityCuts.size() << endl; break;} // solver is finished. isFinished flag has been set?
 			localQueue.pushNodes(nodes);
@@ -765,12 +756,13 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			}
 
 			Node node = localQueue.popNode();
+			if (node.ub <= zOpt) continue;
 			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
-			// auto result = explorer.process2(localQueue.popNode(), zOpt);
-			nProcessed += (result.status == OutObject::STATUS_OP::SUCCESS);
-			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
-			nFeasibilityPruned += (result.status == OutObject::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT);
-			nOptimalityPruned += (result.status == OutObject::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT);
+
+			nProcessed			+= (result.status == OutObject::STATUS_OP::SUCCESS);
+			nFeasibilityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT);
+			nOptimalityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT);
+
 			if (result.status == OutObject::STATUS_OP::SUCCESS) {
 				//
 				if (result.lb > zOpt) {
@@ -892,6 +884,10 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
 	return temp;
 }
 
+/**
+ * Starts the solver with the given value as the current optimal.
+ * @param known_optimal
+ */
 void Inavap::DDSolver::startSolver(double known_optimal) {
 
 	optimal.store(known_optimal, memory_order::relaxed);
@@ -900,17 +896,15 @@ void Inavap::DDSolver::startSolver(double known_optimal) {
 
 	// create initial restricted tree and get cutset with desired max width.
 
-	// RestrictedDDNew restrictedDD{networkPtr, 128};
 	RelaxedDDNew relaxedDD{networkPtr.get()};
 	Node root;
 	relaxedDD.buildTree(root);
 	auto cutset = relaxedDD.getCutset(DOUBLE_MAX);
 
-	if (!cutset.empty()) cout << "Number of nodes from teh first tree: " << cutset.size() << endl;
+	if (!cutset.empty())
+		cout << "cutset from initial tree : " << cutset.size() << endl;
 
 	vector<Node> cutsetNodes = cutset;
-	// assume nodes is a vector of nodes.
-	// divide the nodes to all workers.
 	uint current = 0;
 	payloads = vector<Payload>(N_WORKERS);
 	for (const auto& node : cutsetNodes) {
@@ -918,33 +912,23 @@ void Inavap::DDSolver::startSolver(double known_optimal) {
 		payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
 	}
 
-
-	// static assert
-	// assert(0 == 1);
-	// for (const auto& payload: payloads) {
-	// 	assertm("Payload is empty.", !payload.nodes.empty());
-	// }
-
-	// all payloads are ready. launch threads.
-	// workers = vector<thread>();
+	// payloads are ready. launch worker threads.
 	for (uint i = 0; i < N_WORKERS; i++) {
 		Worker worker{i, networkPtr};
 		workersGroup.push_back(worker);
-		workers.push_back(thread{&Worker::startWorker, &workersGroup[i], this});
-		// workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
+		workers.emplace_back(&Worker::startWorker, &workersGroup[i], this);
 	}
-	// start master
+	// let main thread work as master, instead of spawning new thread.
 	Master m{networkPtr};
 	m.startMaster(std::ref(*this));
-	// std::thread master (&Master::startMaster, &m, std::ref(*this));
-	// if (master.joinable()) master.join();
-	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
+
 	for (unsigned int i = 0; i < N_WORKERS; i++) {
 		if (workers[i].joinable()) workers[i].join();
 	}
 
-	// destruct global cuts?
 	cout << "Optimal Solution: " << optimal.load() << endl;
+
+	//  TODO: post processing needed. (clean up resources).
 
 }
 
