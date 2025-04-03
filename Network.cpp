@@ -98,7 +98,7 @@ Network::Network(const std::string& p_fileName){
 			// another way of doing state update map.
 			auto& node = networkNodes[id];
 			set<int> states (node.outgoingArcs.begin(), node.outgoingArcs.end());
-			if (node.outgoingArcs.size() < node.incomingArcs.size())
+			// if (node.outgoingArcs.size() < node.incomingArcs.size())
 				states.insert(-1);
 			stateUpdateMap.insert({i, states});
 			bool first = true;

@@ -202,9 +202,9 @@ std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t
 
 	auto cut = solveSubProblem(y_bar);
 	if (cut.cutType == FEASIBILITY) {
-		return {FEASIBILITY, Inavap::cutToCut(cut, networkPtr.get())};
+		return make_pair(FEASIBILITY, Inavap::cutToCut(cut, networkPtr.get()));
 	}
-	return {OPTIMALITY, Inavap::cutToCut(cut, networkPtr.get())};
+	return make_pair(OPTIMALITY, Inavap::cutToCut(cut, networkPtr.get()));
 }
 
 
