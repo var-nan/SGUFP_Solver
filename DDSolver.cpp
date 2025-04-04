@@ -712,6 +712,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	NodeExplorer explorer{networkPtr};
 	auto& payload = solver->payloads[id];
 	payload.id = id;
+	nQueue = payload.nodes.size();
 	// auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n"; cout << str <<  endl;
 	NodeQueue localQueue;
 	double zOpt = solver->optimal.load(memory_order::relaxed);
@@ -774,6 +775,7 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			nFeasibilityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT);
 			nOptimalityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT);
 			#endif
+			nQueue				+= (result.nodes.size());
 			if (result.status == OutObject::STATUS_OP::SUCCESS) {
 				//
 				if (result.lb > zOpt) {
@@ -948,8 +950,13 @@ double Inavap::DDSolver::start(double known_opt) {
 #ifdef SOLVER_COUNTERS
 	printWorkerStats();
 #endif
+
+	// compute total nodes.
+	size_t totalQueueNodes = 0;
+	for (const auto& worker : workersGroup) totalQueueNodes += worker.nQueue;
+
 	std::cout << "Optimal solution: " << solution
-		<< ". Explored entire search space in " << duration_seconds.count() << " seconds." << endl;
+		<< ". Explored "<< totalQueueNodes << " nodes (entire search space) in " << duration_seconds.count() << " seconds." << endl;
 	std::cout << "Threads : " << N_WORKERS << " Workers and 1 Master." << std::endl;
 	return solution;
 }

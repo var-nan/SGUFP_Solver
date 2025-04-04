@@ -341,6 +341,8 @@ namespace Inavap {
                 cout << str;
             }
 
+            size_t nQueue = 0;                  // #nodes entered queue.
+
 #ifdef SOLVER_COUNTERS
             /* counters to measure various attributes for the worker. */
             size_t nProcessed = 0;              // #nodes processed successfully.
@@ -437,7 +439,7 @@ namespace Inavap {
             std::cout << "Nodes pruned (feasibility, optimality, bound): " << std::endl;
             for (const auto&  worker: workersGroup) {
                 cout << "(" << worker.nFeasibilityPruned << ", " << worker.nOptimalityPruned
-                            << ", "<< worker.nPrunedByBound << ")" << "   ";
+                            << ", "<< worker.nPrunedByBound << ")" << "  ";
             } cout << endl;
             cout << asterisk << endl;
             std::cout << "Waiting Time (milliseconds): ";

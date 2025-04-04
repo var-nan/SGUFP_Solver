@@ -15,26 +15,16 @@ void test_single(const std::string& fileName) {
 	cout << "Testing " << fileName << endl;
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 
-	double solution = solveStochasticModel(networkPtr.get());
-
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration_cast;
-	using std::chrono::duration;
-	using std::chrono::milliseconds;
-	using std::chrono::seconds;
+	double oracle = solveStochasticModel(networkPtr.get());
 
 	for (uint16_t i = 1; i <= 16; i*= 2) {
 		const auto now = std::chrono::system_clock::now();
 		const auto t_c = std::chrono::system_clock::to_time_t(now);
-		cout << endl << "Starting solver with " << i <<" threads at" << std::ctime(&t_c);
-		auto t1 = high_resolution_clock::now();
+		cout << "Starting solver " << std::ctime(&t_c) << endl;
 		Inavap::DDSolver solver{networkPtr, i};
-		solver.startSolver(solution);
-		auto t2 = high_resolution_clock::now();
-		auto ms_int = duration_cast<seconds>(t2-t1);
-		duration<double> ms_double = t2-t1;
-		std::cout <<"Solver finished: " << ms_int.count() << " seconds" << endl;
-		solver.printWorkerStats();
+		double solution = solver.start(oracle);
+		if (abs(solution-oracle) > 1e-5) cout << "ERROR: incorrect solution" << endl;
+		cout <<"\n\n\n" << endl;
 	}
 }
 
@@ -44,6 +34,8 @@ int main(int argc, char* argv[]) {
 	string fileName;
 	// fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_91_20_1.txt";
 	if (argc == 2) fileName = string(argv[1]);
+	test_single(fileName);
+	return 0;
 	Network network{fileName};
 	double optimal = solveStochasticModel(&network);
 	cout << "Optimal from stochastic model: " << optimal << endl;
