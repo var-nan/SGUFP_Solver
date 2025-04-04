@@ -49,22 +49,11 @@ int main(int argc, char* argv[]) {
 	cout << "Optimal from stochastic model: " << optimal << endl;
 
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration_cast;
-	using std::chrono::duration;
-	using std::chrono::milliseconds;
-	using std::chrono::seconds;
-	auto t1 = high_resolution_clock::now();
 	const auto now = std::chrono::system_clock::now();
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
-	Inavap::DDSolver solver{networkPtr, 1};
-	solver.startSolver(optimal-10000000);
-	auto t2 = high_resolution_clock::now();
-	auto ms_int = duration_cast<seconds>(t2-t1);
-	duration<double> ms_double = t2-t1;
-	std::cout <<"Solver finished: " << ms_int.count() << " seconds" << endl;
-	solver.printWorkerStats();
+	Inavap::DDSolver solver{networkPtr, 8};
+	double solution = solver.start(optimal-10);
 	return 0;
 }
 

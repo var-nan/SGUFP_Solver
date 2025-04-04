@@ -738,9 +738,19 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		// TODO: remove `isCompleted` flag. Only way to exit from current loop is when the master sends signal.
 
 		if (localQueue.empty()) {
+			#ifdef SOLVER_COUNTERS
+			sleepTimes++;
+			const auto start = std::chrono::high_resolution_clock::now();
+			#endif
 			// get nodes from master. This is a blocking call.
 			auto nodes = payload.getNodes(done);
-			if (done) { cout << "nf: " << explorer.feasibilityCuts.size() << " " << " nO: " << explorer.optimalityCuts.size() << endl; break;} // solver is finished. isFinished flag has been set?
+			#ifdef SOLVER_COUNTERS
+			const auto end = std::chrono::high_resolution_clock::now();
+			sleepDuration += std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+			nFeasibilityCuts = explorer.feasibilityCuts.size();
+			nOptimalityCuts = explorer.optimalityCuts.size();
+			#endif
+			if (done) { break;} // solver is finished. isFinished flag has been set?
 			localQueue.pushNodes(nodes);
 		}
 
@@ -756,13 +766,14 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			}
 
 			Node node = localQueue.popNode();
-			if (node.ub <= zOpt) continue;
+			if (node.ub <= zOpt) {nPrunedByBound++;continue;}
 			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
 
+			#ifdef SOLVER_COUNTERS
 			nProcessed			+= (result.status == OutObject::STATUS_OP::SUCCESS);
 			nFeasibilityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT);
 			nOptimalityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT);
-
+			#endif
 			if (result.status == OutObject::STATUS_OP::SUCCESS) {
 				//
 				if (result.lb > zOpt) {
@@ -774,13 +785,13 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 
 					// zOpt is not updated after CAS operation.
 					if (solver->optimal.load(memory_order::relaxed) == result.lb) zOpt = result.lb;
-
+#ifdef SOLVER_COUNTERS
 					 if (result.lb == zOpt) {
 					 	const auto now = std::chrono::system_clock::now();
 					 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 					 	cout << "Thread: " << id << " , optimal lb: " << zOpt << " set at, " << std::ctime(&t_c) << endl;
 					 }
-
+#endif
 					counter = 0;
 				}
 				else if (is_poll_time(counter)) { // check periodically for latest optimal value.
@@ -888,11 +899,9 @@ vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
  * Starts the solver with the given value as the current optimal.
  * @param known_optimal
  */
-void Inavap::DDSolver::startSolver(double known_optimal) {
+double Inavap::DDSolver::startSolver(double known_optimal) {
 
 	optimal.store(known_optimal, memory_order::relaxed);
-
-	cout << "Starting solver, Optimal: " << known_optimal  << endl;
 
 	// create initial restricted tree and get cutset with desired max width.
 
@@ -900,9 +909,6 @@ void Inavap::DDSolver::startSolver(double known_optimal) {
 	Node root;
 	relaxedDD.buildTree(root);
 	auto cutset = relaxedDD.getCutset(DOUBLE_MAX);
-
-	if (!cutset.empty())
-		cout << "cutset from initial tree : " << cutset.size() << endl;
 
 	vector<Node> cutsetNodes = cutset;
 	uint current = 0;
@@ -926,10 +932,26 @@ void Inavap::DDSolver::startSolver(double known_optimal) {
 		if (workers[i].joinable()) workers[i].join();
 	}
 
-	cout << "Optimal Solution: " << optimal.load() << endl;
+	return optimal.load();
 
 	//  TODO: post processing needed. (clean up resources).
 
+}
+
+double Inavap::DDSolver::start(double known_opt) {
+
+	const auto startTime = std::chrono::high_resolution_clock::now();
+	double solution = startSolver(known_opt);
+	const auto endTime = std::chrono::high_resolution_clock::now();
+	auto duration_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(endTime - startTime);
+
+#ifdef SOLVER_COUNTERS
+	printWorkerStats();
+#endif
+	std::cout << "Optimal solution: " << solution
+		<< ". Explored entire search space in " << duration_seconds.count() << " seconds." << endl;
+	std::cout << "Threads : " << N_WORKERS << " Workers and 1 Master." << std::endl;
+	return solution;
 }
 
 void Inavap::DDSolver::NodeQueue::pushNode(Node node) {

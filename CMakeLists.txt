@@ -11,6 +11,7 @@ add_executable(SGUFP_Solver main.cpp ${SOURCES})
 # preprocessor macros.
 add_compile_definitions(MAX_WIDTH=32)
 #add_compile_definitions(REAPPLY_CUT)
+add_compile_definitions(SOLVER_COUNTERS)
 
 if (UNIX)
     message(STATUS "Current Build type: ${CMAKE_BUILD_TYPE}")
