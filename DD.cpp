@@ -3586,7 +3586,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 	 * Otherwise, create nodes as usual (new node for every outgoing arc from current layer).
 	 */
 	// if (nextLayerSize >= RELAXED_MAX_WIDTH );
-	if (nextLayerSize >= RELAXED_MAX_WIDTH) {
+	if (nextLayerSize >= RELAXED_MAX_WIDTH && (nodes[currentLayer.front()].globalLayer < networkPtr->totalLayers-5)) {
 		status = NON_EXACT; // set DD status flag to non-exact.
 
 		LDDNode newNode {++lastInserted};

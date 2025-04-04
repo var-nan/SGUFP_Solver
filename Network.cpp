@@ -117,6 +117,8 @@ Network::Network(const std::string& p_fileName){
 
 		}
 		hasStateChanged.push_back(false); // extra element for buildNextLayer in DD class.
+		for (auto id : Vbar)
+			totalLayers += networkNodes[id].incomingArcs.size();
 	}
 	else {
 		// error in opening file. exit program.
