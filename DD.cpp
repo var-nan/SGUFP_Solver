@@ -3599,7 +3599,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 			allStates.insert(states.begin(), states.end()); // union of all states.
 			// create new arc for each state.
 			std::for_each(states.begin(), states.end(), [&](int16_t state) {
-				if (!(stateChangesNext && node.states.size() > 1 && state == -1)) { // likely branch taken.
+				if (true || !(stateChangesNext && node.states.size() > 1 && state == -1)) { // likely branch taken.
 					DDArc newArc {++lastInserted, id, newNode.id, state};
 					node.outgoingArcs.push_back(newArc.id);
 					newNode.incomingArcs.push_back(newArc.id);
@@ -3629,7 +3629,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 		const auto& states = parent.states;
 
 		std::for_each(states.begin(), states.end(), [&](int16_t state) {
-			if (!(stateChangesNext && states.size() > 1 && state == -1)) {
+			if (true || !(stateChangesNext && states.size() > 1 && state == -1)) {
 				auto newStates = states;
 				if (state != -1) // remove selected decision from the states.
 					newStates.erase(std::remove(newStates.begin(), newStates.end(), state),
