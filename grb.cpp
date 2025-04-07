@@ -186,9 +186,11 @@ void GuroSolver::setObjectiveFunction(const Network &network, const vector<vecto
 
 std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t> &path) {
 	// call w2y code
-	vector<shi> y_1 (networkPtr->n,0);
-	vector<vector<shi>> y_2(networkPtr->n, y_1);
-	vector<vector<vector<shi>>> y_bar(networkPtr->n, y_2);
+	// vector<shi> y_1 (networkPtr->n,0);
+	// vector<vector<shi>> y_2(networkPtr->n, y_1);
+	vector<vector<vector<shi>>> y_bar_temp;
+
+	memset(y_bar, static_cast<int8_t>(0), n*n*n);
 
 	for (uint a = 0; a < path.size(); a++){
 		if (path[a] != -1){
@@ -196,11 +198,12 @@ std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t
 			auto q = networkPtr->networkArcs[arcId].headId;
 			auto i = networkPtr->networkArcs[arcId].tailId;
 			auto j = networkPtr->networkArcs[path[a]].headId;
-			y_bar[i][q][j] = 1;
+			// y_bar[i][q][j] = 1;
+			y_bar[i*n*n + q*n + j] = 1;
 		}
 	}
 
-	auto cut = solveSubProblem(y_bar);
+	auto cut = solveSubProblem(y_bar_temp);
 	if (cut.cutType == FEASIBILITY) {
 		return make_pair(FEASIBILITY, Inavap::cutToCut(cut, networkPtr.get()));
 	}
@@ -208,7 +211,7 @@ std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t
 }
 
 
-Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
+Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar_temp) {
 	// scenario based model.
 
 	GRBModel model = GRBModel(environment);
@@ -403,7 +406,7 @@ Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
 					//uint i = arcs[inArc].tailId;
 					uint j = arcs[outArc].headId;
 					int u_qj = arcs[outArc].upperCapacities[scenario];
-					obj += u_iq * (1-y_bar[i][q][j]) * lambda[i][q][j] + u_qj * (1-y_bar[i][q][j]) * mu[i][q][j]; // second term
+					obj += u_iq * (1-y_bar[i*n*n + q*n + j]) * lambda[i][q][j] + u_qj * (1-y_bar[i*n*n + q*n + j]) * mu[i][q][j]; // second term
 					// sum += y_bar[i][q][j];
 				}
 				// third term here.
@@ -418,7 +421,7 @@ Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
 				int sum = 0;
 				for (uint outArc : nodes[q].outgoingArcs) {
 					uint j = arcs[outArc].headId;
-					sum += y_bar[i][q][j];
+					sum += y_bar[i*n*n + q*n + j];
 				}
 				obj += u_iq * sum * sigma[i][q];
 			}
@@ -432,7 +435,7 @@ Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar) {
 				int sum = 0;
 				for (auto inArc : nodes[q].incomingArcs){
 					uint i = arcs[inArc].tailId;
-					sum += y_bar[i][q][j];
+					sum += y_bar[i*n*n + q*n + j];
 				}
 				obj += u_qj * sum * phi[q][j];
 			}

@@ -10,6 +10,7 @@
 #include <vector>
 #include "Cut.h"
 #include <memory>
+#include <cstring>
 
 using namespace std;
 
@@ -19,6 +20,7 @@ public:
 	GRBEnv environment;
 
 	int n;
+	shi *y_bar;
 	// gurobi variables
 	// GRBVar* alpha;
 	// GRBVar** beta;
@@ -43,6 +45,7 @@ public:
 		// phi = new GRBVar*[n];
 		// lambda = new GRBVar**[n];
 		// mu = new GRBVar**[n];
+		y_bar = new shi[n*n*n];
 	}
 
 	void initializeVariables();
@@ -60,6 +63,7 @@ public:
 	~GuroSolver(){
 
 		// clear up the heap.
+		delete y_bar;
 		#ifdef DEBUG
 			// cout << "Cleaning up gurobi variables... ";
 		#endif
