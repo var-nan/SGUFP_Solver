@@ -784,6 +784,7 @@ namespace Inavap {
 		void deleteArc(LDDNode &parent, DDArc &arc, LDDNode &child);
 		void deleteNode(LDDNode &node);
 		void bottomUpDelete(uint nodeId);
+		void topDownDelete(uint nodeId);
 
 		void updateTree();
 

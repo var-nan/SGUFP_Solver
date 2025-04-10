@@ -3863,21 +3863,34 @@ uint8_t Inavap::RelaxedDDNew::applyFeasibilityCut(const Inavap::Cut &cut) {
 		vui arcsToRemoved;
 		for (size_t layer = 1; layer < llayer; layer++) {
 			if (tree[layer].size() ==1) {
+				size_t total_arcs_this_layer = 0, arcs_pruned_this_layer = 0;
 				double maxGain = maxState - nodes[tree[layer][0]].state2;
 				for (auto nodeId : tree[layer-1]) {
 					auto& node = nodes[nodeId];
 					for (auto outArcId : node.outgoingArcs) {
 						auto& outArc = arcs[outArcId];
 						const auto& parentNode = nodes[outArc.tail];
-						if ((parentNode.state2 + outArc.weight + maxGain) <= 0.01) {
+						/* NOTE: modifying the tolerance level sometimes affecting the optimal
+						 * solution, especially when the solver didn't reach optimal yet.*/
+						if ((parentNode.state2 + outArc.weight + maxGain) <= -0.01) {
 							arcsToRemoved.push_back(outArcId);
+							arcs_pruned_this_layer++;
 						}
+						total_arcs_this_layer++;
 					}
 				}
+				/* if all incoming arcs for this node need to be removed, entire tree should
+				 * be removed. Thus, stop early and return infeasible status. */
+				if (total_arcs_this_layer == arcs_pruned_this_layer) return false;
 			}
 		}
 		if (!arcsToRemoved.empty()) {
 			batchRemoveArcs(arcsToRemoved);
+			// TODO: below loop is not required, since this is already taken care in the above loop.
+			for (size_t layer = 3; layer < llayer-1; layer++) {
+				if (tree[layer].size() == 1 && nodes[tree[layer][0]].incomingArcs.size() == 0) return false;
+			}
+
 		}
 	}
 	return true;
@@ -3948,21 +3961,33 @@ double Inavap::RelaxedDDNew::applyOptimalityCut(const Inavap::Cut &cut, double o
 		vui arcsToRemoved;
 		for (size_t layer = 3; layer < llayer-1; layer++) {
 			if (tree[layer].size() ==1) {
+				size_t arcs_pruned_this_layer = 0, total_arcs_this_layer = 0;
 				double maxGain = maxState - nodes[tree[layer][0]].state2;
 				for (auto nodeId : tree[layer-1]) {
 					auto& node = nodes[nodeId];
 					for (auto outArcId : node.outgoingArcs) {
 						auto& outArc = arcs[outArcId];
 						const auto& parentNode = nodes[outArc.tail];
+						/* NOTE: modifying the tolerance level sometimes affecting the optimal
+						 * solution, especially when the solver didn't reach optimal yet.*/
 						if ((parentNode.state2 + outArc.weight + maxGain) <= (optimal - 0.01)) {
 							arcsToRemoved.push_back(outArcId);
+							arcs_pruned_this_layer++;
 						}
+						total_arcs_this_layer++;
 					}
 				}
+				/* If all incoming arcs for this node need to be removed, entire tree should
+				 * be removed. Thus, stop early and return infeasible status. */
+				if (arcs_pruned_this_layer == total_arcs_this_layer) return DOUBLE_MIN;
 			}
 		}
 		if (!arcsToRemoved.empty()) {
 			batchRemoveArcs(arcsToRemoved);
+		}
+		// TODO: below loop is not needed. comment
+        for (size_t layer = 3; layer < llayer-1; layer++) {
+        	if (tree[layer].size() == 1 && nodes[tree[layer][0]].incomingArcs.size() == 0) return DOUBLE_MIN;
 		}
 	}
 	return terminalState;
@@ -4023,6 +4048,24 @@ void Inavap::RelaxedDDNew::removeNode(uint id, bool isBatch) {
 	if (!isBatch) updateTree();	// no batch deletion.
 
 }
+
+void Inavap::RelaxedDDNew::topDownDelete(uint nodeId) {
+	// assume all the incoming arcs for this node is deleted.
+	// recursively delete sub-tree (orphan nodes).
+	auto& node = nodes[nodeId];
+	auto arcsToDelete = node.outgoingArcs;
+
+	for (auto arcId : arcsToDelete) {
+		// find head node and remove arc.
+		auto& outArc = arcs.at(arcId);
+		auto childId = outArc.head;
+		auto& childNode = nodes[childId];
+		deleteArc(node, outArc, childNode);
+		if (childNode.incomingArcs.empty()) topDownDelete(childId);
+	}
+	deleteNode(node);
+}
+
 
 void Inavap::RelaxedDDNew::bottomUpDelete(uint id) {
 	// INVARIANT this node might contain multiple incoming parents, but should not contain any children.
