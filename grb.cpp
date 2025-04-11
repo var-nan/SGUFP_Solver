@@ -137,25 +137,19 @@ void GuroSolver::addConstraints() {
 }
 
 std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t> &path) {
-	// call w2y code
-	// vector<shi> y_1 (networkPtr->n,0);
-	// vector<vector<shi>> y_2(networkPtr->n, y_1);
-	vector<vector<vector<shi>>> y_bar_temp;
 
-	memset(y_bar, static_cast<int8_t>(0), n*n*n);
-
+	std::memset(y_bar, 0, n*n*n);
 	for (uint a = 0; a < path.size(); a++){
 		if (path[a] != -1){
 			auto arcId = networkPtr->processingOrder[a].second;
 			auto q = networkPtr->networkArcs[arcId].headId;
 			auto i = networkPtr->networkArcs[arcId].tailId;
 			auto j = networkPtr->networkArcs[path[a]].headId;
-			// y_bar[i][q][j] = 1;
 			y_bar[i*n*n + q*n + j] = 1;
 		}
 	}
 
-	auto cut = solveSubProblem(y_bar_temp);
+	auto cut = solveSubProblem(vector<vector<vector<shi>>>());
 	if (cut.cutType == FEASIBILITY) {
 		return make_pair(FEASIBILITY, Inavap::cutToCut(cut, networkPtr.get()));
 	}

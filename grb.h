@@ -65,7 +65,7 @@ public:
 
 	~GuroSolver(){
 		// clear up the heap and gurobi variables.
-		delete y_bar;
+		delete[] y_bar;
 		for (int i = 0; i < n; i++){
 			delete[](beta[i]);
 			delete[](gamma[i]);
