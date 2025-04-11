@@ -965,7 +965,6 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
 
             allSolutions.push_back(path);
 
-            GuroSolver solver{networkPtr, env};
             auto [cutType, cut] = solver.solveSubProblem(path);
             if (cutType == FEASIBILITY) {
                 feasibilityCuts.insertCut(cut);
