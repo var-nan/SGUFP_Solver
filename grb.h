@@ -21,6 +21,7 @@ public:
 
 	int n;
 	shi *y_bar;
+	CutCoefficients Y_bar_coef;
 	// gurobi variables
 	GRBVar* alpha;
 	GRBVar** beta;
@@ -51,6 +52,20 @@ public:
 
 		initializeVariables();
 		addConstraints();
+
+		// initialize cut coefficients
+		const auto& nodes = networkPtr->networkNodes;
+		const auto& arcs = networkPtr->networkArcs;
+		const auto& processingOrder = networkPtr->processingOrder;
+		for (uint i0 = 0; i0 < processingOrder.size(); i0++){
+			uint arcID = processingOrder[i0].second;
+			uint i = arcs[arcID].tailId;
+			uint q = arcs[arcID].headId;
+			for (uint outArc : nodes[q].outgoingArcs){
+				uint j = arcs[outArc].headId;
+				Y_bar_coef[make_tuple(i, q, j)] = 0.0;
+			}
+		}
 	}
 
 	void initializeVariables();

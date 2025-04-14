@@ -148,6 +148,8 @@ std::pair<CutType, Inavap::Cut> GuroSolver::solveSubProblem(const vector<int16_t
 			y_bar[i*n*n + q*n + j] = 1;
 		}
 	}
+	// reset values in y bar coefficients to zero.
+	for (auto& [k,v] : Y_bar_coef) v = 0.0;
 
 	auto cut = solveSubProblem(vector<vector<vector<shi>>>());
 	if (cut.cutType == FEASIBILITY) {
@@ -165,22 +167,8 @@ Cut GuroSolver::solveSubProblem(const vector<vector<vector<shi>>> &y_bar_temp) {
 	const auto& arcs = networkPtr->networkArcs;
 	const auto& processingOrder = networkPtr->processingOrder;
 	double scenarios = networkPtr->nScenarios;
-
-	CutCoefficients Y_bar_coef;
 	double rhs = 0.0;
-
 	CutType type = OPTIMALITY;
-
-	// init coeff map with zeros.
-	for (uint i0 = 0; i0 < processingOrder.size(); i0++){
-		uint arcID = processingOrder[i0].second;
-		uint i = arcs[arcID].tailId;
-		uint q = arcs[arcID].headId;
-		for (uint outArc : nodes[q].outgoingArcs){
-			uint j = arcs[outArc].headId;
-			Y_bar_coef[make_tuple(i, q, j)] = 0.0;
-		}
-	}
 
 	// objective function for all scenarios
 	for (auto scenario = 0 ; scenario < scenarios ; scenario++) {
