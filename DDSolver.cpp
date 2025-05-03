@@ -557,12 +557,19 @@ size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::
 	// worker-mode.
 	double zOpt = solver.optimal.load(memory_order::relaxed);
 	size_t nProcessed = 0;
+	// update global feasibility and optimality cuts
+	size_t prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
+	if (solver.CutResources.getCount() > prevCount) { // new cuts are added to global space.
+		auto res = solver.CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
+		if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
+		if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
+	}
 
 	while (!nodeQueue.empty() && n--) {
 		auto result = explorer.process(nodeQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
 		nProcessed++;
 		// TODO: what to do with local cuts?
-		if (result.status) {
+		if (result.status == OutObject::STATUS_OP::SUCCESS) {
 			if (result.lb > zOpt) {
 				while ((!solver.optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)) && (zOpt < result.lb));
 			}
@@ -576,6 +583,7 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 
 	NodeExplorer explorer{networkPtr};
 	size_t nProcessed = 0;
+	size_t prevFeasShared = 0, prevOptShared = 0;
 
 	// check if the worker shared any cuts?
 	auto func = [&](Payload &worker) { // pair of feasibility, optimality cuts.
@@ -681,11 +689,22 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		// thread sleep?
 
 		// update local cuts to global.
+		// add current local feasibility and optimality cuts to global.
+		if ((explorer.feasibilityCuts.size() - prevFeasShared) > F_CUT_CACHE_SIZE && !feasibilityCuts.empty()) {
+			auto temp = explorer.feasibilityCuts.seek(prevFeasShared);
+			feasibilityCuts.push_back(temp);
+			prevFeasShared = explorer.feasibilityCuts.size();
+		}
+		if ((explorer.optimalityCuts.size() - prevOptShared) > O_CUT_CACHE_SIZE && !optimalityCuts.empty()) {
+			auto temp = explorer.optimalityCuts.seek(prevOptShared);
+			optimalityCuts.push_back(temp);
+			prevOptShared = explorer.optimalityCuts.size();
+		}
 		auto p = make_pair(feasibilityCuts, optimalityCuts);
 		addCutsToGlobal(solver, p);
 
 		// process some nodes from local queue?
-		// nProcessed += processNodes(solver, explorer, 4);
+		nProcessed += processNodes(solver, explorer, 4);
 	}
 	// post-completion tasks by master?
 	// solver.CutResources.printStatistics();
@@ -915,10 +934,17 @@ double Inavap::DDSolver::startSolver(double known_optimal) {
 	vector<Node> cutsetNodes = cutset;
 	uint current = 0;
 	payloads = vector<Payload>(N_WORKERS);
-	for (const auto& node : cutsetNodes) {
-		// round robin.
-		payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
+
+	std::reverse(cutsetNodes.begin(), cutsetNodes.end());
+	for (auto& payload : payloads) {
+		auto node = cutsetNodes.back();
+		cutsetNodes.pop_back();
+		payload.nodes.emplace_back(node);
 	}
+	// for (const auto& node : cutsetNodes) {
+	// 	// round robin.
+	// 	payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
+	// }
 
 	// payloads are ready. launch worker threads.
 	for (uint i = 0; i < N_WORKERS; i++) {
@@ -927,7 +953,7 @@ double Inavap::DDSolver::startSolver(double known_optimal) {
 		workers.emplace_back(&Worker::startWorker, &workersGroup[i], this);
 	}
 	// let main thread work as master, instead of spawning new thread.
-	Master m{networkPtr};
+	Master m{networkPtr,cutsetNodes};
 	m.startMaster(std::ref(*this));
 
 	for (unsigned int i = 0; i < N_WORKERS; i++) {
