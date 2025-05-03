@@ -32,20 +32,22 @@ int main(int argc, char* argv[]) {
 	cout << "C++ version: " << __cplusplus << endl;
 
 	string fileName;
-	// fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_91_20_1.txt";
+	// fileName = "/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_87_20_3.txt";
 	if (argc == 2) fileName = string(argv[1]);
-	test_single(fileName);
-	return 0;
+	fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_93_20_10.txt";
+	// test_single(fileName);
+	// return 0;
 	Network network{fileName};
 	double optimal = solveStochasticModel(&network);
 	cout << "Optimal from stochastic model: " << optimal << endl;
 
+	cout << "Reusing gurobi model between subproblems" << endl;
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 	const auto now = std::chrono::system_clock::now();
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
-	Inavap::DDSolver solver{networkPtr, 8};
-	double solution = solver.start(optimal-10);
+	Inavap::DDSolver solver{networkPtr, 1};
+	double solution = solver.start(optimal-1);
 	return 0;
 }
 

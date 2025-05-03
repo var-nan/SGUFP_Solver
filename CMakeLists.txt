@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h include/statistics.h)
+set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h include/statistics.h include/deppq.h)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.
@@ -40,8 +40,8 @@ if (UNIX)
     set_property(TARGET gurobi110 PROPERTY IMPORTED_LOCATION "${GUROBI_LIB}libgurobi110.so")
 
     add_compile_definitions(SOLVER_STATS)
-    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -g -pthread) # add -O3 flag in final phase. -Wunused
-    target_link_options(SGUFP_Solver PRIVATE -pg -g -pthread)
+    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -ggdb3 -pthread) # add -O3 flag in final phase. -Wunused
+    target_link_options(SGUFP_Solver PRIVATE -pg -ggdb3 -pthread)
 
     find_package(GSL REQUIRED)
     target_link_libraries(SGUFP_Solver PRIVATE GSL::gsl)
@@ -66,6 +66,7 @@ if (UNIX)
 
     # test targets
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+#        set(ENV{ASAN_OPTIONS} suppressions=MyAsan.supp)
         add_compile_definitions(DEBUG)
         message(STATUS "Fetching google test")
         # google test dependency
@@ -99,6 +100,11 @@ if (UNIX)
 
         add_executable(benchCut benchmarks/cut.cpp )
         target_link_libraries(benchCut benchmark::benchmark)
+        add_executable(customQ benchmarks/CustomQueue.cpp)
+        target_link_libraries(customQ benchmark::benchmark)
+
+        add_executable(testPQ tests/test_pq.cpp)
+        target_link_libraries(testPQ GTest::gtest_main)
 
     #    if (CMAKE_BUILD_TYPE STREQUAL "Release")
     #        set_target_properties(testmain PROPERTIES EXCLUDE_FROM_ALL TRUE)
