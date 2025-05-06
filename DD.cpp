@@ -3506,6 +3506,7 @@ double Inavap::RestrictedDDNew::applyOptimalityCut(const Inavap::Cut &cut) {
 
 /* ******************************************************************************************************************** */
 
+// can skip resetting the arc completely. only reset node's incoming and outgoing arcs.
 #define __reset_dd_node(node) {		\
 	node.id = 0;					\
     node.state2 = DOUBLE_MIN;		\
@@ -3536,6 +3537,7 @@ void Inavap::RelaxedDDNew::buildTree(Node node) {
 	// LDDNode root{node};
 	// nodes.insert(make_pair(0, root));
 	LDDNode& root = nodes[0];
+	__reset_dd_node(root);
 	// reset root node's attributes.
 	root.id = 0;
 	root.state2 = DOUBLE_MIN;
@@ -3583,6 +3585,7 @@ void Inavap::RelaxedDDNew::buildTree(Node node) {
 	// LDDNode terminalNode{++lastInserted};
 	terminalId = ++lastInserted;
 	LDDNode& terminalNode = nodes[terminalId];
+	__reset_dd_node(terminalNode);
 	terminalNode.id = terminalId;
 
 	terminalNode.state2 = DOUBLE_MIN;
@@ -3599,6 +3602,7 @@ void Inavap::RelaxedDDNew::buildTree(Node node) {
 
 		uint arcId = ++lastInserted;
 		auto& arc = arcs[arcId];
+		__reset_dd_arc(arc);
 		arc.id = arcId;
 		arc.tail = id;
 		arc.head = terminalId;
@@ -3631,6 +3635,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 		// LDDNode newNode {++lastInserted};
 		auto temp = ++lastInserted;
 		LDDNode& newNode = nodes[temp];
+		__reset_dd_node(newNode);
 		newNode.id = temp;
 		newNode.incomingArcs.reserve(nextLayerSize); // reserve space for incoming arcs.
 
@@ -3645,6 +3650,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 				if (true || !(stateChangesNext && node.states.size() > 1 && state == -1)) { // likely branch taken.
 					auto arcId = ++lastInserted;
 					DDArc& newArc = arcs[arcId];
+					__reset_dd_arc(newArc);
 					newArc.id = arcId;
 					newArc.tail = id;
 					newArc.head = newNode.id;
@@ -3688,12 +3694,14 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 				auto nextId = ++lastInserted;
 				// DDArc childArc{nextId, id, nextId, state};
 				DDArc& childArc = arcs[nextId];
+				__reset_dd_arc(childArc);
 				childArc.id = nextId;
 				childArc.tail = id;
 				childArc.head = nextId;
 				childArc.decision = state;
 				// LDDNode childNode{nextId};
 				LDDNode& childNode = nodes[nextId];
+				__reset_dd_node(childNode);
 				childNode.id = nextId;
 				childNode.incomingArcs.push_back(nextId);
 				childNode.nodeLayer = parent.nodeLayer+1;
@@ -4249,24 +4257,25 @@ vector<Inavap::Node> Inavap::RelaxedDDNew::getCutset(double ub) {
 
 void Inavap::RelaxedDDNew::reset() {
 	// reset all nodes and arc attributes.
-	for (auto& [id, arc] : arcs) {
-		// use memcpy.
-		arc.decision = 0;
-		arc.head = 0;
-		arc.tail = 0;
-		arc.weight = 0;
-		arc.id = 0;
-	}
-
-	for (auto& [id, node] : nodes) {
-		node.id = 0;
-		node.state2 = DOUBLE_MIN;
-		node.states.clear();
-		node.globalLayer = 0;
-		node.nodeLayer = 0;
-		node.incomingArcs.clear();
-		node.outgoingArcs.clear();
-	}
+	// nodes and arcs are reset during tree compilation.
+	// for (auto& [id, arc] : arcs) {
+	// 	// use memcpy.
+	// 	arc.decision = 0;
+	// 	arc.head = 0;
+	// 	arc.tail = 0;
+	// 	arc.weight = 0;
+	// 	arc.id = 0;
+	// }
+	//
+	// for (auto& [id, node] : nodes) {
+	// 	node.id = 0;
+	// 	node.state2 = DOUBLE_MIN;
+	// 	node.states.clear();
+	// 	node.globalLayer = 0;
+	// 	node.nodeLayer = 0;
+	// 	node.incomingArcs.clear();
+	// 	node.outgoingArcs.clear();
+	// }
 
 	for (auto& layer : tree) layer.clear();
 	tree.clear();

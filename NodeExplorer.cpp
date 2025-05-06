@@ -917,7 +917,13 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
 
     double upperBound = node.ub;
 
-    RelaxedDDNew relaxedDD{networkPtr.get()};
+    /* This relaxed dd is reused across multiple invocations of this function. So reset the
+     * tree before processing the node. Usually, reset() should be called at the end of this
+     * function, since there are multiple exit points in this function, it is better to reset
+     * the tree before processing the node, instead of at the exit.
+     */
+    // RelaxedDDNew relaxedDD{networkPtr.get()};
+    relaxedDD.reset();
     relaxedDD.buildTree(node);
 
     /* The cut refinement occurs in the following manner: apply local feasibility cuts, global
