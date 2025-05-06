@@ -733,10 +733,10 @@ namespace Inavap {
 	class RelaxedDDNew {
 
 		enum DDStatus {
-			FEASIBLE = 0x03,
-			INFEASIBLE = 0x2,
 			EXACT = 0x00,
 			NON_EXACT = 0x01,
+			INFEASIBLE = 0x2,
+			FEASIBLE = 0x3,
 		};
 
 		class LDDNode {
@@ -803,6 +803,8 @@ namespace Inavap {
 		double applyOptimalityCut(const Inavap::Cut& cut, double optimal, double upperbound);
 
 		vector<Node> getCutset(double ub);
+
+		void reset();
 
 	};
 }

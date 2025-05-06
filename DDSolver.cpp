@@ -704,13 +704,14 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		addCutsToGlobal(solver, p);
 
 		// process some nodes from local queue?
-		nProcessed += processNodes(solver, explorer, 4);
+		// nProcessed += processNodes(solver, explorer, 4);
 	}
 	// post-completion tasks by master?
 	// solver.CutResources.printStatistics();
 }
 
 void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
+	cout << "Starting worker" << endl;
 
 	/* function: returns true if it is time to read the atomic variable of global optimal, else increases counter. */
 	auto is_poll_time = [](size_t &counter) { // resets counter when reaches limit.

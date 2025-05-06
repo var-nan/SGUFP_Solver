@@ -3506,6 +3506,24 @@ double Inavap::RestrictedDDNew::applyOptimalityCut(const Inavap::Cut &cut) {
 
 /* ******************************************************************************************************************** */
 
+#define __reset_dd_node(node) {		\
+	node.id = 0;					\
+    node.state2 = DOUBLE_MIN;		\
+    node.states.clear();			\
+    node.globalLayer = 0;			\
+    node.nodeLayer = 0;				\
+    node.incomingArcs.clear();		\
+    node.outgoingArcs.clear();		\
+}
+
+#define __reset_dd_arc(arc) {		\
+	arc.decision = 0;				\
+    arc.head = 0;					\
+    arc.tail = 0;					\
+    arc.weight = 0;					\
+    arc.id = 0;						\
+}
+
 void Inavap::RelaxedDDNew::buildTree(Node node) {
 
 	const auto& processingOrder = networkPtr->processingOrder;
@@ -3515,8 +3533,17 @@ void Inavap::RelaxedDDNew::buildTree(Node node) {
 	rootSolution = std::move(node.solutionVector);
 
 	// create root node and insert it.
-	LDDNode root{node};
-	nodes.insert(make_pair(0, root));
+	// LDDNode root{node};
+	// nodes.insert(make_pair(0, root));
+	LDDNode& root = nodes[0];
+	// reset root node's attributes.
+	root.id = 0;
+	root.state2 = DOUBLE_MIN;
+	root.states = node.states;
+	root.incomingArcs.clear();
+	root.outgoingArcs.clear();
+	root.nodeLayer = 0;
+	root.globalLayer = node.globalLayer;
 	// setup root node and root layer.
 	// vector<uint> currentLayer = {0};
 	tree.push_back({0});
@@ -3552,9 +3579,11 @@ void Inavap::RelaxedDDNew::buildTree(Node node) {
 	}
 
 	// build terminal node and terminal layer.
-	vector<uint> terminalLayer;
-	LDDNode terminalNode{++lastInserted};
-	terminalId = terminalNode.id;
+	// vector<uint> terminalLayer;
+	// LDDNode terminalNode{++lastInserted};
+	terminalId = ++lastInserted;
+	LDDNode& terminalNode = nodes[terminalId];
+	terminalNode.id = terminalId;
 
 	terminalNode.state2 = DOUBLE_MIN;
 	/* the node layer, global layer, states, state2, and outgoing arcs are not relevant for the terminal node. */
@@ -3562,16 +3591,26 @@ void Inavap::RelaxedDDNew::buildTree(Node node) {
 	// create incoming arcs to terminal node. current layer now points to the last layer in the tree.
 	for (auto id: tree[index]) { // is it index or index-1?
 		auto& parentNode = nodes[id];
-		DDArc arc {++lastInserted, id, terminalId, 1};
+		// DDArc arc {++lastInserted, id, terminalId, 1};
+		// arc.weight = DOUBLE_MAX;
+		// terminalNode.incomingArcs.push_back(arc.id);
+		// parentNode.outgoingArcs.push_back(arc.id);
+		// arcs.insert(make_pair(arc.id, arc));
+
+		uint arcId = ++lastInserted;
+		auto& arc = arcs[arcId];
+		arc.id = arcId;
+		arc.tail = id;
+		arc.head = terminalId;
+		arc.decision = 1;
 		arc.weight = DOUBLE_MAX;
-		terminalNode.incomingArcs.push_back(arc.id);
-		parentNode.outgoingArcs.push_back(arc.id);
-		arcs.insert(make_pair(arc.id, arc));
+		parentNode.outgoingArcs.push_back(arcId);
+		terminalNode.incomingArcs.push_back(arcId);
 	}
 
-	nodes.insert(make_pair(terminalId, terminalNode));
-	terminalLayer.push_back(terminalId);
-	tree.push_back(terminalLayer);
+	// nodes.insert(make_pair(terminalId, terminalNode));
+	// terminalLayer.push_back(terminalId);
+	tree.push_back({terminalId});
 }
 
 
@@ -3589,9 +3628,13 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 	if (nextLayerSize >= RELAXED_MAX_WIDTH && (nodes[currentLayer.front()].globalLayer < networkPtr->totalLayers-5)) {
 		status = NON_EXACT; // set DD status flag to non-exact.
 
-		LDDNode newNode {++lastInserted};
+		// LDDNode newNode {++lastInserted};
+		auto temp = ++lastInserted;
+		LDDNode& newNode = nodes[temp];
+		newNode.id = temp;
 		newNode.incomingArcs.reserve(nextLayerSize); // reserve space for incoming arcs.
 
+		// optimize the code by using bit representation of states and union operation.
 		set<int16_t> allStates;
 		std::for_each(currentLayer.cbegin(), currentLayer.cend(), [&](uint id) {
 			auto& node = nodes[id];
@@ -3600,10 +3643,16 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 			// create new arc for each state.
 			std::for_each(states.begin(), states.end(), [&](int16_t state) {
 				if (true || !(stateChangesNext && node.states.size() > 1 && state == -1)) { // likely branch taken.
-					DDArc newArc {++lastInserted, id, newNode.id, state};
+					auto arcId = ++lastInserted;
+					DDArc& newArc = arcs[arcId];
+					newArc.id = arcId;
+					newArc.tail = id;
+					newArc.head = newNode.id;
+					newArc.decision = state;
+					// DDArc newArc {++lastInserted, id, newNode.id, state};
 					node.outgoingArcs.push_back(newArc.id);
 					newNode.incomingArcs.push_back(newArc.id);
-					arcs.insert(make_pair(newArc.id, newArc));
+					// arcs.insert(make_pair(newArc.id, newArc));
 				}
 			});
 		});
@@ -3615,7 +3664,7 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 		newNode.globalLayer = someParent.globalLayer + 1;
 		newNode.states = std::vector(allStates.begin(), allStates.end());
 		// newNode.outgoingArcs.reserve(newNode.states.size()); // reserve space for outgoing arcs.
-		nodes.insert(make_pair(newNode.id, newNode));
+		// nodes.insert(make_pair(newNode.id, newNode));
 		tree.push_back({newNode.id});
 		return ;
 	}
@@ -3637,15 +3686,22 @@ void Inavap::RelaxedDDNew::buildNextLayer(uint current, uint &nextLayerSize, uin
 
 				nextLayerSize += newStates.size();
 				auto nextId = ++lastInserted;
-				DDArc childArc{nextId, id, nextId, state};
-				LDDNode childNode{nextId};
+				// DDArc childArc{nextId, id, nextId, state};
+				DDArc& childArc = arcs[nextId];
+				childArc.id = nextId;
+				childArc.tail = id;
+				childArc.head = nextId;
+				childArc.decision = state;
+				// LDDNode childNode{nextId};
+				LDDNode& childNode = nodes[nextId];
+				childNode.id = nextId;
 				childNode.incomingArcs.push_back(nextId);
 				childNode.nodeLayer = parent.nodeLayer+1;
 				childNode.globalLayer = parent.globalLayer+1;
 				childNode.states = std::move(newStates);
 				parent.outgoingArcs.push_back(nextId);
-				arcs.insert(make_pair(nextId, childArc));
-				nodes.insert(make_pair(nextId, childNode));
+				// arcs.insert(make_pair(nextId, childArc));
+				// nodes.insert(make_pair(nextId, childNode));
 				nextLayer.push_back(nextId);
 			}
 		});
@@ -3887,9 +3943,9 @@ uint8_t Inavap::RelaxedDDNew::applyFeasibilityCut(const Inavap::Cut &cut) {
 		if (!arcsToRemoved.empty()) {
 			batchRemoveArcs(arcsToRemoved);
 			// TODO: below loop is not required, since this is already taken care in the above loop.
-			for (size_t layer = 3; layer < llayer-1; layer++) {
-				if (tree[layer].size() == 1 && nodes[tree[layer][0]].incomingArcs.size() == 0) return false;
-			}
+			// for (size_t layer = 3; layer < llayer-1; layer++) {
+			// 	if (tree[layer].size() == 1 && nodes[tree[layer][0]].incomingArcs.size() == 0) return false;
+			// }
 
 		}
 	}
@@ -3986,23 +4042,27 @@ double Inavap::RelaxedDDNew::applyOptimalityCut(const Inavap::Cut &cut, double o
 			batchRemoveArcs(arcsToRemoved);
 		}
 		// TODO: below loop is not needed. comment
-        for (size_t layer = 3; layer < llayer-1; layer++) {
-        	if (tree[layer].size() == 1 && nodes[tree[layer][0]].incomingArcs.size() == 0) return DOUBLE_MIN;
-		}
+  //       for (size_t layer = 3; layer < llayer-1; layer++) {
+  //       	if (tree[layer].size() == 1 && nodes[tree[layer][0]].incomingArcs.size() == 0) return DOUBLE_MIN;
+		// }
 	}
 	return terminalState;
 }
 
 void Inavap::RelaxedDDNew::deleteNode(LDDNode &node) {
 	deletedNodeIds.emplace_back(node.id);
-	nodes.erase(node.id);
+	// Since the nodes are reused, erasing the node from the container is not required. Just update the Tree.
+	// nodes.erase(node.id);
 }
 
 void Inavap::RelaxedDDNew::deleteArc(LDDNode &parent, DDArc &arc, LDDNode &child) {
 	// erase-remove idiom is replaced with erase(). below functions are available since C++20.
 	std::erase(parent.outgoingArcs, arc.id);
 	std::erase(child.incomingArcs, arc.id);
-	arcs.erase(arc.id);
+	/* Removing the id of the arc from the parent's outgoing arcs vector and child's incoming arcs vector is
+	 * sufficient to remove the connection (link) from parent to child. I don't think of any benefit of updating
+	 * the arc's attributes.*/
+	//arcs.erase(arc.id);
 }
 
 void Inavap::RelaxedDDNew::removeNode(uint id, bool isBatch) {
@@ -4138,7 +4198,8 @@ void Inavap::RelaxedDDNew::batchRemoveArcs(const vui &arcIds) {
 		std::erase(tail.outgoingArcs, arcId);
 		// head.incomingArcs.erase(std::find(head.incomingArcs.begin(), head.incomingArcs.end(), arcId));
 		// tail.outgoingArcs.erase(std::find(tail.outgoingArcs.begin(), tail.outgoingArcs.end(), arcId));
-		arcs.erase(arcId);
+		// Reusing the arc objects, so do not remove from the container.
+		// arcs.erase(arcId);
 
 		// if (head.incomingArcs.empty()) removeNode(head.id);
 		// if (tail.outgoingArcs.empty()) removeNode(tail.id);
@@ -4184,4 +4245,36 @@ vector<Inavap::Node> Inavap::RelaxedDDNew::getCutset(double ub) {
 		}
 	}
 	return cutsetNodes;
+}
+
+void Inavap::RelaxedDDNew::reset() {
+	// reset all nodes and arc attributes.
+	for (auto& [id, arc] : arcs) {
+		// use memcpy.
+		arc.decision = 0;
+		arc.head = 0;
+		arc.tail = 0;
+		arc.weight = 0;
+		arc.id = 0;
+	}
+
+	for (auto& [id, node] : nodes) {
+		node.id = 0;
+		node.state2 = DOUBLE_MIN;
+		node.states.clear();
+		node.globalLayer = 0;
+		node.nodeLayer = 0;
+		node.incomingArcs.clear();
+		node.outgoingArcs.clear();
+	}
+
+	for (auto& layer : tree) layer.clear();
+	tree.clear();
+
+	rootSolution.clear();
+	lastInserted = 0;
+	terminalId = 0;
+	startTree = 0;
+	status = DDStatus::EXACT;
+	deletedNodeIds.clear();
 }
