@@ -13,6 +13,7 @@
 #include <utility>
 #include "Network.h"
 // #define private public
+#include <atomic>
 
 using namespace std;
 
@@ -198,7 +199,7 @@ namespace Inavap {
 	static constexpr uint64_t EXTRACT_J			= 0XFFFF00000000;	// Turn on only the J bits of the other operand.
 
 	class Cut {
-	private:
+	public:
 		size_t hash_val;
 		double RHS;
 		// map<tuple<int,int,int>, double> coeff;
@@ -443,6 +444,36 @@ namespace Inavap {
 		// isNewAndOldCutEqual(c, cut);
 		// return Cut{cut.RHS, coeff};
 	}
+
+	class cut_node_t {
+	public:
+		Cut cut;
+		cut_node_t *next = nullptr;
+
+		explicit cut_node_t(const Cut& cut_): cut{cut_.RHS, cut_.coeff}{}
+	};
+
+	class Container {
+		std::atomic<cut_node_t *>head;
+	public:
+		[[nodiscard]] const cut_node_t *get() const { return head.load(std::memory_order_relaxed); }
+
+		void add(cut_node_t *node) {
+
+			node->next = head.load(std::memory_order_relaxed);
+			while (!head.compare_exchange_weak(node->next, node,
+				std::memory_order_relaxed, std::memory_order_relaxed)){}
+
+			/* // use below code if adding cuts in a batch.
+			cut_node_t *end = node;
+			while (end->next) end = end->next; // find end of list.
+			end->next = head.load(std::memory_order_relaxed);
+
+			while (!head.compare_exchange_weak(end->next, node,
+				std::memory_order_relaxed, std::memory_order_relaxed));
+			*/
+		}
+	};
 }
 
 //#endif //SGUFP_SOLVER_CUT_H

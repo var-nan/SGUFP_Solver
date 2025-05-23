@@ -32,9 +32,9 @@ int main(int argc, char* argv[]) {
 	cout << "C++ version: " << __cplusplus << endl;
 
 	string fileName;
-	// fileName = "/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_87_20_3.txt";
-	if (argc == 2) fileName = string(argv[1]);
-	fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_93_20_10.txt";
+	fileName = "/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_87_20_3.txt";
+	// if (argc == 2) fileName = string(argv[1]);
+	// fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_93_20_10.txt";
 	// test_single(fileName);
 	// return 0;
 	Network network{fileName};
@@ -46,8 +46,8 @@ int main(int argc, char* argv[]) {
 	const auto now = std::chrono::system_clock::now();
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
-	Inavap::DDSolver solver{networkPtr, 1};
-	double solution = solver.start(optimal-1);
+	Inavap::DDSolver solver{networkPtr, 4};
+	double solution = solver.start(optimal-100000);
 	return 0;
 }
 

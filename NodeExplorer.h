@@ -125,8 +125,7 @@ namespace Inavap {
             env.set(GRB_IntParam_Threads,1);
         }
 
-        OutObject process(Node node, double optimalLB,
-            const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts);
+        OutObject process(Node node, double optimalLB, Container &feasCuts, Container &optCuts);
 
         OutObject process2(Node node, double optimalLB);
 

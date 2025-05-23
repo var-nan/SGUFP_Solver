@@ -337,9 +337,9 @@ namespace Inavap {
             explicit Worker(uint id_, const shared_ptr<Network>& networkPtr_): id{id_}, networkPtr{networkPtr_}{}
             void startWorker(DDSolver *solver);
             void printStats() const noexcept {
-                auto str = "Worker: " + std::to_string(id) +" . FCC: " + std::to_string(feasCutsGlobal.size())
-                    + ". OCC: " + std::to_string(optCutsGlobal.size()) +"\n";
-                cout << str;
+                // auto str = "Worker: " + std::to_string(id) +" . FCC: " + std::to_string(feasCutsGlobal.size())
+                //     + ". OCC: " + std::to_string(optCutsGlobal.size()) +"\n";
+                // cout << str;
             }
 
             size_t nQueue = 0;                  // #nodes entered queue.
@@ -377,6 +377,9 @@ namespace Inavap {
             };
             void startMaster (DDSolver &solver);
         };
+
+        Container feasCutsGlobal;
+        Container optCutsGlobal;
 
         vector<Payload> payloads; // individual payloads for worker threads.
         CutResource CutResources;
@@ -432,11 +435,18 @@ namespace Inavap {
 
             cout << endl;
             // print cuts information.
-            cout << "Cuts (feasibility, optimality): " << endl;
-            for (const auto& worker : workersGroup) {
-                cout << "(" << worker.feasCutsGlobal.size() << ", " << worker.optCutsGlobal.size() << ")" << "  ";
-            }
-            cout << endl;
+            auto get_size = [](const Container& cont) {
+                const auto *start = cont.get();
+                size_t n = 0;
+                while (start) {
+                    n++;
+                    start = start->next;
+                }
+                return n;
+            };
+            size_t nOpt = get_size(optCutsGlobal);
+            size_t nFeas = get_size(feasCutsGlobal);
+            cout << "Cuts (feasibility, optimality): " << nFeas <<" , " << nOpt << endl;
 
             cout << asterisk << endl;
 

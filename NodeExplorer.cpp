@@ -913,7 +913,7 @@ Inavap::OutObject Inavap::NodeExplorer::process2(Node node, double optimalLB) {
 }
 
 Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
-    const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts) {
+    Container &globalFeasCuts, Container &globalOptCuts) {
 
     double upperBound = node.ub;
 
@@ -926,32 +926,20 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
      * the node explorer gets a new node to explore.
      */
 
+    const auto *current_f_cut = globalFeasCuts.get();
+    const auto *current_opt_cut = globalOptCuts.get();
+
     if (relaxedDD.isTreeExact()) {
 
-        for (const auto& cut : feasibilityCuts) {
-            if (!relaxedDD.applyFeasibilityCut(cut)) {
+        for ( ; current_f_cut; current_f_cut = current_f_cut->next) {
+            if (!relaxedDD.applyFeasibilityCut(current_f_cut->cut))
                 return PRUNED_BY_FEASIBILITY_CUT;
-            }
         }
 
-        for (const auto& contPtr : globalFCuts) {
-            for (const auto& cut : *contPtr) {
-                if (!relaxedDD.applyFeasibilityCut(cut))
-                    return PRUNED_BY_FEASIBILITY_CUT;
-            }
-        }
-
-        for (const auto& cut: optimalityCuts) {
-            upperBound = relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound);
+        for ( ; current_opt_cut; current_opt_cut = current_opt_cut->next) {
+            upperBound = relaxedDD.applyOptimalityCut(current_opt_cut->cut, optimalLB, upperBound);
             if (upperBound <= optimalLB)
                 return PRUNED_BY_OPTIMALITY_CUT;
-        }
-
-        for (const auto& contPtr : globalOCuts) {
-            for (const auto& cut : *contPtr) {
-                upperBound = relaxedDD.applyOptimalityCut(cut,optimalLB, upperBound);
-                if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
-            }
         }
 
         /* New cuts are generated only when the tree is exact. */
@@ -966,13 +954,14 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             allSolutions.push_back(path);
 
             auto [cutType, cut] = solver.solveSubProblem(path);
+            cut_node_t *new_cut = new cut_node_t{cut};
             if (cutType == FEASIBILITY) {
-                feasibilityCuts.insertCut(cut);
+                globalFeasCuts.add(new_cut);
                 if (!relaxedDD.applyFeasibilityCut(cut))
                     return PRUNED_BY_FEASIBILITY_CUT;
             }
             else {
-                optimalityCuts.insertCut(cut);
+                globalOptCuts.add(new_cut);
                 upperBound = relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound);
                 if (upperBound <= optimalLB)
                     return PRUNED_BY_OPTIMALITY_CUT;
@@ -982,28 +971,14 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
 
     /* Non-Exact Tree */
 
-    for (const auto& cut: feasibilityCuts) {
-        if (!relaxedDD.applyFeasibilityCut(cut))
+    for ( ; current_f_cut; current_f_cut = current_f_cut->next) {
+        if (!relaxedDD.applyFeasibilityCut(current_f_cut->cut))
             return PRUNED_BY_FEASIBILITY_CUT;
     }
 
-    for (const auto& containerPtr : globalFCuts) {
-        for (const auto& cut : *containerPtr) {
-            if (!relaxedDD.applyFeasibilityCut(cut))
-                return PRUNED_BY_FEASIBILITY_CUT;
-        }
-    }
-
-    for (const auto& cut: optimalityCuts) {
-        upperBound = min(relaxedDD.applyOptimalityCut(cut,optimalLB, upperBound), upperBound);
+    for ( ; current_opt_cut; current_opt_cut = current_opt_cut->next) {
+        upperBound = min(relaxedDD.applyOptimalityCut(current_opt_cut->cut,optimalLB, upperBound), upperBound);
         if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
-    }
-
-    for (const auto& contPtr : globalOCuts) {
-        for (const auto& cut : *contPtr) {
-            upperBound = min(relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound), upperBound);
-            if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
-        }
     }
 
     return {DOUBLE_MIN, upperBound, relaxedDD.getCutset(upperBound), OutObj::STATUS_OP::SUCCESS};

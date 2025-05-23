@@ -557,16 +557,9 @@ size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::
 	// worker-mode.
 	double zOpt = solver.optimal.load(memory_order::relaxed);
 	size_t nProcessed = 0;
-	// update global feasibility and optimality cuts
-	size_t prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
-	if (solver.CutResources.getCount() > prevCount) { // new cuts are added to global space.
-		auto res = solver.CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
-		if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
-		if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
-	}
 
 	while (!nodeQueue.empty() && n--) {
-		auto result = explorer.process(nodeQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
+		auto result = explorer.process(nodeQueue.popNode(), zOpt, solver.feasCutsGlobal, solver.optCutsGlobal);
 		nProcessed++;
 		// TODO: what to do with local cuts?
 		if (result.status == OutObject::STATUS_OP::SUCCESS) {
@@ -602,20 +595,14 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 		// number of idle workers, and number of processing workers.
 		uint16_t idle = 0, processing = 0;
 
-		// containers to hold the cuts shared by the workers.
-		vector<CutContainer> feasibilityCuts;
-		vector<CutContainer> optimalityCuts;
-
 		// iterate through all workers.
 		for (uint16_t i = 0; i < solver.N_WORKERS; i++) {
 			auto& worker = solver.payloads[i];
-			pair<CutContainer, CutContainer> workerCuts;
 			uint8_t watchStatus = 0;
 			{
 				/* Worker might share cuts anytime. Instead of double locking for cuts and status check, acquire lock
 				 * on entire payload before operation starts.*/
 				scoped_lock l{worker.lock};
-				workerCuts = func(worker);
 				// st cannot be reordered with the below instructions. (invariant).
 				auto st = worker.payloadStatus.load(memory_order::relaxed);
 				if (st == Payload::WORKER_WORKING) {
@@ -657,9 +644,6 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 				}
 			}
 			if (watchStatus) worker.cv.notify_one();
-			// add cuts to global.
-			if (!workerCuts.first.empty()) feasibilityCuts.push_back( std::move(workerCuts.first));
-			if (!workerCuts.second.empty()) optimalityCuts.push_back(std::move(workerCuts.second));
 		}
 
 		if (idle == solver.N_WORKERS && nodeQueue.empty()) {
@@ -688,23 +672,8 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 
 		// thread sleep?
 
-		// update local cuts to global.
-		// add current local feasibility and optimality cuts to global.
-		if ((explorer.feasibilityCuts.size() - prevFeasShared) > F_CUT_CACHE_SIZE && !feasibilityCuts.empty()) {
-			auto temp = explorer.feasibilityCuts.seek(prevFeasShared);
-			feasibilityCuts.push_back(temp);
-			prevFeasShared = explorer.feasibilityCuts.size();
-		}
-		if ((explorer.optimalityCuts.size() - prevOptShared) > O_CUT_CACHE_SIZE && !optimalityCuts.empty()) {
-			auto temp = explorer.optimalityCuts.seek(prevOptShared);
-			optimalityCuts.push_back(temp);
-			prevOptShared = explorer.optimalityCuts.size();
-		}
-		auto p = make_pair(feasibilityCuts, optimalityCuts);
-		addCutsToGlobal(solver, p);
-
 		// process some nodes from local queue?
-		nProcessed += processNodes(solver, explorer, 4);
+		// nProcessed += processNodes(solver, explorer, 4);
 	}
 	// post-completion tasks by master?
 	// solver.CutResources.printStatistics();
@@ -777,17 +746,9 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 		while (!localQueue.empty()) {
 			// cout << "worker: " << id << " processing " << endl;
 
-			// get updated cuts from global space.
-			if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
-				auto res = solver->CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
-				if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
-				if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
-				prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
-			}
-
 			Node node = localQueue.popNode();
 			if (node.ub <= zOpt) {nPrunedByBound++;continue;}
-			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
+			auto result = explorer.process(node, zOpt, solver->feasCutsGlobal, solver->optCutsGlobal);
 
 			#ifdef SOLVER_COUNTERS
 			nProcessed			+= (result.status == OutObject::STATUS_OP::SUCCESS);
@@ -822,23 +783,6 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 					localQueue.pushNodes(result.nodes);
 			}
 
-			// look into explorer's local cuts.
-			if (((explorer.feasibilityCuts.size() + explorer.optimalityCuts.size()) - prevLocalCount) > LOCAL_CUTS_LIMIT) {
-				scoped_lock l{payload.lock};
-				if ((explorer.feasibilityCuts.size() - nFeasShared) > F_CUT_CACHE_SIZE) {
-					if (payload.fCuts.empty())
-						payload.fCuts = explorer.feasibilityCuts.seek(nFeasShared);
-					else payload.fCuts.addContainer(explorer.feasibilityCuts.seek(nFeasShared));
-					nFeasShared = explorer.feasibilityCuts.size();
-				}
-				if ((explorer.optimalityCuts.size() - nOptShared) > O_CUT_CACHE_SIZE) {
-					if (payload.oCuts.empty())
-						payload.oCuts = explorer.optimalityCuts.seek(nOptShared);
-					else payload.oCuts.addContainer(explorer.optimalityCuts.seek(nOptShared));
-					nOptShared = explorer.optimalityCuts.size();
-				}
-				prevLocalCount = explorer.optimalityCuts.size() + explorer.feasibilityCuts.size();
-			}
 
             // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
 			// TODO: instead of checking in every iteration, check periodically
@@ -960,6 +904,19 @@ double Inavap::DDSolver::startSolver(double known_optimal) {
 		if (workers[i].joinable()) workers[i].join();
 	}
 
+	// delete cuts?
+	auto *start = optCutsGlobal.get();
+	while (start) {
+		auto *temp = start->next;
+		delete start;
+		start = temp;
+	}
+	auto *start2 = feasCutsGlobal.get();
+	while (start2) {
+		auto *temp = start2->next;
+		delete start2;
+		start2 = temp;
+	}
 	return optimal.load();
 
 	//  TODO: post processing needed. (clean up resources).
