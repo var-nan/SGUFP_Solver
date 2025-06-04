@@ -456,13 +456,13 @@ namespace Inavap {
 	class Container {
 		std::atomic<cut_node_t *>head;
 	public:
-		[[nodiscard]] const cut_node_t *get() const { return head.load(std::memory_order_relaxed); }
+		[[nodiscard]] const cut_node_t *get() const { return head.load(std::memory_order_acquire); }
 
 		void add(cut_node_t *node) {
 
 			node->next = head.load(std::memory_order_relaxed);
 			while (!head.compare_exchange_weak(node->next, node,
-				std::memory_order_relaxed, std::memory_order_relaxed)){}
+				std::memory_order_release, std::memory_order_relaxed)){}
 
 			/* // use below code if adding cuts in a batch.
 			cut_node_t *end = node;
@@ -472,6 +472,15 @@ namespace Inavap {
 			while (!head.compare_exchange_weak(end->next, node,
 				std::memory_order_relaxed, std::memory_order_relaxed));
 			*/
+		}
+		~Container() {
+			// free all cuts.
+			cut_node_t *current = head.load(std::memory_order_acquire);
+			while ((current)) {
+				cut_node_t *next = current->next;
+				delete current;
+				current = next;
+			}
 		}
 	};
 }
