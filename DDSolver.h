@@ -18,6 +18,7 @@
 #include <bit>
 #include "include/statistics.h"
 #include "include/deppq.h"
+#include <cassert>
 
 #ifndef POLL_FREQUENCY
 #define POLL_FREQUENCY 512
@@ -257,8 +258,38 @@ const unsigned int NUM_WORKERS = 3;
 //     void startPThreadSolver();
 // };
 
+#include "include/lock_free_queue.h"
 
 namespace Inavap {
+
+    static llist convert(const vector<Node>& nodes) {
+        lf_node *start = new Node();
+        lf_node *current = start;
+
+        for (int i = 0; i < nodes.size()-1; i++) {
+            const auto& tnode = nodes[i];
+            current->globalLayer = tnode.globalLayer;
+            current->ub = tnode.ub;
+            current->solutionVector = tnode.solutionVector;
+            current->states = tnode.states;
+            current->next = new Node();
+            current = current->next;
+        }
+
+        const auto& last = nodes.back();
+        current->globalLayer = last.globalLayer;
+        current->ub = last.ub;
+        current->solutionVector = last.solutionVector;
+        current->states = last.states;
+        const lf_node *cur2 = start;
+        for (int i = 0; i < nodes.size(); i++) {
+            assert(cur2 != nullptr);
+            cur2 = cur2->next;
+        }
+        assert(start != nullptr && current != nullptr);
+        // current->next = nullptr;
+        return {start, current, nodes.size()};
+    }
 
     class DDSolver {
 
@@ -268,22 +299,25 @@ namespace Inavap {
         class Payload {
         public:
             enum STATUS {
-                WORKER_WORKING = 0X1,
-                WORKER_NEEDS_NODES = 0X2,
-                WORKER_SHARED_NODES = 0X4,
-                NOT_ENOUGH_NODES_TO_SHARE = 0X8,
-                MASTER_NEEDS_NODES = 0X10,
-                MASTER_ASSIGNED_NODES = 0X20,
-                MASTER_RECEIVED_NODES = 0X40,
-                SOLVER_FINISHED = 0X80
+                WORKER_WORKING = 0X1u,
+                WORKER_NEEDS_NODES = 0X2u,
+                WORKER_SHARED_NODES = 0X4u,
+                NOT_ENOUGH_NODES_TO_SHARE = 0X8u,
+                MASTER_NEEDS_NODES = 0X10u,
+                MASTER_ASSIGNED_NODES = 0X20u,
+                MASTER_RECEIVED_NODES = 0X40u,
+                SOLVER_FINISHED = 0X80u
             };
-            vector<Node> nodes;
+            // vector<Node> nodes;
             uint id = 0;
-            std::mutex lock;
-            std::condition_variable cv;
-            std::atomic<uint> payloadStatus;
-            CutContainer fCuts;
-            CutContainer oCuts;
+            // std::mutex lock;
+            // std::condition_variable cv;
+            std::atomic<uint> payloadStatus = Payload::WORKER_WORKING;
+            // CutContainer fCuts;
+            // TODO: separate payload status and private queue. master only access the private when adding or removing nodes.
+            // CutContainer oCuts;
+            char padding[16];
+            lf_queue private_queue;
 
             Payload() = default;
             vector<Node> getNodes(uint8_t &done);
@@ -360,7 +394,7 @@ namespace Inavap {
         };
 
         class Master {
-            NodeQueue nodeQueue;
+            master_queue nodeQueue;
             vector<Cut> tempOptCuts;
             vector<Cut> tempFeasCuts; // to be published global later.
             vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
@@ -372,14 +406,15 @@ namespace Inavap {
             size_t processNodes(DDSolver &solver, NodeExplorer &explorer, size_t n);
 
         public:
-            explicit Master(const shared_ptr<Network>& networkPtr_, const std::vector<Node> &cutsetNodes) : networkPtr{networkPtr_} {
-                nodeQueue.pushNodes(cutsetNodes);
+            explicit Master(const shared_ptr<Network>& networkPtr_, llist& master_nodes) : networkPtr{networkPtr_} {
+                nodeQueue.push(master_nodes);
             };
             void startMaster (DDSolver &solver);
         };
 
         Container feasCutsGlobal;
         Container optCutsGlobal;
+        lf_queue globalQueue;
 
         vector<Payload> payloads; // individual payloads for worker threads.
         CutResource CutResources;

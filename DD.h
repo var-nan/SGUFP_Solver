@@ -460,6 +460,7 @@ namespace Inavap {
 		double lb;
 		double ub;
 		uint16_t globalLayer;
+		Node *next = nullptr;
 
 		Node(): lb{std::numeric_limits<double>::lowest()}, ub{std::numeric_limits<double>::lowest()}, globalLayer{0} {}
 
