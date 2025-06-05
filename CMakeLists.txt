@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
 set(SOURCES Network.cpp DD.cpp Cut.h grb.cpp DDSolver.cpp NodeExplorer.cpp optimized.cpp OriginalProblem.h
-        include/statistics.h include/deppq.h include/lock_free_queue.h)
+        include/statistics.h include/lock_free_queue.h)
 add_executable(SGUFP_Solver main.cpp ${SOURCES})
 
 # preprocessor macros.

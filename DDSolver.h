@@ -17,7 +17,6 @@
 #include "optimized.h"
 #include <bit>
 #include "include/statistics.h"
-#include "include/deppq.h"
 #include <cassert>
 
 #ifndef POLL_FREQUENCY
@@ -434,7 +433,7 @@ namespace Inavap {
             workersGroup.reserve(N_WORKERS);
         }
 
-        double start(double opt);
+        std::pair<double,double> start(double opt);
 
         double startSolver(double optimal);
 

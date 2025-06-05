@@ -860,7 +860,7 @@ double Inavap::DDSolver::startSolver(double known_optimal) {
 
 }
 
-double Inavap::DDSolver::start(double known_opt) {
+std::pair<double,double> Inavap::DDSolver::start(double known_opt) {
 
 	const auto startTime = std::chrono::high_resolution_clock::now();
 	double solution = startSolver(known_opt);
@@ -878,7 +878,7 @@ double Inavap::DDSolver::start(double known_opt) {
 	std::cout << "Optimal solution: " << solution
 		<< ". Explored "<< totalQueueNodes << " nodes (entire search space) in " << duration_seconds.count() << " seconds." << endl;
 	std::cout << "Threads : " << N_WORKERS << " Workers and 1 Master." << std::endl;
-	return solution;
+	return {solution, duration_seconds.count()};
 }
 
 void Inavap::DDSolver::NodeQueue::pushNode(Node node) {
