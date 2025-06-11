@@ -73,7 +73,7 @@ public:
 
     [[nodiscard]] size_t get_size() const noexcept { return size; }
 
-    [[nodiscard]] bool empty() const noexcept { return !size; }
+    [[nodiscard]] bool empty() const noexcept { return !(head); }
 };
 
 class lf_queue {
@@ -133,9 +133,15 @@ public:
         size_t rem = sz - n_skip; // number of nodes popped from the queue from the end.
         size_t k = n_skip;
 
-        lf_node *start = head; // need SC here.
+        lf_node *start = head.load(); // memory_order::acquire should also work.
 
-        while (--n_skip && start->next) start = start->next;
+        while (n_skip && start) {
+            start = start->next;
+            n_skip--;
+        }
+        // while (--n_skip && start && start->next) start = start->next;
+
+        if (n_skip || !start) return {nullptr, nullptr, 0};
 
         size_t ssz = size.load(); // memory order: acquire
         if (ssz <= (sz - (k>>1))) {

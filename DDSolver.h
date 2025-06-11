@@ -491,9 +491,9 @@ namespace Inavap {
                             << ", "<< worker.nPrunedByBound << ")" << "  ";
             } cout << endl;
             cout << asterisk << endl;
-            std::cout << "Waiting Time (milliseconds): ";
+            std::cout << "Waiting Time (seconds): ";
             for (auto t: sleepDurations) {
-                std::cout << t << "   ";
+                std::cout << (t/1000) << "   ";
             }
             std::cout<< endl<< asterisk << std::endl;
             std::cout << std::endl;

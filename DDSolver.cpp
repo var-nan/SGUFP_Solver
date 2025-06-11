@@ -560,9 +560,10 @@ size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::
 
 	while (!nodeQueue.empty() && n--) {
 		lf_node *node = nodeQueue.pop();
+		if (node->ub <= zOpt) continue;
+		zOpt = solver.optimal.load(memory_order::relaxed);
 		auto result = explorer.process(*node, zOpt, solver.feasCutsGlobal, solver.optCutsGlobal);
 		nProcessed++;
-		// TODO: what to do with local cuts?
 		if (result.status == OutObject::STATUS_OP::SUCCESS) {
 			if (result.lb > zOpt) {
 				while ((!solver.optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)) && (zOpt < result.lb));
@@ -601,19 +602,11 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 
 			if (st == Payload::WORKER_NEEDS_NODES) { // worker should be in waiting state.
 				// check local queue and send them to queue if queue is not empty
-				// cout<< "master: Worker " << i << " needs nodes" << endl;
 				size_t q_size = nodeQueue.get_size();
 				if (q_size) {
 					size_t k = (q_size &1) ? (1+ q_size>>1) : q_size>>1; // TODO; fill this.
 					// assign nodes to worker.
 					llist new_list = nodeQueue.pop_k(k);
-
-					// {
-					// 	size_t x = 0;
-					// 	for (const lf_node *begin = new_list.start; (begin) ; begin = begin->next) x++;
-					// 	assert(x == new_list.n && x > 0);
-					// 	if (!new_list.start || !new_list.end || !new_list.n) {cout << "Empty list" << endl;}
-					// }
 					worker.private_queue.push(new_list);
 
 					// signal worker
@@ -623,7 +616,6 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 					processing++;
 				}
 				else {
-					// cout << "master queue is empty" << endl;
 					idle++;
 					worker_status[i] = Payload::WORKER_NEEDS_NODES;
 				}
@@ -823,7 +815,7 @@ double Inavap::DDSolver::startSolver(double known_optimal) {
 	// }
 	// nodes = {st, end, sz};
 	// reserve last nodes to the master.
-	for (uint i = 0; i < (sz-(sz%N_WORKERS)); i++) {
+	for (uint i = 0; i < (sz-N_WORKERS); i++) {
 		// insert only to worker payloads.
 		llist worker_nodes = {st, st, 1};
 		lf_node *temp = st->next;
@@ -831,7 +823,7 @@ double Inavap::DDSolver::startSolver(double known_optimal) {
 		st =temp;
 	}
 	// insert to master paylaod.
-	nodes = {st, end, sz%N_WORKERS};
+	nodes = {st, end, N_WORKERS};
 
 	// payloads are ready. launch worker threads.
 	for (uint i = 0; i < N_WORKERS; i++) {
