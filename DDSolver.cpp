@@ -589,7 +589,7 @@ void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
 	for (;;) {
 		// if nodeQueue is not empty, process some ndoes
 		if (!nodeQueue.empty()) {
-			nProcessed += processNodes(solver, explorer, 4);
+			nProcessed += processNodes(solver, explorer, 2);
 		}
 		// number of idle workers, and number of processing workers.
 		uint16_t idle = 0, processing = 0;
@@ -781,8 +781,6 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 			break;
 		}
 	}
-
-	cout << "finished: " << payload.id << endl;
 }
 
 /**

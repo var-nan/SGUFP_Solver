@@ -20,7 +20,7 @@
 #include <cassert>
 
 #ifndef POLL_FREQUENCY
-#define POLL_FREQUENCY 512
+#define POLL_FREQUENCY 4
 #endif
 
 #ifndef LOCAL_CUTS_LIMIT

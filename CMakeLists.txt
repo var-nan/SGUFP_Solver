@@ -44,8 +44,6 @@ if (UNIX)
     target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -pg -ggdb3 -pthread) # add -O3 flag in final phase. -Wunused
     target_link_options(SGUFP_Solver PRIVATE -pg -ggdb3 -pthread)
 
-    find_package(GSL REQUIRED)
-    target_link_libraries(SGUFP_Solver PRIVATE GSL::gsl)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wall -Wextra -Wpedantic -Werror -Wshadow -Wnull-dereference)
 #    target_compile_options(SGUFP_Solver PRIVATE -Wuseless-cast -Wduplicated-cond -Wduplicated-branches -Wold-style-cast)
 #    target_compile_options(SGUFP_Solver PRIVATE -fsanitize=pointer-subtract -fsanitize=address)
@@ -68,6 +66,8 @@ if (UNIX)
     # test targets
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 #        set(ENV{ASAN_OPTIONS} suppressions=MyAsan.supp)
+        find_package(GSL REQUIRED)
+        target_link_libraries(SGUFP_Solver PRIVATE GSL::gsl)
         add_compile_definitions(DEBUG)
         message(STATUS "Fetching google test")
         # google test dependency
