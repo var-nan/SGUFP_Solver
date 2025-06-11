@@ -407,7 +407,8 @@ namespace Inavap {
         public:
             explicit Master(const shared_ptr<Network>& networkPtr_, llist& master_nodes) : networkPtr{networkPtr_} {
                 nodeQueue.push(master_nodes);
-            };
+            }
+            explicit Master(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}{}
             void startMaster (DDSolver &solver);
         };
 
