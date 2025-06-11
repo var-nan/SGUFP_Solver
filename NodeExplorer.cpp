@@ -917,7 +917,8 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
 
     double upperBound = node.ub;
 
-    RelaxedDDNew relaxedDD{networkPtr.get()};
+    /* this relaxed DD is reused across multiple invocations of this function. tree is automatically
+     * reset to default, before compiling the new tree */
     relaxedDD.buildTree(node);
 
     /* The cut refinement occurs in the following manner: apply local feasibility cuts, global

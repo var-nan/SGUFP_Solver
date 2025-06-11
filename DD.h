@@ -734,10 +734,10 @@ namespace Inavap {
 	class RelaxedDDNew {
 
 		enum DDStatus {
-			FEASIBLE = 0x03,
-			INFEASIBLE = 0x2,
 			EXACT = 0x00,
 			NON_EXACT = 0x01,
+			INFEASIBLE = 0x2,
+			FEASIBLE = 0x03,
 		};
 
 		class LDDNode {
@@ -790,6 +790,8 @@ namespace Inavap {
 		void updateTree();
 
 		Path getPathForNode(uint id) const;
+
+		void reset();
 
 	public:
 		explicit RelaxedDDNew(const Network *pointer) : networkPtr{pointer}{}

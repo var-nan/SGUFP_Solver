@@ -113,6 +113,7 @@ namespace Inavap {
         GRBEnv env = GRBEnv();
         const shared_ptr<Network> networkPtr;
         GuroSolver solver;
+        RelaxedDDNew relaxedDD;
 
     public:
         CutContainer feasibilityCuts; // local feasibility cuts.
@@ -120,7 +121,8 @@ namespace Inavap {
         // vector<CutContainer *> globalFCuts;
         // vector<CutContainer *> globalOCuts;
 
-        explicit NodeExplorer(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_},solver{networkPtr, env} {
+        explicit NodeExplorer(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_},
+            solver{networkPtr, env}, relaxedDD{networkPtr_.get()} {
             env.set(GRB_IntParam_OutputFlag,0);
             env.set(GRB_IntParam_Threads,1);
         }
