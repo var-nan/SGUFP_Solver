@@ -37,6 +37,14 @@ public:
         size += n;
     }
 
+    lf_node *pop() {
+        if (!head) return nullptr;
+        lf_node *rv = head;
+        head = head->next;
+        size--;
+        rv->next = nullptr;
+        return rv;
+    }
 
     /**
      * Returns n nodes from the master's node queue. The return type is a tuple of three
@@ -114,7 +122,7 @@ public:
      * @param proportion - proportion of nodes to pop from worker queue.
      * @return llist {start,end, n}
      */
-    [[gnu::optimize("O0")]] llist m_pop(double proportion) {
+    llist m_pop(double proportion) {
 
         proportion = 1 - proportion; // % of nodes left in queue after successful completion of this operation.
 
@@ -136,13 +144,17 @@ public:
 
         lf_node *begin = start->next;
         start->next = nullptr;
-        size.fetch_sub(rem);
 
         // reach last of the list.
         lf_node *end = begin;
-        while (end->next) end = end->next;
-
-        return {begin, end,rem};
+        size_t count = 0;
+        while (end) {
+            count++;
+            if (!end->next) break;
+            end = end->next;
+        }
+        size.fetch_sub(count);
+        return {begin, end,count};
     }
 };
 
