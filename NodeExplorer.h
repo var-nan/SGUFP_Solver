@@ -78,15 +78,21 @@ namespace Inavap {
 
     /* Return Object from the Node Explorer to the DDSolver. */
     using OutObject = struct OutObj{
+        enum STATUS_OP {
+            SUCCESS = 0X0,
+            PRUNED_BY_FEASIBILITY_CUT = 0X1,
+            PRUNED_BY_OPTIMALITY_CUT = 0X2,
+        };
+
         double lb = std::numeric_limits<double>::lowest();
         /* reason: new (empty) nodes should not be processed (or sent to queue) if not initialized. */
         double ub = std::numeric_limits<double>::lowest();
         vector<Node> nodes;
         uint16_t status; // status bits after processing the node.
         /* this will hold the status of the node explorer operation on the given node.
-         * 0X0 - fail
-         * 0X1 - success
-         * 0X2 - Success (with empty nodes returned).
+         * 0X0  - Success
+         * 0X1  - Pruned by Feasibility cut
+         * 0X11 - Pruned by Optimality cut
          */
 
         // OutObj() = default;
@@ -96,13 +102,18 @@ namespace Inavap {
 
     };
 
-    static auto INVALID_OBJECT = OutObject{std::numeric_limits<double>::lowest(),
-                                                std::numeric_limits<double>::lowest(),
-                                                    {}, false};
+    static auto INVALID_OBJECT              = OutObject{DOUBLE_MIN, DOUBLE_MIN,
+        {}, OutObj::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT};
+    static auto PRUNED_BY_FEASIBILITY_CUT   = OutObject{DOUBLE_MIN, DOUBLE_MIN,
+        {}, OutObj::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT};
+    static auto PRUNED_BY_OPTIMALITY_CUT    = OutObject{DOUBLE_MIN, DOUBLE_MIN,
+        {}, OutObj::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT};
 
     class NodeExplorer {
         GRBEnv env = GRBEnv();
         const shared_ptr<Network> networkPtr;
+        GuroSolver solver;
+        RelaxedDDNew relaxedDD;
 
     public:
         CutContainer feasibilityCuts; // local feasibility cuts.
@@ -110,15 +121,18 @@ namespace Inavap {
         // vector<CutContainer *> globalFCuts;
         // vector<CutContainer *> globalOCuts;
 
-        explicit NodeExplorer(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_} {
+        explicit NodeExplorer(const shared_ptr<Network>& networkPtr_): networkPtr{networkPtr_},
+            solver{networkPtr, env}, relaxedDD{networkPtr_.get()} {
             env.set(GRB_IntParam_OutputFlag,0);
             env.set(GRB_IntParam_Threads,1);
         }
 
-        OutObject process(Node node, double optimalLB,
-            const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts);
+        OutObject process(Node node, double optimalLB, Container &feasCuts, Container &optCuts);
 
         OutObject process2(Node node, double optimalLB);
+
+        OutObject processX3(Node node, double optimalLB,
+            const vector<CutContainer *> &globalFCuts, const vector<CutContainer *> &globalOCuts);
 
     };
 }

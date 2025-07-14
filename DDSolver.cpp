@@ -510,45 +510,36 @@ void Inavap::DDSolver::Master::addCutsToGlobal(DDSolver &solver, pair<vector<Ina
 
 	size_t nfCuts = accumulate(cuts.first.begin(), cuts.first.end(), 0,
 		[](size_t sum, const CutContainer &cont) { return sum + cont.size(); });
-	// size_t nfCuts = 0;
-	// for (const auto &cutContainer : cuts.first) {
-	// 	nfCuts += cutContainer.size();
-	// }
-
-	// TODO: add master's local cuts to the global.
 
 	if (nfCuts > FEASIBILITY_CONTAINER_CAPACITY) {
-		uint nContainers = static_cast<uint> (floor(nfCuts/FEASIBILITY_CONTAINER_CAPACITY));
-		if (nContainers) {
-			feasibilityPointers = vector<CutContainer *>(nContainers);
-			uint c_index = 0;
-			uint n_so_far = 0;
-			for (auto& container : cuts.first) {
-				for (auto&& cut : container) { // don't know if it causes problem?
-					feasibilityPointers[c_index]->insertCut(std::move(cut));
-					n_so_far++;
-					if (n_so_far == FEASIBILITY_CONTAINER_CAPACITY) c_index++;
-				}
-			}
-		}
+		uint nContainers = static_cast<uint> (ceil((1.0*nfCuts)/FEASIBILITY_CONTAINER_CAPACITY));
+		for (auto i = 0; i < nContainers; i++)
+			feasibilityPointers.push_back(new CutContainer(FEASIBILITY_CONTAINER_CAPACITY));
+
+        uint c_index = 0;
+        uint n_so_far = 0;
+        for (auto& container : cuts.first) {
+            for (auto& cut : container) {
+                feasibilityPointers[c_index]->insertCut(cut);
+            	if (!(++n_so_far % FEASIBILITY_CONTAINER_CAPACITY)) c_index++;
+            }
+        }
 	}
 
 	size_t nOCuts = accumulate(cuts.second.begin(), cuts.second.end(), 0,
 		[](size_t sum, const CutContainer &cont) { return sum + cont.size(); });
 	if (nOCuts > OPTIMALITY_CONTAINER_CAPACITY) {
-		uint nContainers = static_cast<uint>(floor(nOCuts/OPTIMALITY_CONTAINER_CAPACITY));
-		if (nContainers) {
-			optimalityPointers = vector<CutContainer *> (nContainers);
-			uint c_index = 0;
-			uint n_so_far = 0;
-			for (auto& container : cuts.second) {
-				for (auto&& cut: container) { // capturing by references (without copying).
-					optimalityPointers[c_index]->insertCut(std::move(cut));
-					n_so_far++;
-					if (n_so_far == OPTIMALITY_CONTAINER_CAPACITY) c_index++;
-				}
-			}
-		}
+		uint nContainers = static_cast<uint> (ceil( static_cast<double>(nOCuts)/OPTIMALITY_CONTAINER_CAPACITY));
+		for (auto i = 0; i < nContainers; i++)
+			optimalityPointers.push_back(new CutContainer(OPTIMALITY_CONTAINER_CAPACITY));
+        uint c_index = 0;
+        uint n_so_far = 0;
+        for (auto& container : cuts.second) {
+            for (auto& cut: container) {
+                optimalityPointers[c_index]->insertCut(cut);
+            	if (!(++n_so_far % OPTIMALITY_CONTAINER_CAPACITY)) c_index++;
+            }
+        }
 	}
 
 	solver.CutResources.add(make_pair(feasibilityPointers, optimalityPointers));
@@ -563,151 +554,108 @@ void Inavap::DDSolver::Master::addCutsToGlobal(DDSolver &solver, pair<vector<Ina
  * @return - number of nodes processed by the master in this function call.
  */
 size_t Inavap::DDSolver::Master::processNodes(Inavap::DDSolver &solver, Inavap::NodeExplorer &explorer, size_t n) {
-	// worker-mode.
+	// // worker-mode.
 	double zOpt = solver.optimal.load(memory_order::relaxed);
 	size_t nProcessed = 0;
 
 	while (!nodeQueue.empty() && n--) {
-		auto result = explorer.process(nodeQueue.popNode(), zOpt, feasCutsGlobal, optCutsGlobal);
+		lf_node *node = nodeQueue.pop();
+		if (node->ub <= zOpt) continue;
+		zOpt = solver.optimal.load(memory_order::relaxed);
+		auto result = explorer.process(*node, zOpt, solver.feasCutsGlobal, solver.optCutsGlobal);
 		nProcessed++;
-		// TODO: what to do with local cuts?
-		if (result.status) {
+		if (result.status == OutObject::STATUS_OP::SUCCESS) {
 			if (result.lb > zOpt) {
 				while ((!solver.optimal.compare_exchange_weak(zOpt, result.lb, memory_order::relaxed)) && (zOpt < result.lb));
 			}
-			if (result.ub > zOpt && !result.nodes.empty()) nodeQueue.pushNodes(result.nodes);
+
+			if (result.ub > zOpt && !result.nodes.empty()) {
+				llist nodes = convert(result.nodes);
+				nodeQueue.push(nodes);
+			}
 		}
 	}
 	return nProcessed;
 }
 
 void Inavap::DDSolver::Master::startMaster(DDSolver &solver) {
-	cout << "Starting Master thread" << endl;
 
 	NodeExplorer explorer{networkPtr};
 	size_t nProcessed = 0;
 
-	// check if the worker shared any cuts?
-	auto func = [&](Payload &worker) { // pair of feasibility, optimality cuts.
-		// need to lock again?
-		pair<CutContainer, CutContainer> cuts;
-		if (!worker.fCuts.empty()) {
-			cuts.first = std::move(worker.fCuts);
-		}
-		if (!worker.oCuts.empty()) {
-			cuts.second = std::move(worker.oCuts);
-		}
-		return cuts;
-	};
+	const uint16_t N_WORKERS = solver.N_WORKERS;
 
-	while (!solver.isCompleted) {
+	vector<Payload::STATUS> worker_status(N_WORKERS, Payload::WORKER_WORKING); // 0 - sleeping, 1- working
+	// maintain payload status.
+	for (;;) {
+		// if nodeQueue is not empty, process some ndoes
+		if (!nodeQueue.empty()) {
+			nProcessed += processNodes(solver, explorer, 2);
+		}
 		// number of idle workers, and number of processing workers.
 		uint16_t idle = 0, processing = 0;
 
-		// containers to hold the cuts shared by the workers.
-		vector<CutContainer> feasibilityCuts;
-		vector<CutContainer> optimalityCuts;
-
 		// iterate through all workers.
-		for (uint16_t i = 0; i < solver.N_WORKERS; i++) {
+		for (uint16_t i = 0; i < N_WORKERS; i++) {
 			auto& worker = solver.payloads[i];
-			pair<CutContainer, CutContainer> workerCuts;
-			uint8_t watchStatus = 0;
-			{
-				/* Worker might share cuts anytime. Instead of double locking for cuts and status check, acquire lock
-				 * on entire payload before operation starts.*/
-				scoped_lock l{worker.lock};
-				workerCuts = func(worker);
-				// st cannot be reordered with the below instructions. (invariant).
-				auto st = worker.payloadStatus.load(memory_order::relaxed);
-				if (st == Payload::WORKER_WORKING) {
+			auto st = worker.payloadStatus.load(std::memory_order::acquire);
+
+			if (st == Payload::WORKER_NEEDS_NODES) { // worker should be in waiting state.
+				// check local queue and send them to queue if queue is not empty
+				size_t q_size = nodeQueue.get_size();
+				if (q_size) {
+					size_t k = (q_size &1) ? (1+ q_size>>1) : q_size>>1; // TODO; fill this.
+					// assign nodes to worker.
+					llist new_list = nodeQueue.pop_k(k);
+					worker.private_queue.push(new_list);
+
+					// signal worker
+					worker.payloadStatus.store(Payload::WORKER_WORKING);
+					worker.payloadStatus.notify_one();
+					worker_status[i] = Payload::WORKER_WORKING;
 					processing++;
 				}
-				else if (st == Payload::WORKER_SHARED_NODES) {
-					// scoped_lock l{worker.lock};
-					/* double check, the worker might take back the previously shared nodes if the worker is idle. */
-					// st = worker.payloadStatus.load(memory_order::relaxed); // lock acquired at start of block.
-					// if (st == Payload::WORKER_SHARED_NODES) {
-					auto message = "Thread " +std::to_string(worker.id) + " sent " + std::to_string(worker.nodes.size()) + " nodes."; cout << message << endl;
-                    auto nodes = std::move(worker.nodes);
-                    worker.payloadStatus.store(Payload::MASTER_RECEIVED_NODES, memory_order::relaxed);
-                    processing++;
-                    nodeQueue.pushNodes(nodes);
-					// }
-				}
-				else if (st == Payload::WORKER_NEEDS_NODES) {
-					// status cannot be changed by the worker once reached here.
-					if(!nodeQueue.empty()) {
-						{ // mutex unlocks after this scope and signal can be properly viewed by worker.
-							// scoped_lock l {worker.lock};
-							uint size = nodeQueue.size();
-							size = static_cast<size_t> (ceil(size*PROPORTION_OF_SHARE));
-							auto nodes = nodeQueue.popNodes(size);
-							worker.nodes = std::move(nodes);
-							worker.payloadStatus.store(Payload::MASTER_ASSIGNED_NODES, memory_order::relaxed);
-							auto msg = "Master sent " + to_string(worker.nodes.size()) + " nodes to worker " + std::to_string(worker.id); cout << msg << endl;
-						}
-						// worker.cv.notify_one(); // signal after lock release instead.
-						watchStatus = 1;
-					}
-					else idle++;
-				}
-				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
-					// scoped_lock l{worker.lock};
-					/* reason for second check is that worker might change the status to 'WORKER_NEEDS_NODES' and wait for
-					 * master before the master changes the status to 'WORKER_WORKING',  resulting in infinite wait by the worker.*/
-					st = worker.payloadStatus.load(memory_order::relaxed);
-					if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES) {
-						worker.payloadStatus.store(Payload::WORKER_WORKING, memory_order::relaxed);
-						processing++;
-					}
+				else {
+					idle++;
+					worker_status[i] = Payload::WORKER_NEEDS_NODES;
 				}
 			}
-			if (watchStatus) worker.cv.notify_one();
-			// add cuts to global.
-			if (!workerCuts.first.empty()) feasibilityCuts.push_back( std::move(workerCuts.first));
-			if (!workerCuts.second.empty()) optimalityCuts.push_back(std::move(workerCuts.second));
+			else {
+				// status is either WORKER_WORKING or MASTER_ASSIGNED_NODES
+				worker_status[i] = Payload::WORKER_WORKING;
+				processing++;
+			}
 		}
 
-		if (idle == solver.N_WORKERS && nodeQueue.empty()) {
-			cout << "Indicating all workers" << endl;
-			solver.isCompleted.store(true, std::memory_order::release);
-			for_each (solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
-				// all the workers must be in waiting state. lock not needed.
-				worker.payloadStatus.store(Payload::SOLVER_FINISHED, memory_order::release);
-				worker.cv.notify_one();
-			});
-			cout << "Solver finished. "<< endl;
-			return;
+		if (idle == N_WORKERS && nodeQueue.empty()) {
+			// solver is finished, all the threads must be waiting now.
+			for (uint16_t i = 0; i < N_WORKERS; i++) {
+				auto& worker = solver.payloads[i];
+				worker.payloadStatus.store(Payload::SOLVER_FINISHED);
+				// std::atomic_notify_one(&worker.payloadStatus);
+				worker.payloadStatus.notify_one();
+			}
+			cout << "Master processed " << nProcessed << " nodes." << endl;
+			break;
 		}
 
-		if (idle > 0) {
-			// some workers are idle, get nodes from busy workers.
-			for_each(solver.payloads.begin(), solver.payloads.end(), [](auto &worker) {
-				scoped_lock l{worker.lock};
-				auto st = worker.payloadStatus.load(memory_order::relaxed);
-				if (st == Payload::WORKER_WORKING)
-					worker.payloadStatus.store(Payload::MASTER_NEEDS_NODES, memory_order::relaxed);
-				else if (st == Payload::NOT_ENOUGH_NODES_TO_SHARE || st == Payload::MASTER_RECEIVED_NODES)
-					worker.payloadStatus.store(Payload::WORKER_WORKING, memory_order::relaxed);
-					// either this worker don't have enough nodes to share or it shared earlier.
-			});
+		for (uint16_t i = 0; idle && i < N_WORKERS; i++) {
+			if (worker_status[i] == Payload::WORKER_NEEDS_NODES) continue;
+			// take nodes from this worker.
+			auto& worker = solver.payloads[i];
+			auto st = worker.payloadStatus.load(memory_order::acquire); // this is not needed.
+			if (st == Payload::WORKER_NEEDS_NODES) continue; // this is not needed
+			llist new_list = worker.private_queue.m_pop(0.4);
+			if (!new_list.start) continue; // either this worker is empty or not have enough nodes.
+			// push to local queue.
+			nodeQueue.push(new_list);
 		}
-
-		// thread sleep?
-
-		// update local cuts to global.
-		auto p = make_pair(feasibilityCuts, optimalityCuts);
-		addCutsToGlobal(solver, p);
-
-		// process some nodes from local queue?
-		// nProcessed += processNodes(solver, explorer, 4);
 	}
 	// post-completion tasks by master?
+	// solver.CutResources.printStatistics();
 }
 
 void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
-	// change to pointer of DDSolver.
 
 	/* function: returns true if it is time to read the atomic variable of global optimal, else increases counter. */
 	auto is_poll_time = [](size_t &counter) { // resets counter when reaches limit.
@@ -715,28 +663,29 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
         counter++; return false;
     };
 
-	/* function: returns cuts from the node explorer */
-    // auto f_shareCuts = [](NodeExplorer &explorer) { // share cuts with master if exceeds limit.
-    //     pair<optional<CutContainer>, optional<CutContainer>> cuts;
-    //     if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT )
-    //         cuts.first.value() = move(explorer.feasibilityCuts);
-    //     if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT)
-    //         cuts.second.value() = move(explorer.optimalityCuts);
-    //     return cuts;
-    // };
-
+	auto is_check_time = [](uint &counter) {
+		if (counter == PAYLOAD_CHECK_TICKS) {
+			counter = 0;
+			return true;
+		}
+		counter++;
+		return false;
+	};
 
 	NodeExplorer explorer{networkPtr};
 	auto& payload = solver->payloads[id];
 	payload.id = id;
-	// auto str = "Worker: " + to_string(id) + " , nodes: " + to_string(payload.nodes.size()) + "\n"; cout << str <<  endl;
-	NodeQueue localQueue;
+	auto& private_queue = payload.private_queue;
 	double zOpt = solver->optimal.load(memory_order::relaxed);
 
 	uint8_t done = 0; // flag to indicate solver is finished.
-	size_t nProcessed = 0; // # nodes processed so far.
+	// size_t nProcessed = 0; // # nodes processed so far.
 	size_t counter = 0;
-	uint prevCount = 0; // # newly generated cuts since last shared with global.
+	uint nOptShared = 0;		// # local optimality cuts shared with master so far.
+	uint nFeasShared = 0;		// # local feasibility cuts shared with master so far.
+	uint prevLocalCount = 0;	//
+	uint prevCount = 0;			// # newly generated cuts since last shared with global.
+	uint payloadCheckTick = 0;	//
 
 	/* Operations on same variable by a single thread with relaxed-order will obey the happens-before relationships.
 	 * The access to a single atomic variable from  the same thread can't be reordered. Once a given thread see a
@@ -745,35 +694,31 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 	 */
 
 	/* Still don't know how the atomic store is implemented at the hardware level. Does it directly write to memory ?
-	 * or does it store in caches in case of relaxed ordering?
+	 * or does it store in caches in case of relaxed ordering? I think I know bit better now.
 	 */
-	while (!solver->isCompleted.load(memory_order::relaxed)) {
+	while (private_queue.empty()){} // after this point, the worker should see a valid head pointer.
 
-		if (localQueue.empty()) {
-			// indicate master for nodes. wait until master responds.
-			auto nodes = payload.getNodes(done);
-			if (done) { break;} // solver is finished. isFinished flag has been set?
-			localQueue.pushNodes(nodes);
-		}
+	for (;;) {
 
-		while (!localQueue.empty()) {
-			// cout << "worker: " << id << " processing " << endl;
+		for (lf_node *node_ptr; (node_ptr = private_queue.pop()); ) {
 
-			// get updated cuts from global space.
-			// if (solver->CutResources.getCount() > prevCount) { // new cuts are added to global space.
-			// 	auto res = solver->CutResources.get(feasCutsGlobal.size(), optCutsGlobal.size());
-			// 	if (!res.first.empty()) feasCutsGlobal.insert(feasCutsGlobal.end(), res.first.begin(), res.first.end());
-			// 	if (!res.second.empty()) optCutsGlobal.insert(optCutsGlobal.end(), res.second.begin(), res.second.end());
-			// 	prevCount = feasCutsGlobal.size() + optCutsGlobal.size();
-			// }
+			Node node = *node_ptr;
+			// auto str = "node: " + to_string(node.globalLayer); cout << str << endl;
+			if (node.ub <= zOpt) {
+				nPrunedByBound++;
+				delete node_ptr; // should not cause leak.
+				continue;
+			}
+			auto result = explorer.process(node, zOpt, solver->feasCutsGlobal, solver->optCutsGlobal);
 
-			Node node = localQueue.popNode();
-			auto result = explorer.process(node, zOpt, feasCutsGlobal, optCutsGlobal);
-			// auto result = explorer.process2(localQueue.popNode(), zOpt);
-			nProcessed++;
-			// auto str = "Worker : " + to_string(id) + " processed a node\n"; cout << str << endl;
-
-			if (result.status) {
+			delete node_ptr; // free nodes.
+			#ifdef SOLVER_COUNTERS
+			nProcessed			+= (result.status == OutObject::STATUS_OP::SUCCESS);
+			nFeasibilityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_FEASIBILITY_CUT);
+			nOptimalityPruned	+= (result.status == OutObject::STATUS_OP::PRUNED_BY_OPTIMALITY_CUT);
+			#endif
+			nQueue				+= (result.nodes.size());
+			if (result.status == OutObject::STATUS_OP::SUCCESS) {
 				//
 				if (result.lb > zOpt) {
 					/* short-circuit operation. If the store is successful, exit the loop, else keep trying until
@@ -783,162 +728,142 @@ void Inavap::DDSolver::Worker::startWorker(DDSolver *solver) {
 						&& (zOpt < result.lb)) {}
 
 					// zOpt is not updated after CAS operation.
-					if (solver->optimal.load(memory_order::relaxed) == result.lb) zOpt = result.lb;
-
+					if (solver->optimal.load(memory_order::acquire) == result.lb) zOpt = result.lb;
+#ifdef SOLVER_COUNTERS
 					 if (result.lb == zOpt) {
 					 	const auto now = std::chrono::system_clock::now();
 					 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 					 	cout << "Thread: " << id << " , optimal lb: " << zOpt << " set at, " << std::ctime(&t_c) << endl;
 					 }
-
+#endif
 					counter = 0;
 				}
 				else if (is_poll_time(counter)) { // check periodically for latest optimal value.
 					zOpt = solver->optimal.load(memory_order::relaxed);
 				}
-				if (result.ub > zOpt && !result.nodes.empty())
-					localQueue.pushNodes(result.nodes);
+				if (result.ub > zOpt && !result.nodes.empty()) {
+					llist nodes = convert(result.nodes);
+					assert((nodes.start && nodes.end && nodes.n));
+					private_queue.push(nodes);
+				}
 			}
+		}
 
-			// look into explorer's local cuts.
-			// if ((explorer.feasibilityCuts.size() + explorer.optimalityCuts.size()) > LOCAL_CUTS_LIMIT) {
-			// 	// use different strategy.
-			// 	scoped_lock l{payload.lock};
-			// 	if (explorer.feasibilityCuts.size() > FEASIBILITY_CONTAINER_LIMIT) payload.fCuts = std::move(explorer.feasibilityCuts);
-			// 	if (explorer.optimalityCuts.size() > OPTIMALITY_CONTAINER_LIMIT) payload.oCuts = std::move(explorer.optimalityCuts);
-			// 	// shareCutsWithMaster(explorer, payload);
-			// 	// At this point, node explorer cuts are empty.
-			// }
+		#ifdef SOLVER_COUNTERS
+			sleepTimes++;
+			const auto start = std::chrono::system_clock::now();
+		#endif
 
-            // if payload status is 'MASTER NEEDS NODES', then master cannot change it.
-			// TODO: instead of checking in every iteration, check periodically
-			scoped_lock l{payload.lock};
-            auto payloadStatus = payload.payloadStatus.load(memory_order::relaxed);
-            if (payload.payloadStatus.load(memory_order::relaxed) == Payload::MASTER_NEEDS_NODES) {
-                uint n = localQueue.size();
-                auto sz = static_cast<size_t> (ceil(n*0.4));
-                auto nodes = localQueue.popNodes(sz);
-            	/* Do not share cuts with master. */
-            	// auto [fst, snd] = f_shareCuts(explorer);
-                // scoped_lock l{payload.lock};
-                payload.nodes = std::move(nodes);
-                payload.payloadStatus.store(Payload::WORKER_SHARED_NODES, memory_order::relaxed);
-            	// share cuts to master. TODO: instead of move, keep a copy of local cuts.
-            	// if (fst) payload.fCuts = move(fst.value());
-            	// if (snd) payload.oCuts = move(snd.value());
-            }
+		// private queue is empty. indicate to master.
+		payload.payloadStatus.store(Payload::WORKER_NEEDS_NODES, std::memory_order::release);
+
+		// sleep until master signals.
+		payload.payloadStatus.wait(Payload::WORKER_NEEDS_NODES);
+
+		// std::atomic_thread_fence(std::memory_order::acquire);
+		#ifdef SOLVER_COUNTERS
+			const auto end = std::chrono::system_clock::now();
+			sleepDuration += std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count();
+		#endif
+
+		// either solver is finished or master assigned some nodes.
+		auto status = payload.payloadStatus.load(std::memory_order::acquire);
+		// while (status == Payload::WORKER_NEEDS_NODES) {status = payload.payloadStatus.load(memory_order::acquire);}
+		if (status == Payload::SOLVER_FINISHED) {
+			break;
 		}
 	}
-
-	// display cut statistics. append to global string instead of printing.
-	std::string msg = "Worker: " + std::to_string(id) + " processed " + std::to_string(nProcessed) + " nodes";
-	cout << msg << endl;
 }
-
-void Inavap::DDSolver::Worker::shareCutsWithMaster(NodeExplorer &explorer, Inavap::DDSolver::Payload &payload) {
-	// lock the paylaod and share cuts.
-	// should share all the cuts to the payload.
-	// payload.fCuts = move(explorer.feasibilityCuts);
-	// if (explorer.optimalityCuts.size() > )
-}
-
 
 /**
- * Returns vector of nodes to process from the Payload.
- * @param status
- * @return
+ * Starts the solver with the given value as the current optimal.
+ * @param known_optimal
  */
-vector<Inavap::Node> Inavap::DDSolver::Payload::getNodes(uint8_t &status) {
+double Inavap::DDSolver::startSolver(double known_optimal) {
 
-	/* Acquire lock and get already existing nodes (if any) from the payload. This is possible when
-	 * the worker recently shared nodes with master, and master yet to take the nodes shared by this worker.
-	 *
-	 * NOTE: unique_lock is a type of lock that unlocks the acquired mutex when the code reaches out-of-scope,
-	 * thus eliminating explicit unlocking of the acquired locks.
-	 */
-
-	unique_lock l {lock};
-	if (!nodes.empty()) {
-		auto temp = std::move(nodes);
-		payloadStatus.store(WORKER_WORKING, memory_order::relaxed);
-		return temp;
-	}
-	payloadStatus.store(WORKER_NEEDS_NODES, memory_order::relaxed);
-	uint st;
-
-	// cout << "Thread" << this_thread::get_id() << " Node Queue is empty. Indicating Master. " << endl;
-	// std::string message = "Thread " + std::to_string(id) + ": Queue is empty. Indicating Master."; cout << message << endl;
-	// for now, set the status to finished
-	// status = status | 1; return {};
-
-	/* Conditionally wait for the nodes until master wakes (signals) this worker. The master can also set the
-	 * status as finished when all the other threads are waiting for the nodes and the master's queue is empty.
-	 *
-	 * NOTE: While waiting, the worker gives-up the acquired lock on the payload, and so that master can acquire
-	 * it in the future. unique_lock can be re-locked again, thus particularly useful in conditional waiting.
-	 */
-	cv.wait(l, [&] {
-		st = payloadStatus.load(memory_order::relaxed);
-		return (st == MASTER_ASSIGNED_NODES || st == SOLVER_FINISHED);
-	});
-	if (st == SOLVER_FINISHED) {status = 1; return {};}
-	auto temp = std::move(nodes);
-	auto msg = "Thread " + std::to_string(id) + ": received " + std::to_string(temp.size()) + " nodes"; cout << msg << endl;
-	status = 0;
-	payloadStatus.store(WORKER_WORKING, memory_order::relaxed);
-	return temp;
-}
-
-void Inavap::DDSolver::startSolver() {
-
-	cout << "Starting DD Solver." << endl;
+	optimal.store(known_optimal, memory_order::relaxed);
 
 	// create initial restricted tree and get cutset with desired max width.
 
-	RestrictedDDNew restrictedDD{networkPtr, 128};
+	RelaxedDDNew relaxedDD{networkPtr.get()};
 	Node root;
-	auto cutset = restrictedDD.buildTree(root);
+	relaxedDD.buildTree(root);
+	auto cutset = relaxedDD.getCutset(DOUBLE_MAX);
 
-	if (cutset) cout << "Number of nodes from teh first tree: " << cutset.value().size() << endl;
-
-	vector<Node> cutsetNodes = cutset.value();
-	// assume nodes is a vector of nodes.
-	// divide the nodes to all workers.
+	vector<Node> cutsetNodes = cutset;
 	uint current = 0;
 	payloads = vector<Payload>(N_WORKERS);
-	for (const auto& node : cutsetNodes) {
-		// round robin.
-		payloads[(current++)%N_WORKERS].nodes.emplace_back(node);
-	}
 
-
-	// static assert
-	// assert(0 == 1);
-	// for (const auto& payload: payloads) {
-	// 	assertm("Payload is empty.", !payload.nodes.empty());
+	std::reverse(cutsetNodes.begin(), cutsetNodes.end());
+	llist nodes = convert(cutsetNodes);
+	lf_node *st = nodes.start, *end = nodes.end;
+	size_t sz = nodes.n;
+	// for (auto& payload : payloads) {
+	// 	llist worker_nodes = {st, st, 1};
+	// 	lf_node *temp = st->next;
+	// 	payload.private_queue.push(worker_nodes);
+	// 	st = temp;
+	// 	assert(st != nullptr);
+	// 	sz--;
 	// }
+	// // check if nodes have correct nodes
+	// size_t finalsize = 0;
+	// for (const lf_node *begin = st; (begin); begin = begin->next){finalsize++;}
+	// if (finalsize != sz) {
+	// 	cout << "values mismatch"<< endl;
+	// 	abort();
+	// }
+	// nodes = {st, end, sz};
+	// reserve last nodes to the master.
+	for (uint i = 0; i < (sz-N_WORKERS); i++) {
+		// insert only to worker payloads.
+		llist worker_nodes = {st, st, 1};
+		lf_node *temp = st->next;
+		payloads[i%N_WORKERS].private_queue.push(worker_nodes);
+		st =temp;
+	}
+	// insert to master paylaod.
+	nodes = {st, end, N_WORKERS};
 
-	// all payloads are ready. launch threads.
-	// workers = vector<thread>();
+	// payloads are ready. launch worker threads.
 	for (uint i = 0; i < N_WORKERS; i++) {
 		Worker worker{i, networkPtr};
 		workersGroup.push_back(worker);
-		workers.push_back(thread{&Worker::startWorker, &workersGroup[i], this});
-		// workers[i] = thread{&Worker::startWorker, &workersGroup[i], this};
+		workers.emplace_back(&Worker::startWorker, &workersGroup[i], this);
 	}
-	// start master
-	Master m{networkPtr};
+	// let main thread work as master, instead of spawning new thread.
+	Master m{networkPtr, nodes};
 	m.startMaster(std::ref(*this));
-	// std::thread master (&Master::startMaster, &m, std::ref(*this));
-	// if (master.joinable()) master.join();
-	/* LATER: instead of creating new thread for master, let the main thread be the master thread */
+
 	for (unsigned int i = 0; i < N_WORKERS; i++) {
 		if (workers[i].joinable()) workers[i].join();
 	}
 
-	// destruct global cuts?
-	cout << "Optimal Solution: " << optimal.load() << endl;
+	return optimal.load();
 
+	//  TODO: post processing needed. (clean up resources).
+
+}
+
+std::pair<double,double> Inavap::DDSolver::start(double known_opt) {
+
+	const auto startTime = std::chrono::high_resolution_clock::now();
+	double solution = startSolver(known_opt);
+	const auto endTime = std::chrono::high_resolution_clock::now();
+	auto duration_seconds = std::chrono::duration_cast<std::chrono::duration<double>>(endTime - startTime);
+
+#ifdef SOLVER_COUNTERS
+	printWorkerStats();
+#endif
+
+	// compute total nodes.
+	size_t totalQueueNodes = 0;
+	for (const auto& worker : workersGroup) totalQueueNodes += worker.nQueue;
+
+	std::cout << "Optimal solution: " << solution
+		<< ". Explored "<< totalQueueNodes << " nodes (entire search space) in " << duration_seconds.count() << " seconds." << endl;
+	std::cout << "Threads : " << N_WORKERS << " Workers and 1 Master." << std::endl;
+	return {solution, duration_seconds.count()};
 }
 
 void Inavap::DDSolver::NodeQueue::pushNode(Node node) {

@@ -16,23 +16,26 @@
 #include <stack>
 #include "optimized.h"
 #include <bit>
+#include "include/statistics.h"
+#include <cassert>
 
 #ifndef POLL_FREQUENCY
-#define POLL_FREQUENCY 512
+#define POLL_FREQUENCY 4
 #endif
 
 #ifndef LOCAL_CUTS_LIMIT
-#define LOCAL_CUTS_LIMIT 1024
+#define LOCAL_CUTS_LIMIT 16
 #endif
 
 const unsigned int NUM_WORKERS = 3;
 //const uint8_t SHIFT = 5;
 // const uint16_t POLL_FREQUENC;
 
-#define CUT_CONTAINER_CAPACITY 128
-#define FEASIBILITY_CONTAINER_LIMIT 50
-#define OPTIMALITY_CONTAINER_LIMIT 100
+#define CUT_CONTAINER_CAPACITY 64
+#define F_CUT_CACHE_SIZE 8
+#define O_CUT_CACHE_SIZE 8
 #define PROPORTION_OF_SHARE 0.4
+#define PAYLOAD_CHECK_TICKS 10
 
 
 //
@@ -254,8 +257,38 @@ const unsigned int NUM_WORKERS = 3;
 //     void startPThreadSolver();
 // };
 
+#include "include/lock_free_queue.h"
 
 namespace Inavap {
+
+    static llist convert(const vector<Node>& nodes) {
+        lf_node *start = new Node();
+        lf_node *current = start;
+
+        for (int i = 0; i < nodes.size()-1; i++) {
+            const auto& tnode = nodes[i];
+            current->globalLayer = tnode.globalLayer;
+            current->ub = tnode.ub;
+            current->solutionVector = tnode.solutionVector;
+            current->states = tnode.states;
+            current->next = new Node();
+            current = current->next;
+        }
+
+        const auto& last = nodes.back();
+        current->globalLayer = last.globalLayer;
+        current->ub = last.ub;
+        current->solutionVector = last.solutionVector;
+        current->states = last.states;
+        const lf_node *cur2 = start;
+        for (int i = 0; i < nodes.size(); i++) {
+            assert(cur2 != nullptr);
+            cur2 = cur2->next;
+        }
+        assert(start != nullptr && current != nullptr);
+        // current->next = nullptr;
+        return {start, current, nodes.size()};
+    }
 
     class DDSolver {
 
@@ -265,22 +298,25 @@ namespace Inavap {
         class Payload {
         public:
             enum STATUS {
-                WORKER_WORKING = 0X1,
-                WORKER_NEEDS_NODES = 0X2,
-                WORKER_SHARED_NODES = 0X4,
-                NOT_ENOUGH_NODES_TO_SHARE = 0X8,
-                MASTER_NEEDS_NODES = 0X10,
-                MASTER_ASSIGNED_NODES = 0X20,
-                MASTER_RECEIVED_NODES = 0X40,
-                SOLVER_FINISHED = 0X80
+                WORKER_WORKING = 0X1u,
+                WORKER_NEEDS_NODES = 0X2u,
+                WORKER_SHARED_NODES = 0X4u,
+                NOT_ENOUGH_NODES_TO_SHARE = 0X8u,
+                MASTER_NEEDS_NODES = 0X10u,
+                MASTER_ASSIGNED_NODES = 0X20u,
+                MASTER_RECEIVED_NODES = 0X40u,
+                SOLVER_FINISHED = 0X80u
             };
-            vector<Node> nodes;
+            // vector<Node> nodes;
             uint id = 0;
-            std::mutex lock;
-            std::condition_variable cv;
-            std::atomic<uint> payloadStatus;
-            CutContainer fCuts;
-            CutContainer oCuts;
+            // std::mutex lock;
+            // std::condition_variable cv;
+            std::atomic<uint> payloadStatus = Payload::WORKER_WORKING;
+            // CutContainer fCuts;
+            // TODO: separate payload status and private queue. master only access the private when adding or removing nodes.
+            // CutContainer oCuts;
+            char padding[16];
+            lf_queue private_queue;
 
             Payload() = default;
             vector<Node> getNodes(uint8_t &done);
@@ -303,7 +339,7 @@ namespace Inavap {
 
             struct comparator {
                 bool operator() (const Node &node1, const Node &node2) const {
-                    return node1.globalLayer > node2.globalLayer;
+                    return node1.globalLayer < node2.globalLayer; // DEPTH_FIRST_SEARCH
                 }
             };
 
@@ -323,19 +359,41 @@ namespace Inavap {
 
         class Worker {
             const uint id;
+        public:
             vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
             vector<CutContainer *> feasCutsGlobal; // pointers to global feasibility cut containers.
             shared_ptr<Network> networkPtr;
 
             void shareCutsWithMaster(NodeExplorer& explorer, Inavap::DDSolver::Payload& payload);
 
-        public:
+        // public:
             explicit Worker(uint id_, const shared_ptr<Network>& networkPtr_): id{id_}, networkPtr{networkPtr_}{}
             void startWorker(DDSolver *solver);
+            void printStats() const noexcept {
+                // auto str = "Worker: " + std::to_string(id) +" . FCC: " + std::to_string(feasCutsGlobal.size())
+                //     + ". OCC: " + std::to_string(optCutsGlobal.size()) +"\n";
+                // cout << str;
+            }
+
+            size_t nQueue = 0;                  // #nodes entered queue.
+
+#ifdef SOLVER_COUNTERS
+            /* counters to measure various attributes for the worker. */
+            size_t nProcessed = 0;              // #nodes processed successfully.
+            size_t nReceived = 0;               // #nodes received from the master.
+            size_t nPrunedByBound = 0;          // #nodes pruned by the bound.
+            size_t nFeasibilityPruned = 0;      // #nodes pruned by feasibility cut
+            size_t nOptimalityPruned = 0;       // #nodes pruned by optimality cut.
+            size_t sleepDuration = 0;           // total amount of time this worker spent in waiting.
+            size_t sleepTimes = 0;              // # of times this worker waited for nodes from master.
+            size_t nFeasibilityCuts = 0;        // # feasibility cuts generated by this worker.
+            size_t nOptimalityCuts = 0;         // # optimality cuts generated by this worker.
+            size_t queueRange = 0;              // max size of queue throughout the solver.
+#endif
         };
 
         class Master {
-            NodeQueue nodeQueue;
+            master_queue nodeQueue;
             vector<Cut> tempOptCuts;
             vector<Cut> tempFeasCuts; // to be published global later.
             vector<CutContainer *> optCutsGlobal; // pointers to global optimality cut containers.
@@ -347,9 +405,16 @@ namespace Inavap {
             size_t processNodes(DDSolver &solver, NodeExplorer &explorer, size_t n);
 
         public:
-            explicit Master(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}{};
+            explicit Master(const shared_ptr<Network>& networkPtr_, llist& master_nodes) : networkPtr{networkPtr_} {
+                nodeQueue.push(master_nodes);
+            }
+            explicit Master(const shared_ptr<Network>& networkPtr_) : networkPtr{networkPtr_}{}
             void startMaster (DDSolver &solver);
         };
+
+        Container feasCutsGlobal;
+        Container optCutsGlobal;
+        lf_queue globalQueue;
 
         vector<Payload> payloads; // individual payloads for worker threads.
         CutResource CutResources;
@@ -367,12 +432,73 @@ namespace Inavap {
             networkPtr{networkPtr_}, N_WORKERS{nWorkers}, payloads{nWorkers} {
             workers.reserve(N_WORKERS);
             workersGroup.reserve(N_WORKERS);
-            cout << "Number of workers: " << N_WORKERS << endl;
         }
 
+        std::pair<double,double> start(double opt);
 
-        void startSolver();
+        double startSolver(double optimal);
 
+#ifdef SOLVER_COUNTERS
+        void printWorkerStats() const noexcept {
+            vector<double> processed;
+            vector<size_t> sleepTimes;
+            vector<size_t> sleepDurations;
+            size_t n = processed.size() * 36 +32;
+            n = std::max(n, static_cast<size_t>(72));
+            std::string asterisk(n,'-');
+            cout << asterisk <<endl;
+
+            cout << "Processed: ";
+            for (const auto& worker : workersGroup) {
+                processed.push_back(static_cast<double>(worker.nProcessed));
+                sleepDurations.push_back(worker.sleepDuration);
+                sleepTimes.push_back(worker.sleepTimes);
+                cout << worker.nProcessed << "  ";
+            }
+            cout << endl;
+            double mean = stats_mean(processed.data(), processed.size());
+            double absdev = stats_absdev(processed.data(), processed.size());
+            double min_val= stats_min(processed.data(), processed.size());
+            double max_val = stats_max(processed.data(), processed.size());
+
+            double total = std::accumulate(processed.begin(), processed.end(), 0.0);
+
+            cout << "Total: " << total << "\t Mean: " << mean << "\t Deviation: " << absdev
+                        <<"\t Min: " << min_val <<"\t Max: " << max_val
+                        << endl;
+            cout << asterisk << endl;
+
+            cout << endl;
+            // print cuts information.
+            auto get_size = [](const Container& cont) {
+                const auto *start = cont.get();
+                size_t n = 0;
+                while (start) {
+                    n++;
+                    start = start->next;
+                }
+                return n;
+            };
+            size_t nOpt = get_size(optCutsGlobal);
+            size_t nFeas = get_size(feasCutsGlobal);
+            cout << "Cuts (feasibility, optimality): " << nFeas <<" , " << nOpt << endl;
+
+            cout << asterisk << endl;
+
+            std::cout << "Nodes pruned (feasibility, optimality, bound): " << std::endl;
+            for (const auto&  worker: workersGroup) {
+                cout << "(" << worker.nFeasibilityPruned << ", " << worker.nOptimalityPruned
+                            << ", "<< worker.nPrunedByBound << ")" << "  ";
+            } cout << endl;
+            cout << asterisk << endl;
+            std::cout << "Waiting Time (seconds): ";
+            for (auto t: sleepDurations) {
+                std::cout << (t/1000) << "   ";
+            }
+            std::cout<< endl<< asterisk << std::endl;
+            std::cout << std::endl;
+        }
+#endif
     };
 }
 

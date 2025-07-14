@@ -5,56 +5,78 @@
 #include <chrono>
 #include "OriginalProblem.h"
 
+#include "include/StochasticModel.h"
+
 using namespace std;
 
 #include "DDSolver.h"
 
-int main() {
-	cout << "C++ version: " << __cplusplus << endl;
-	string fileName ="C:/Users/nandgate/CLionProjects/SGUFP_Solver/40_95_20_5.txt";
-	Network network{fileName};
-
-	SolveOriginalProblem(network);
-
-	cout << "Solved Original problem " <<endl;
-	cout << endl;
-	cout << endl;
-
+void test_single(const std::string& fileName) {
+	cout << "Testing " << fileName << endl;
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
-	cout << "Vbar order: "; for (auto id : networkPtr->Vbar) cout << id << " "; cout << endl;
-	cout << "Max Width : " << MAX_WIDTH << endl;
-	cout << "DEBUG enabled, solving for a subset of V Bar nodes. Single scenario." << endl;
-	using std::chrono::high_resolution_clock;
-	using std::chrono::duration_cast;
-	using std::chrono::duration;
-	using std::chrono::milliseconds;
-	using std::chrono::seconds;
-	auto t1 = high_resolution_clock::now();
+
+	double oracle = solveStochasticModel(networkPtr.get());
+
+	for (uint16_t i = 1; i <= 16; i*= 2) {
+		const auto now = std::chrono::system_clock::now();
+		const auto t_c = std::chrono::system_clock::to_time_t(now);
+		cout << "Starting solver " << std::ctime(&t_c) << endl;
+		Inavap::DDSolver solver{networkPtr, i};
+		auto [solution,execution_time] = solver.start(oracle);
+		if (abs(solution-oracle) > 1e-5) cout << "ERROR: incorrect solution" << endl;
+		cout <<"\n\n\n" << endl;
+	}
+}
+
+void test_multiple(const std::string& filename, uint16_t threads, uint16_t n) {
+	cout << "File: " << filename << endl;
+	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{filename})};
+
+	double oracle = solveStochasticModel(networkPtr.get());
+	vector<double> exec_times(n);
+
+	for (uint16_t i = 0; i < n; i++) {
+		const auto now = std::chrono::system_clock::now();
+		const auto t_c = std::chrono::system_clock::to_time_t(now);
+		Inavap::DDSolver solver{networkPtr, threads};
+		auto [solution, exec_time] = solver.start(oracle-10);
+		if (abs(solution-oracle) > 1e-5) {
+			cout << "ERROR: Incorrect solution" << endl;
+			cout << "Aborting....";
+			exit(-1);
+		}
+		exec_times[i] = exec_time;
+		cout << "\n\n\n" << endl;
+	}
+	//
+	double average_time = stats_mean(exec_times.data(), n);
+	cout << "Mean execution time: " << average_time << endl;
+}
+
+int main(int argc, char* argv[]) {
+	cout << "C++ version: " << __cplusplus << endl;
+
+	string fileName;
+	fileName = "/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/100_201_1_9.txt";
+	// if (argc == 2) fileName = string(argv[1]);
+	// fileName ="/mnt/c/Users/nandgate/CLionProjects/SGUFP_Solver/instances/40_93_20_10.txt";
+	// test_single(fileName);
+	// return 0;
+	Network network{fileName};
+	double optimal = solveStochasticModel(&network);
+	cout << "Optimal from stochastic model: " << optimal << endl;
+
+	cout << "Reusing gurobi model between subproblems" << endl;
+	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 	const auto now = std::chrono::system_clock::now();
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
-	// DDSolver solver{networkPtr};
-	Inavap::DDSolver solver{networkPtr, 1};
-	// solver.startSolver();
-	// solver.initialize();
-
-//	int n_initial_cuts = 25;
-//	auto cuts = solver.initializeCuts2(n_initial_cuts);
-//	cout << "Number of initial cuts: " << n_initial_cuts << ". Optimality: " << cuts.second.cuts.size() <<
-//		" , Feasibility: " << cuts.first.cuts.size() << endl;
-	cout << "**********************************************************************************************************\n\n\n" << endl;
-
-//	solver.startSolve(cuts);
-	solver.startSolver();
-	// solver.startPThreadSolver();
-
-	auto t2 = high_resolution_clock::now();
-	// cout << "Node queue strategy: LIFO" << endl;
-	auto ms_int = duration_cast<seconds>(t2-t1);
-	duration<double> ms_double = t2-t1;
-	std::cout <<"program took " << ms_int.count() << " seconds" << endl;
-
-	cout << "Solver finished" << endl;
+	Inavap::DDSolver solver{networkPtr, 4};
+	auto [solution,exec_time ]= solver.start(optimal-10);
+	if (abs(solution-optimal) > 1e-5) {
+		cout << "ERROR: incorrect solution" << endl;
+		exit(-1);
+	}
 	return 0;
 }
 

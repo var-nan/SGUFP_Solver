@@ -602,7 +602,7 @@ void printBothCuts(const ::Cut& oldCut, const Inavap::Cut& newCut) {
     else newCut.printCut(0);
 }
 
-Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
+Inavap::OutObject Inavap::NodeExplorer::processX3(Node node, double optimalLB,
         const vector<CutContainer *>& globalFCuts, const vector<CutContainer *>& globalOCuts) {
 
     // copied from Node Explorer 5.
@@ -678,7 +678,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             GuroSolver solver{networkPtr, env};
             // auto cut = cutToCut(solver.solveSubProblemInstance(y_bar, 0));
             // find out the cut type and create Inavap::Cut.
-            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+            auto temp = solver.solveSubProblem(y_bar);
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
                 feasibilityCuts.insertCut(cut); // do not move cut.
@@ -770,7 +770,7 @@ Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
             vector<int> intSolution; for (auto s: solution) intSolution.push_back(s);
             GuroSolver solver{networkPtr, env};
             auto y_bar = w2y(intSolution, networkPtr);
-            auto temp = solver.solveSubProblemInstance(y_bar, 0);
+            auto temp = solver.solveSubProblem(y_bar);
             if (temp.cutType == FEASIBILITY) {
                 auto cut = cutToCut(temp, networkPtr.get());
                 feasibilityCuts.insertCut(cut);
@@ -910,4 +910,77 @@ Inavap::OutObject Inavap::NodeExplorer::process2(Node node, double optimalLB) {
             }
         }
     }
+}
+
+Inavap::OutObject Inavap::NodeExplorer::process(Node node, double optimalLB,
+    Container &globalFeasCuts, Container &globalOptCuts) {
+
+    double upperBound = node.ub;
+
+    /* this relaxed DD is reused across multiple invocations of this function. tree is automatically
+     * reset to default, before compiling the new tree */
+    relaxedDD.buildTree(node);
+
+    /* The cut refinement occurs in the following manner: apply local feasibility cuts, global
+     * feasibility cuts, local optimality cuts and global optimality cuts. The container cuts
+     * are iterated in reverse order of the container. If any of the cuts prunes the entire tree,
+     * the node explorer gets a new node to explore.
+     */
+
+    const auto *current_f_cut = globalFeasCuts.get();
+    const auto *current_opt_cut = globalOptCuts.get();
+
+    if (relaxedDD.isTreeExact()) {
+
+        for ( ; current_f_cut; current_f_cut = current_f_cut->next) {
+            if (!relaxedDD.applyFeasibilityCut(current_f_cut->cut))
+                return PRUNED_BY_FEASIBILITY_CUT;
+        }
+
+        for ( ; current_opt_cut; current_opt_cut = current_opt_cut->next) {
+            upperBound = relaxedDD.applyOptimalityCut(current_opt_cut->cut, optimalLB, upperBound);
+            if (upperBound <= optimalLB)
+                return PRUNED_BY_OPTIMALITY_CUT;
+        }
+
+        /* New cuts are generated only when the tree is exact. */
+
+        vector<Path> allSolutions;
+        while (true) {
+            auto path = relaxedDD.getSolution();
+            if (std::find(allSolutions.begin(), allSolutions.end(), path) != allSolutions.end()) {
+                return {upperBound, upperBound, {}, OutObj::STATUS_OP::SUCCESS};
+            }
+
+            allSolutions.push_back(path);
+
+            auto [cutType, cut] = solver.solveSubProblem(path);
+            cut_node_t *new_cut = new cut_node_t{cut};
+            if (cutType == FEASIBILITY) {
+                globalFeasCuts.add(new_cut);
+                if (!relaxedDD.applyFeasibilityCut(cut))
+                    return PRUNED_BY_FEASIBILITY_CUT;
+            }
+            else {
+                globalOptCuts.add(new_cut);
+                upperBound = relaxedDD.applyOptimalityCut(cut, optimalLB, upperBound);
+                if (upperBound <= optimalLB)
+                    return PRUNED_BY_OPTIMALITY_CUT;
+            }
+        }
+    }
+
+    /* Non-Exact Tree */
+
+    for ( ; current_f_cut; current_f_cut = current_f_cut->next) {
+        if (!relaxedDD.applyFeasibilityCut(current_f_cut->cut))
+            return PRUNED_BY_FEASIBILITY_CUT;
+    }
+
+    for ( ; current_opt_cut; current_opt_cut = current_opt_cut->next) {
+        upperBound = min(relaxedDD.applyOptimalityCut(current_opt_cut->cut,optimalLB, upperBound), upperBound);
+        if (upperBound <= optimalLB) return PRUNED_BY_OPTIMALITY_CUT;
+    }
+
+    return {DOUBLE_MIN, upperBound, relaxedDD.getCutset(upperBound), OutObj::STATUS_OP::SUCCESS};
 }

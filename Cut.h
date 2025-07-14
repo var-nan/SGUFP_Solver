@@ -11,7 +11,9 @@
 #include <tuple>
 #include <memory>
 #include <utility>
-#define private public
+#include "Network.h"
+// #define private public
+#include <atomic>
 
 using namespace std;
 
@@ -197,14 +199,18 @@ namespace Inavap {
 	static constexpr uint64_t EXTRACT_J			= 0XFFFF00000000;	// Turn on only the J bits of the other operand.
 
 	class Cut {
-	private:
+	public:
 		size_t hash_val;
 		double RHS;
 		// map<tuple<int,int,int>, double> coeff;
 		vector<pair<uint64_t, double>> coeff;
 		// vector<uint32_t> q_offsets; // The 16 MSB contains the offset and the 16 LSB is the 'q' element.
 
-		map<tuple<uint16_t,uint16_t,uint16_t>,double> cutCoeff;
+		// map<tuple<uint16_t,uint16_t,uint16_t>,double> cutCoeff;
+
+#ifdef REAPPLY_CUT
+		uint8_t owner;
+#endif
 
 		// /**
 		//  * Returns the offset corresponding to 'q' and 'i' in the cut. The function scans all the elements in the
@@ -227,14 +233,15 @@ namespace Inavap {
 			// jump-search: search all q_i with offset of current q_i.
 			for (uint16_t i = 0; i < coeff.size(); ) {
 				if ((coeff[i].first & IQ_MASK) ^ qi) i += coeff[i].first >> 48; // jump to next q_i.
-				return i;
+				else return i;
 			}
 			return 0;
 		}
 
 	// public:
 
-		explicit Cut(double RHS_, vector<pair<uint64_t, double>> coeff_): RHS{RHS_}, coeff{std::move(coeff_)} {
+		explicit Cut(double RHS_, vector<pair<uint64_t, double>> coeff_, uint8_t owner_ = 0)
+										: RHS{RHS_}, coeff{std::move(coeff_)} {
 			hash_val = 0;
 			/* hash function: sum of (index * key + hash(val)) */
 			for (size_t i = 0; i< coeff.size(); i++) {
@@ -242,36 +249,22 @@ namespace Inavap {
 				size_t key_hash = coeff[i].first * i;
 				hash_val += (key_hash ^ val_hash);
 			}
-
-			// initialize cut map.
-			for (const auto& [k,v]: coeff) {
-				// extract i, q, and j from k.
-				uint16_t q = (k&Q_MASK);
-				uint16_t i = (k&EXTRACT_I)>>16;
-				uint16_t j = (k&EXTRACT_J)>>32;
-
-				cutCoeff[make_tuple(q,i,j)] = v;
-			}
+#ifdef REAPPLY_CUT
+			owner = owner_;
+#endif
 		}
 
-		explicit Cut(Cut&& c) noexcept :
-				hash_val{c.hash_val}, RHS{c.RHS} ,coeff{std::move(c.coeff)}{}
+		/* Let compiler generate default copy and move constructors and assignment operators. */
 
-		Cut(const Cut &c) : hash_val{c.hash_val}, RHS{c.RHS} ,coeff{c.coeff} {}
+		explicit Cut(Cut&& c) = default;
+		explicit Cut(const Cut& c) = default;
+		Cut& operator=(Cut&& c) = default;
+		Cut& operator=(const Cut& c) = default;
 
 		bool operator==(const Cut& cut2) const {
-			return cut2.hash_val == hash_val && cut2.RHS == RHS && coeff.size() == cut2.coeff.size();
+			return cut2.hash_val == hash_val && cut2.RHS == RHS &&
+				coeff.size() == cut2.coeff.size();
 		}
-
-		Cut& operator=(Cut&& c) noexcept {
-			hash_val = c.hash_val;
-			RHS = c.RHS;
-			coeff = std::move(c.coeff);
-			// q_offsets = move(c.q_offsets);
-			return *this;
-		}
-
-		Cut& operator=(const Cut& cut2) = default;
 
 		[[nodiscard]]size_t getHash() const noexcept {return hash_val;}
 
@@ -370,7 +363,7 @@ namespace Inavap {
 		// TODO: define 'new' operator (efficient, without copying).
 		void insertCut(const Cut &cut) {
 			// do not insert duplicate cuts.
-			for (const auto& c: cuts) { if (c == cut) return;}
+			// for (const auto& c: cuts) { if (c == cut) return;}
 			cuts.push_back(cut);
 		}
 		[[nodiscard]] bool isCutExists(const Cut& cut) const noexcept {return std::find(cuts.begin(), cuts.end(), cut) != cuts.end();}
@@ -378,8 +371,22 @@ namespace Inavap {
 		[[nodiscard]] bool empty() const noexcept {return cuts.empty();}
 		void clearContainer() noexcept { cuts.clear();}
 
-		auto begin() noexcept {return cuts.begin();}
-		auto end() noexcept {return cuts.end();}
+		auto begin() noexcept {return cuts.rbegin();}
+		auto end() noexcept {return cuts.rend();}
+
+		[[nodiscard]] CutContainer seek(size_t pos) {
+			size_t n = cuts.size() - pos;
+			CutContainer c{n};
+
+			for (const auto& cut : cuts) {
+				c.insertCut(cut);
+			}
+			return c;
+		}
+
+		void addContainer(CutContainer cc) {
+			cuts.insert(cuts.end(), cc.cuts.begin(), cc.cuts.end());
+		}
 	};
 
 
@@ -412,31 +419,70 @@ namespace Inavap {
 			coeff.push_back(std::make_pair(key,v));
 		}
 		return Cut{cut.RHS, coeff};
-		// vector<uint32_t> q_offsets;
-		// processing order defines the global order.
-		for (const auto [index, arcId] : networkPtr->processingOrder) {
-			const auto& arc = networkPtr->networkArcs[arcId];
-			/* Not sure how the cast works on the bitwise operations.*/
-			uint64_t i = arc.tailId;
-			uint64_t q = arc.headId;
-			uint64_t offset = 0;
-			for (uint64_t j: networkPtr->networkNodes[q].outNodeIds) {
-				// typically the original cut should contain mapping to all permutations of (i,q,j).
-				// double val = cut.cutCoeff.at(make_tuple(i,q,j));
-				double val = cut.get(static_cast<uint>(i),static_cast<uint>(q),static_cast<uint>(j));
-				if (val == 0) continue; // reduce size of cut, do not store zero coeffs.
-				offset++;
-				uint64_t key = Inavap::getKey(q,i,j);
-				coeff.emplace_back(key,val);
-			}
-			// if (!offset) continue; // set offset information in 16MSB of coeff.first
-			// uint64_t start = coeff.size() - offset; // this should give start of new IQ.
-			// coeff[start].first |= (offset << 48);
-		}
-		Cut c{cut.RHS, coeff};
-		isNewAndOldCutEqual(c, cut);
-		return Cut{cut.RHS, coeff};
+		// // vector<uint32_t> q_offsets;
+		// // processing order defines the global order.
+		// for (const auto [index, arcId] : networkPtr->processingOrder) {
+		// 	const auto& arc = networkPtr->networkArcs[arcId];
+		// 	/* Not sure how the cast works on the bitwise operations.*/
+		// 	uint64_t i = arc.tailId;
+		// 	uint64_t q = arc.headId;
+		// 	uint64_t offset = 0;
+		// 	for (uint64_t j: networkPtr->networkNodes[q].outNodeIds) {
+		// 		// typically the original cut should contain mapping to all permutations of (i,q,j).
+		// 		// double val = cut.cutCoeff.at(make_tuple(i,q,j));
+		// 		double val = cut.get(static_cast<uint>(i),static_cast<uint>(q),static_cast<uint>(j));
+		// 		if (val == 0) continue; // reduce size of cut, do not store zero coeffs.
+		// 		offset++;
+		// 		uint64_t key = Inavap::getKey(q,i,j);
+		// 		coeff.emplace_back(key,val);
+		// 	}
+		// 	// if (!offset) continue; // set offset information in 16MSB of coeff.first
+		// 	// uint64_t start = coeff.size() - offset; // this should give start of new IQ.
+		// 	// coeff[start].first |= (offset << 48);
+		// }
+		// Cut c{cut.RHS, coeff};
+		// isNewAndOldCutEqual(c, cut);
+		// return Cut{cut.RHS, coeff};
 	}
+
+	class cut_node_t {
+	public:
+		Cut cut;
+		cut_node_t *next = nullptr;
+
+		explicit cut_node_t(const Cut& cut_): cut{cut_.RHS, cut_.coeff}{}
+	};
+
+	class Container {
+		std::atomic<cut_node_t *>head;
+	public:
+		[[nodiscard]] const cut_node_t *get() const { return head.load(std::memory_order_acquire); }
+
+		void add(cut_node_t *node) {
+
+			node->next = head.load(std::memory_order_relaxed);
+			while (!head.compare_exchange_weak(node->next, node,
+				std::memory_order_release, std::memory_order_relaxed)){}
+
+			/* // use below code if adding cuts in a batch.
+			cut_node_t *end = node;
+			while (end->next) end = end->next; // find end of list.
+			end->next = head.load(std::memory_order_relaxed);
+
+			while (!head.compare_exchange_weak(end->next, node,
+				std::memory_order_relaxed, std::memory_order_relaxed));
+			*/
+		}
+		~Container() {
+			// free all cuts.
+			cut_node_t *current = head.load(std::memory_order_acquire);
+			while ((current)) {
+				cut_node_t *next = current->next;
+				delete current;
+				current = next;
+			}
+		}
+	};
 }
 
 //#endif //SGUFP_SOLVER_CUT_H

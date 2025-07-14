@@ -89,6 +89,7 @@ public:
 	vector<uint8_t> hasStateChanged; // true if state changes at v[i], false otherwise.
 	vi layerRewards;
 	vector<uint8_t> troubleMaker; // contains zero if layer is not a trouble maker.
+	uint totalLayers = 0;
 
 	vector<uint> getTroubleNodes() const noexcept;
 
