@@ -41,7 +41,7 @@ void test_multiple(const std::string& filename, uint16_t threads, uint16_t n) {
 		Inavap::DDSolver solver{networkPtr, threads};
 		auto [solution, exec_time] = solver.start(oracle-10);
 		if (abs(solution-oracle) > 1e-5) {
-			cout << "ERROR: Incorrect solution" << endl.
+			cout << "ERROR: Incorrect solution" << endl;
 			cout << "Aborting....";
 			exit(-1);
 		}
@@ -64,15 +64,19 @@ int main(int argc, char* argv[]) {
 	// return 0;
 	Network network{fileName};
 	double optimal = solveStochasticModel(&network);
-	// cout << "Optimal from stochastic model: " << optimal << endl;
+	cout << "Optimal from stochastic model: " << optimal << endl;
 
 	cout << "Reusing gurobi model between subproblems" << endl;
 	const shared_ptr<Network> networkPtr{make_shared<Network>(Network{fileName})};
 	const auto now = std::chrono::system_clock::now();
 	const auto t_c = std::chrono::system_clock::to_time_t(now);
 	cout << endl << "Starting solver at " << std::ctime(&t_c);
-	Inavap::DDSolver solver{networkPtr, 8};
+	Inavap::DDSolver solver{networkPtr, 4};
 	auto [solution,exec_time ]= solver.start(optimal-10);
+	if (abs(solution-optimal) > 1e-5) {
+		cout << "ERROR: incorrect solution" << endl;
+		exit(-1);
+	}
 	return 0;
 }
 
